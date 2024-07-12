@@ -6,6 +6,7 @@ module SequenceServer
   # Report is a generic superclass. Programs, like BLAST, must implement their
   # own report subclass.
   class Report
+<<<<<<< HEAD
     class << self
       # Generates report for the given job. Returns generated report object.
       def generate(job, env_config = nil)
@@ -15,6 +16,8 @@ module SequenceServer
       end
     end
 
+=======
+>>>>>>> main
     # Provide access to global `config` & `logger` services to the report
     # objects.
     extend Forwardable
@@ -26,7 +29,6 @@ module SequenceServer
     def initialize(job)
       @job = job
       yield if block_given?
-      generate
     end
 
     private
