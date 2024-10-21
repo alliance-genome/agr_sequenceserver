@@ -160,11 +160,9 @@ module SequenceServer
       halt 202 unless job.done?
 
       env_file_path = File.join('/sequenceserver', 'public', 'environments', params[:segment1], params[:segment2], 'environment.json')
-      puts env_file_path
       env_config = JSON.parse(File.read(env_file_path))
-      puts env_config
 
-      report = BLAST::Report.new(job, env_config)
+      report = BLAST::Report.new(job, env_config["data"])
       halt 202 unless report.done?
 
       if display_large_result_warning?(report.xml_file_size)

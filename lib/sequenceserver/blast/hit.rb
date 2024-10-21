@@ -10,7 +10,10 @@ module SequenceServer
         args[5] = args[5].to_i
         args[6] = '' if args[6] == 'N/A'
         args[7] = args[7].to_i
-        super
+
+        #Call the super method with the transformed arguments
+        super(*args)
+
       end
 
       # This gets called when #to_json is called on report object in routes. We
@@ -37,17 +40,50 @@ module SequenceServer
       # in the client. These are derived by calling link generators, that is,
       # instance methods of the Links module.
       def links
-        links = Links.instance_methods.map { |m| send m }
-        puts "links"
-        puts links
-        links.compact!
-        links.sort_by { |link| [link[:order], link[:title]] }
+        puts "make links"
+        database_filepath = getdbpath
+
+        puts "dataase_filepath"
+        puts database_filepath
+        database_filename = File.basename(database_filepath)
+        puts database_filename
+        fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
+        puts fasta_file_basename
+        puts "id"
+        puts id
+        database_config = query.report.instance_variable_get(:@env_config)
+
+        sequence_metadata = {}
+        for reference_sequence in database_config
+          if reference_sequence["uri"].include? fasta_file_basename
+             if reference_sequence.key?("genome_browser")
+                filepath_parts = database_filepath.split(File::SEPARATOR)
+                links = Links.instance_methods.map do |m|
+                   send(m, reference_sequence["genome_browser"], filepath_parts)
+                end
+             
+                links.compact!
+                return links.sort_by { |link| [link[:order], link[:title]] }
+             else
+               return []
+             end
+             break
+          end  
+        end
+        return []
       end
 
       # Returns the database type (nucleotide or protein).
       def dbtype
         report.dbtype
       end
+
+      # returns the first database that it finds based on the id
+      def getdbpath
+          db = report.querydb.find { |db| db.include?(id) }
+          return db&.name
+      end
+
 
       # Returns a list of databases that contain this hit.
       #
