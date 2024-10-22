@@ -61,29 +61,9 @@ module SequenceServer
     #     query_coords = coordinates[0]
     #     hit_coords = coordinates[1]
 
-    def jbrowse
-        database_filepath = whichdb.map(&:name).at(0)
-        database_filename = File.basename(database_filepath)
-        fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
-        filepath_parts = database_filepath.split(File::SEPARATOR)
-        config_filename = filepath_parts[2] + "/" + filepath_parts[3] + "/environment.json"
-        file = File.read('/sequenceserver/public/environments/' + config_filename)
-        database_config = JSON.parse(file)
-
-        sequence_metadata = {}
-        for reference_sequence in database_config["data"]
-          if reference_sequence["uri"].include? fasta_file_basename
-            sequence_metadata = reference_sequence
-            break
-          end  
-        end
-
-        if !sequence_metadata.has_key?("genome_browser")
-            return
-        end
-
-        assembly = sequence_metadata["genome_browser"]["assembly"]
-        if sequence_metadata["genome_browser"]["type"] == "jbrowse"
+    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession)
+        assembly = genome_browser_metadata["assembly"]
+        if genome_browser_metadata["type"] == "jbrowse"
             subfeatures = []
 
             features_start = -1
@@ -121,17 +101,17 @@ module SequenceServer
                 :type => "match",
                 :subfeatures => subfeatures
             }]))
-            tracks = ERB::Util.url_encode(sequence_metadata["genome_browser"]["tracks"].join(",") + ",Hits")
+            tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",Hits")
             add_tracks = ERB::Util.url_encode('[{"label":"Hits","type":"JBrowse/View/Track/CanvasFeatures","store":"url","subParts":"match_part","glyph":"JBrowse/View/FeatureGlyph/Segments"}]')
 
-            url = "#{sequence_metadata['genome_browser']['url']}" \
+            url = "#{genome_browser_metadata['url']}" \
                   "?data=data/#{assembly}" \
                   "&loc=#{loc}" \
                   "&addFeatures=#{features}" \
                   "&addTracks=#{add_tracks}" \
                   "&tracks=#{tracks}" \
                   "&highlight="
-        elsif sequence_metadata["genome_browser"]["type"] == "jbrowse2"
+        elsif genome_browser_metadata["type"] == "jbrowse2"
             unique_ids = []
             subfeatures = []
 
@@ -179,10 +159,10 @@ module SequenceServer
                                                       "end": features_end,
                                                       "name": "Hits",
                                                       "subfeatures": subfeatures}]}}].to_json)
-            tracks = ERB::Util.url_encode(sequence_metadata["genome_browser"]["tracks"].join(",") + ",blasthits")
+            tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",blasthits")
             loc = ERB::Util.url_encode(accession + ":" + features_start.to_s + ".." + features_end.to_s)
 
-            url = "#{sequence_metadata['genome_browser']['url']}?" \
+            url = "#{genome_browser_metadata['url']}?" \
                          "loc=#{loc}" \
                          "&tracks=#{tracks}"\
                          "&sessionTracks=#{session_tracks}" \
@@ -197,109 +177,22 @@ module SequenceServer
        }
     end
 
-    def mod_gene_link
-        database_filepath = whichdb.map(&:name).at(0)
-        database_filename = File.basename(database_filepath)
-        fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
-        filepath_parts = database_filepath.split(File::SEPARATOR)
-        config_filename = filepath_parts[2] + "/" + filepath_parts[3] + "/environment.json"
-        file = File.read('/sequenceserver/public/environments/' + config_filename)
-        database_config = JSON.parse(file)
-
-        first_hit_start = hsps.map(&:sstart).at(0)
-        first_hit_end = hsps.map(&:send).at(0)
-        organism = accession.partition('-').first
-
-        sequence_metadata = {}
-        for reference_sequence in database_config["data"]
-          if reference_sequence["uri"].include? fasta_file_basename
-            sequence_metadata = reference_sequence
-            break
-          end  
-        end
-
-        if !sequence_metadata.has_key?("genome_browser")
-          return
-        end
-        genome_browser_metadata = sequence_metadata["genome_browser"]
-        if !genome_browser_metadata.has_key?("gene_track") || !genome_browser_metadata.has_key?("mod_gene_url")
-            return
-        end
-
-        data_url = genome_browser_metadata["data_url"]
-        gene_track = genome_browser_metadata["gene_track"]
-        command = "jbrowse-nclist-cli -b " + data_url + " -t tracks/" + gene_track + "/{refseq}/trackData.jsonz -s " \
-                                        + first_hit_start.to_s + " -e " + first_hit_end.to_s + " -r " + organism
-        response = `#{command}`
-        if response != ''
-            data = JSON.parse(response)
-            if data && data.length >= 1
-                url_data = data[0]
-                if url_data && url_data["display_name"] && 
-                    filepath_parts && filepath_parts[2] && 
-                    genome_browser_metadata && genome_browser_metadata["mod_gene_url"]
-
-                    {
-                     order: 2,
-                     title: "#{filepath_parts[2]}: #{url_data['display_name']}",
-                     url:   "#{genome_browser_metadata['mod_gene_url']}#{url_data['id']}",
-                     icon:  'fa-external-link'
-                    }
-                end
-            end
-        end
+    def self.mod_gene(genome_browser_metadata, filepath_parts, url_data)
+        {
+         order: 2,
+         title: "#{filepath_parts[2]}: #{url_data['display_name']}",
+         url:   "#{genome_browser_metadata['mod_gene_url']}#{url_data['id']}",
+         icon:  'fa-external-link'
+        }
     end
 
-    def agr_gene_link
-        database_filepath = whichdb.map(&:name).at(0)
-        database_filename = File.basename(database_filepath)
-        fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
-        filepath_parts = database_filepath.split(File::SEPARATOR)
-        config_filename = filepath_parts[2] + "/" + filepath_parts[3] + "/environment.json"
-        file = File.read('/sequenceserver/public/environments/' + config_filename)
-        database_config = JSON.parse(file)
-
-        first_hit_start = hsps.map(&:sstart).at(0)
-        first_hit_end = hsps.map(&:send).at(0)
-        organism = accession.partition('-').first
-
-        sequence_metadata = {}
-        for reference_sequence in database_config["data"]
-          if reference_sequence["uri"].include? fasta_file_basename
-            sequence_metadata = reference_sequence
-            break
-          end  
-        end
-
-        if !sequence_metadata.has_key?("genome_browser")
-          return
-        end
-        genome_browser_metadata = sequence_metadata["genome_browser"]
-        if !genome_browser_metadata.has_key?("gene_track")
-            return
-        end
-
-        data_url = genome_browser_metadata["data_url"]
-        gene_track = genome_browser_metadata["gene_track"]
-        command = "jbrowse-nclist-cli -b " + data_url + " -t tracks/" + gene_track + "/{refseq}/trackData.jsonz -s " \
-                                        + first_hit_start.to_s + " -e " + first_hit_end.to_s + " -r " + organism
-        response = `#{command}`
-
-        if response != ''
-            data = JSON.parse(response)
-            if data && !data.empty? && filepath_parts[2]
-                url_data = data[0]
-                if url_data && url_data["id"] && url_data["display_name"]
-                    url = "https://www.alliancegenome.org/gene/#{filepath_parts[2]}:#{url_data['id']}"
-                        {
-                         order: 2,
-                         title: "Alliance: #{url_data['display_name']}",
-                         url: url,
-                         icon: 'fa-external-link'
-                        }
-                end
-            end
-        end
+    def self.agr_gene(filepath_parts, url_data)
+        {
+         order: 2,
+         title: "Alliance: #{url_data['display_name']}",
+         url: "https://www.alliancegenome.org/gene/#{filepath_parts[2]}:#{url_data['id']}",
+         icon: 'fa-external-link'
+        }
     end
   end
 end
