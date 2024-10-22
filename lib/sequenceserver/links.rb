@@ -61,7 +61,7 @@ module SequenceServer
     #     query_coords = coordinates[0]
     #     hit_coords = coordinates[1]
 
-    def jbrowse(genome_browser_metadata, filepath_parts)
+    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession)
         assembly = genome_browser_metadata["assembly"]
         if genome_browser_metadata["type"] == "jbrowse"
             subfeatures = []
@@ -177,69 +177,22 @@ module SequenceServer
        }
     end
 
-    def mod_gene_link(genome_browser_metadata, filepath_parts)
-        if !genome_browser_metadata.has_key?("gene_track") || !genome_browser_metadata.has_key?("mod_gene_url")
-            return
-        end
-
-        first_hit_start = hsps.map(&:sstart).at(0)
-        first_hit_end = hsps.map(&:send).at(0)
-        organism = accession.partition('-').first
-
-        data_url = genome_browser_metadata["data_url"]
-        gene_track = genome_browser_metadata["gene_track"]
-        command = "jbrowse-nclist-cli -b " + data_url + " -t tracks/" + gene_track + "/{refseq}/trackData.jsonz -s " \
-                                        + first_hit_start.to_s + " -e " + first_hit_end.to_s + " -r " + organism
-        response = `#{command}`
-        if response != ''
-            data = JSON.parse(response)
-            if data && data.length >= 1
-                url_data = data[0]
-                if url_data && url_data["display_name"] && 
-                    filepath_parts && filepath_parts[2] && 
-                    genome_browser_metadata && genome_browser_metadata["mod_gene_url"]
-
-                    {
-                     order: 2,
-                     title: "#{filepath_parts[2]}: #{url_data['display_name']}",
-                     url:   "#{genome_browser_metadata['mod_gene_url']}#{url_data['id']}",
-                     icon:  'fa-external-link'
-                    }
-                end
-            end
-        end
+    def self.mod_gene(genome_browser_metadata, filepath_parts, url_data)
+        {
+         order: 2,
+         title: "#{filepath_parts[2]}: #{url_data['display_name']}",
+         url:   "#{genome_browser_metadata['mod_gene_url']}#{url_data['id']}",
+         icon:  'fa-external-link'
+        }
     end
 
-    def agr_gene_link(genome_browser_metadata, filepath_parts)
-        if !genome_browser_metadata.has_key?("gene_track")
-            return
-        end
-
-        first_hit_start = hsps.map(&:sstart).at(0)
-        first_hit_end = hsps.map(&:send).at(0)
-        organism = accession.partition('-').first
-
-        data_url = genome_browser_metadata["data_url"]
-        gene_track = genome_browser_metadata["gene_track"]
-        command = "jbrowse-nclist-cli -b " + data_url + " -t tracks/" + gene_track + "/{refseq}/trackData.jsonz -s " \
-                                        + first_hit_start.to_s + " -e " + first_hit_end.to_s + " -r " + organism
-        response = `#{command}`
-
-        if response != ''
-            data = JSON.parse(response)
-            if data && !data.empty? && filepath_parts[2]
-                url_data = data[0]
-                if url_data && url_data["id"] && url_data["display_name"]
-                    url = "https://www.alliancegenome.org/gene/#{filepath_parts[2]}:#{url_data['id']}"
-                        {
-                         order: 2,
-                         title: "Alliance: #{url_data['display_name']}",
-                         url: url,
-                         icon: 'fa-external-link'
-                        }
-                end
-            end
-        end
+    def self.agr_gene(filepath_parts, url_data)
+        {
+         order: 2,
+         title: "Alliance: #{url_data['display_name']}",
+         url: "https://www.alliancegenome.org/gene/#{filepath_parts[2]}:#{url_data['id']}",
+         icon: 'fa-external-link'
+        }
     end
   end
 end

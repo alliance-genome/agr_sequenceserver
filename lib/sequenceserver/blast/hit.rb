@@ -40,37 +40,54 @@ module SequenceServer
       # in the client. These are derived by calling link generators, that is,
       # instance methods of the Links module.
       def links
-        puts "make links"
         database_filepath = getdbpath
 
-        puts "dataase_filepath"
-        puts database_filepath
         database_filename = File.basename(database_filepath)
-        puts database_filename
         fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
-        puts fasta_file_basename
-        puts "id"
-        puts id
         database_config = query.report.instance_variable_get(:@env_config)
 
-        sequence_metadata = {}
+        links = []
         for reference_sequence in database_config
           if reference_sequence["uri"].include? fasta_file_basename
              if reference_sequence.key?("genome_browser")
+                genome_browser_metadata = reference_sequence["genome_browser"]
                 filepath_parts = database_filepath.split(File::SEPARATOR)
-                links = Links.instance_methods.map do |m|
-                   send(m, reference_sequence["genome_browser"], filepath_parts)
+                links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession))
+
+                if genome_browser_metadata.has_key?("gene_track")
+                    first_hit_start = hsps.map(&:sstart).at(0)
+                    first_hit_end = hsps.map(&:send).at(0)
+                    organism = accession.partition('-').first
+
+                    data_url = genome_browser_metadata["data_url"]
+                    gene_track = genome_browser_metadata["gene_track"]
+                    command = "jbrowse-nclist-cli -b " + data_url + " -t tracks/" + gene_track + "/{refseq}/trackData.jsonz -s " \
+                                                    + first_hit_start.to_s + " -e " + first_hit_end.to_s + " -r " + organism
+                    response = `#{command}`
+                    if response != ''
+                        data = JSON.parse(response)
+                        if data && !data.empty?
+                            for url_data in data
+                                if url_data && url_data["id"] && url_data["display_name"]
+                                    links.push(Links.agr_gene(filepath_parts, url_data))
+                                    if genome_browser_metadata.has_key?("mod_gene_url") && filepath_parts[2] && genome_browser_metadata["mod_gene_url"]
+                                        links.push(Links.mod_gene(genome_browser_metadata, filepath_parts, url_data))
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
                 end
-             
                 links.compact!
                 return links.sort_by { |link| [link[:order], link[:title]] }
              else
-               return []
+               return links
              end
              break
           end  
         end
-        return []
+        return links
       end
 
       # Returns the database type (nucleotide or protein).
