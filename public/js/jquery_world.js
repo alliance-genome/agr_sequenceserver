@@ -1,6 +1,5 @@
 import $ from 'jquery';
-import '../packages/jquery-ui@1.11.4';
-import 'bootstrap';
+import '../packages/jquery-ui@1.13.3';
 
 global.$ = $;
 /**
@@ -44,22 +43,32 @@ global.$ = $;
         return this.prop('checked', false);
     };
 
-
     /**
-     * Initialise Bootstrap tooltip on an element with presets. Takes title.
+     * Tooltip
      */
-    $.fn._tooltip = $.fn.tooltip;
-    $.fn.tooltip = function (options) {
-        return this
-            ._tooltip('destroy')
-            ._tooltip($.extend({
-                container: 'body',
-                placement: 'bottom',
-                delay: {
-                    show: 1000
-                }
-            }, options));
-    };
+    $(document).tooltip({
+        position: {
+            my: 'center bottom-20',
+            at: 'center top',
+            using: function( position, feedback ) {
+                $(this).css(position);
+                $('<div>')
+                    .addClass('arrow')
+                    .addClass(feedback.vertical)
+                    .addClass(feedback.horizontal)
+                    .appendTo(this);
+            }
+        },
+        items: 'rect, .tooltip-item',
+        show: false,
+        hide: false,
+        content: function() {
+            var title = $(this).attr('title');
+            if (!title) return false;
+            var parsedHTML = $.parseHTML(title);
+            return parsedHTML;
+        }
+    });
 
     /**
      * Returns true / false if any modal is active.

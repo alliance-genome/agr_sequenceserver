@@ -17,6 +17,8 @@ class Page extends Component {
         this.showErrorModal = this.showErrorModal.bind(this);
         this.getCharacterWidth = this.getCharacterWidth.bind(this);
         this.hspChars = createRef();
+        this.sequenceModal = createRef();
+        this.errorModal = createRef();
     }
     componentDidMount() {
         var job_id = location.pathname.split('/').pop();
@@ -24,11 +26,11 @@ class Page extends Component {
     }
 
     showSequenceModal(url) {
-        this.refs.sequenceModal.show(url);
+        this.sequenceModal.current.show(url);
     }
 
     showErrorModal(errorData, beforeShow) {
-        this.refs.errorModal.show(errorData, beforeShow);
+        this.errorModal.current.show(errorData, beforeShow);
     }
 
     getCharacterWidth() {
@@ -41,9 +43,9 @@ class Page extends Component {
     render() {
         return (
             <div>
-                {/* Provide bootstrap .container element inside the #view for
+                {/* Provide tailwind element inside the #view for
                     the Report component to render itself in. */}
-                <div className="container">
+                <div className="mx-auto">
                     <Report
                         showSequenceModal={(_) => this.showSequenceModal(_)}
                         getCharacterWidth={() => this.getCharacterWidth()}
@@ -52,7 +54,7 @@ class Page extends Component {
                 </div>
 
                 {/* Add a hidden span tag containing chars used in HSPs */}
-                <pre className="pre-reset hsp-lines" ref={this.hspChars} hidden>
+                <pre className="m-0 p-0 rounded-none border-0 bg-inherit whitespace-pre-wrap break-keep mt-1 pre-text tracking-wider" ref={this.hspChars} hidden>
                     ABCDEFGHIJKLMNOPQRSTUVWXYZ +-
                 </pre>
 
@@ -60,11 +62,11 @@ class Page extends Component {
                 <canvas id="png-exporter" hidden></canvas>
 
                 <SequenceModal
-                    ref="sequenceModal"
+                    ref={this.sequenceModal}
                     showErrorModal={(...args) => this.showErrorModal(...args)}
                 />
 
-                <ErrorModal ref="errorModal" />
+                <ErrorModal ref={this.errorModal} />
             </div>
         );
     }

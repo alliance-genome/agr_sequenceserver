@@ -5,10 +5,12 @@ require 'rest-client'
 
 require 'sequenceserver/job'
 require 'sequenceserver/blast'
+require 'sequenceserver/blast/tasks'
 require 'sequenceserver/report'
 require 'sequenceserver/database'
 require 'sequenceserver/sequence'
 require 'sequenceserver/makeblastdb'
+require 'rack/csrf'
 
 module SequenceServer
   # Controller.
@@ -34,7 +36,7 @@ module SequenceServer
       # e.g. for example.org/our-sequenceserver set to '/our-sequenceserver'
       set :root_path_prefix, ''
 
-      set :search_layout, :'search_layout'
+      set :layout, :'layout'
     end
 
     # See
@@ -58,6 +60,14 @@ module SequenceServer
         frame_options = SequenceServer.config[:frame_options]
         frame_options && { frame_options: frame_options }
       }
+
+      use(
+        Rack::Session::Cookie,
+        key: 'rack.session.sequenceserver',
+        secret: ENV.fetch('SESSION_SECRET') { SecureRandom.alphanumeric(64) }
+      )
+
+      use Rack::Csrf, raise: true, skip: ['POST:/cloud_share'] unless ENV['SKIP_CSRF_PROTECTION'] == 'true'
     end
 
     unless ENV['SEQUENCE_SERVER_COMPRESS_RESPONSES'] == 'false'
@@ -77,7 +87,7 @@ module SequenceServer
 
     # Returns base HTML. Rest happens client-side: rendering the search form.
     get '/blast/' do
-      erb :search, layout: settings.search_layout
+      erb :search, layout: settings.layout
     end
 
     get '/blast/sitemap.xml' do
@@ -111,7 +121,9 @@ module SequenceServer
       searchdata = {
         query: Database.retrieve(params[:query]),
         database: Database.all,
-        options: Database.config[:options]
+        #options: Database.config[:options] deleted when pulled upstream
+        options: SequenceServer.config[:options],
+        blastTaskMap: SequenceServer::BLAST::Tasks.to_h
       }
 
       searchdata.update(tree: Database.tree) if SequenceServer.config[:databases_widget] == 'tree'
@@ -136,7 +148,7 @@ module SequenceServer
     def handle_blast_request(params)
       if params[:input_sequence]
         @input_sequence = params[:input_sequence]
-        erb :search, layout: settings.search_layout
+        erb :search, layout: settings.layout
       else
         job = Job.create(params)
         protocol = request.env['HTTP_X_FORWARDED_PROTO'] == 'https' ? 'https' : 'http'
@@ -175,7 +187,7 @@ module SequenceServer
       job = Job.fetch(jid)
       halt 404, File.read(File.join(settings.root, 'public/404.html')) if job.nil?
 
-      erb :report, layout: true
+      erb :report, layout: settings.layout
     end
 
     # @params sequence_ids: whitespace separated list of sequence ids to
@@ -189,15 +201,35 @@ module SequenceServer
     # in identifiers) and retreival_databases (we don't allow whitespace in a
     # database's name, so it's safe).
     get '/blast/:segment1/:segment2/get_sequence/' do
-      sequence_ids = params[:sequence_ids].split(',')
-      database_ids = params[:database_ids].split(',')
+      sequence_ids = params[:sequence_ids].to_s.split(',').uniq
+      database_ids = params[:database_ids].to_s.split(',')
+      if sequence_ids.empty?
+        status 422
+        return { error: 'No sequence ids provided' }.to_json
+      end
+
+      if database_ids.empty?
+        status 422
+        return { error: 'No database ids provided' }.to_json
+      end
       sequences = Sequence::Retriever.new(sequence_ids, database_ids)
       sequences.to_json
     end
 
     post '/blast/:segment1/:segment2/get_sequence' do
-      sequence_ids = params['sequence_ids'].split(',')
-      database_ids = params['database_ids'].split(',')
+      sequence_ids = params['sequence_ids'].to_s.split(',').uniq
+      database_ids = params['database_ids'].to_s.split(',')
+
+      if sequence_ids.empty?
+        status 422
+        return 'No sequence ids provided'
+      end
+
+      if database_ids.empty?
+        status 422
+        return 'No database ids provided'
+      end
+
       sequences = Sequence::Retriever.new(sequence_ids, database_ids, true)
       send_file(sequences.file.path,
                 type: sequences.mime,
@@ -375,7 +407,7 @@ module SequenceServer
         error_data[:more_info] = error.backtrace.join("\n")
       end
 
-      if request.env['HTTP_ACCEPT'].to_s.include?('application/json')
+      if request.env['HTTP_ACCEPT'].to_s.include?('application/json') || request.path.end_with?('.json')
         status 422
         content_type :json
         error_data.to_json
@@ -405,9 +437,9 @@ module SequenceServer
       # the user hits the back button. Thus we do not test for empty string.
       method = job.method.to_sym
       if job.advanced && job.advanced !=
-                         searchdata[:options][method][:default].join(' ')
+                         searchdata.dig(:options, method, :default, :attributes).to_a.join(' ')
         searchdata[:options] = searchdata[:options].deep_copy
-        searchdata[:options][method]['last search'] = [job.advanced]
+        searchdata[:options][method]['last search'] = { attributes: [job.advanced] }
       end
     end
 
@@ -430,7 +462,8 @@ module SequenceServer
         download_links: [
           { name: 'Standard Tabular Report', url: "download/#{jid}.std_tsv" },
           { name: 'Full Tabular Report', url: "/download/#{jid}.full_tsv" },
-          { name: 'Results in XML', url: "/download/#{jid}.xml" }
+          { name: 'Results in XML', url: "/download/#{jid}.xml" },
+          { name: 'Pairwise', url: "/download/#{jid}.pairwise" },
         ]
       }
     end

@@ -1,23 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <title>SequenceServer: Custom BLAST Server</title>
-  <meta name="author" content="Pragmatic Genomics Ltd">
+  <meta name="author" content="Pragmatic Genomics Limited"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Custom BLAST server provided by SequenceServer (https://sequenceserver.com)"/>
-
   <% base_url_protocol = ENV['HTTPS'] == 'on' ? 'https' : (request.env['HTTP_X_FORWARDED_PROTO'] || request.scheme) %>
   <% base_url = "#{base_url_protocol}://#{request.host}" %>
   <% base_url << ":#{request.port}" unless [80, 443].include?(request.port) %>
   <!-- CSS -->
+  <%= Rack::Csrf.metatag(env) %>
+  <link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}" %>/blast/css/app.min.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!--
   <% if settings.production? || settings.test? %>
     <link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}" %>/blast/css/sequenceserver.min.css?ver=<%= SequenceServer::VERSION %>"/>
   <% else %>
     <link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}/blast/css/sequenceserver.css"%>"/>
   <% end %>
+  -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=UA-98765810-1"></script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-H3F65KGJDR"></script>
   <script>
@@ -33,98 +36,94 @@
   </script>
 </head>
 
-<body>
-  <div
-    class="navbar">
-    <div
-      class="container" id="header">
-      <a
-        class="navbar-brand"
-        href="https://sequenceserver.com" target="_blank">
-        <img class="logo" src="<%= "#{base_url}" %>/blast/sequenceserver_logo.webp" alt="sequenceserver_logo">
-        <small>
-          <%= SequenceServer::VERSION %>
-        </small>
-      </a>
-      <ul class="nav navbar-nav navbar-right hover-reset focus-reset">
-        <li>
-          <a
-            href="https://sequenceserver.com/progress-on-BLAST-interface/"
-            class="update-check"
-            data-version="<%= SequenceServer::VERSION %>"
-            target="_blank">
+<body class="text-black relative">
+  <header id="header" class="border-b border-seqorange print:hidden">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-none items-center">
+        <div class="pr-8 md:pr-0 py-4">
+          <a href="https://sequenceserver.com" target="_blank" class="flex items-end">
+            <img src="<%= "#{base_url}" %>/blast/sequenceserver_logo.webp" alt="sequenceserver_logo" width="1620" height="213" class="h-8 w-auto pr-2">
+            <span class="text-sm md:text-base">
+              <%= SequenceServer::VERSION %>
+            </span>
           </a>
-        </li>
-        <li>
-          <a
-            target="_blank"
-            href="https://sequenceserver.com/support">
-            <i class="fa fa-comment-o"></i>
-            &nbsp;Help &amp; Support
-          </a>
-        </li>
-      </ul>
+        </div>
+
+        <div class="flex-grow"></div>
+        <ul class="flex space-x-2">
+          <li>
+            <a
+              href="https://sequenceserver.com/progress-on-BLAST-interface/"
+              class="underline text-seqblue"
+              data-update-check
+              data-version="<%= SequenceServer::VERSION %>"
+              target="_blank">
+            </a>
+          </li>
+          <li>
+            <a
+              class="text-seqblue flex items-center text-sm md:text-base hover:text-seqorange"
+              target="_blank"
+              href="https://sequenceserver.com/support">
+
+              <i class="fa-regular fa-comment w-4 h-4 mr-1 fill-current"></i>
+              Help &amp; Support
+            </a>
+          </li>
+        </ul>
+      </div>
     </div>
-  </div>
+  </header>
+
   <script type="text/javascript" src="<%= "#{base_url}" %>/blast/resource_logo.js"></script>
-  <div
-    class="container">
-    <noscript>
-      <div
-        class="nojs-error">
-        <h3>SequenceServer can't work without JavaScript.</h3>
-        <ul>
+  <noscript>
+    <div class="mx-auto px-4">
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <strong class="font-bold">Our website cannot work without JavaScript.</strong>
+        <ul class="mt-2 list-disc list-inside">
           <li>Please see if you can enable JavaScript in your browser's preferences.</li>
           <li>If your browser doesn't support JavaScript, please consider upgrading to the latest version or using Firefox or Chrome.</li>
         </ul>
       </div>
-    </noscript>
-  </div>
+    </div>
+  </noscript>
 
   <%= yield %>
 
-  <div
-    class="footer" id="footer">
-    <hr>
-    <div
-      class="container">
-      <p
-        class="text-center">
-	Please cite data sources and <a style='vertical-align: baseline' href="https://doi.org/10.1093/molbev/msz185">the paper</a> describing <a href="https://wurmlab.com">our</a> <a href="https://sequenceserver.com">SequenceServer BLAST interface</a>.
-        <a style='vertical-align: baseline'
-          href='https://sequenceserver.com'><em>
-          <%=
-            quote = [
-	      "Visualize BLAST results.",
-              "Run BLAST on local computer.",
-	      "BLAST on Mac.",
-	      "BLAST on Windows.",
-	      "Run blast on mac.",
-	      "Blast analysis software.",
-	      "Sequence Search on local computer.",
-	      "Blast DNA sequence search.",
-              "Custom BLAST search.",
-              "Install blast on Mac.",
-              "Perform BLAST analyses.",
-              "Custom BLAST web interface.",
-              "SequenceServer: Local BLAST with bespoke html interface.",
-              "Set up custom BLAST interface with SequenceServer.",
-              "Easy BLASTing with SequenceServer.",
-              "BLAST against a custom, local database with SequenceServer.",
-  	      "Cloud BLAST custom genome.",
-	      "NCBI BLAST alternative.",
-	      "BLAST private transcriptome assembly in the Cloud.",
-	      "Cloud server for comparative genomics, oligos, crisp, primers and more."
-            ][rand(19)]
-          %>
-        </em></a>
+  <div class="mx-auto px-4">
+    <div class="container mx-auto max-w-screen-xl">
+      <p class="text-center text-sm print:hidden">
+        Please cite data sources and <a class="text-seqblue" href="https://doi.org/10.1093/molbev/msz185">the paper</a> describing <a class="text-seqblue" href="https://wurmlab.com">our</a> <a class="text-seqblue" href="https://sequenceserver.com">SequenceServer BLAST interface</a>.
+        <a class="text-seqblue" href='https://sequenceserver.com'>
+          <em>
+            <%=
+              quote = [
+                "Visualize BLAST results.",
+                "Run BLAST on local computer.",
+                "BLAST on Mac.",
+                "BLAST on Windows.",
+                "Run blast on mac.",
+                "Blast analysis software.",
+                "Sequence Search on local computer.",
+                "Blast DNA sequence search.",
+                "Custom BLAST search.",
+                "Install blast on Mac.",
+                "Perform BLAST analyses.",
+                "Custom BLAST web interface.",
+                "SequenceServer: Local BLAST with bespoke html interface.",
+                "Set up custom BLAST interface with SequenceServer.",
+                "Easy BLASTing with SequenceServer.",
+                "BLAST against a custom, local database with SequenceServer.",
+                "Cloud BLAST custom genome.",
+                "NCBI BLAST alternative.",
+                "BLAST private transcriptome assembly in the Cloud.",
+                "Cloud server for comparative genomics, oligos, crisp, primers and more."
+              ].sample
+            %>
+          </em>
+        </a>
       </p>
-      <% footer_path = File.join(settings.root, '../website-extras/footer.html.erb') %>
-      <%= erb :'../../website-extras/footer.html', locals: { path_prefix: root_path_prefix } if File.exist?(footer_path) %>
-    </div> <!-- /container -->
   </div>
 
-  <!-- twitter -->
-  <script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src="//platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");</script>
 </body>
 </html>

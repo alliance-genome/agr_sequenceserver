@@ -1,4 +1,4 @@
-import d3 from 'd3';
+import * as d3 from 'd3';
 import _ from 'underscore';
 import Grapher from 'grapher';
 import * as Helpers from './visualisation_helpers';
@@ -58,13 +58,6 @@ class Graph {
         return hits;
     }
 
-    setupTooltip() {
-        this.svg_container.find('[data-toggle="tooltip"]').tooltip({
-            'placement': 'top', 'container': 'body', 'html': 'true',
-            'delay': 0, 'white-space': 'nowrap'
-        });
-    }
-
     setupClick($graphDiv) {
         $('a', $graphDiv).click(function (evt) {
             evt.preventDefault();
@@ -87,7 +80,7 @@ class Graph {
             $graphDiv
                 .append(
                     $('<button/>')
-                        .addClass('btn btn-link more')
+                        .addClass('btn btn-link text-sm text-seqblue hover:text-seqorange cursor-pointer more')
                         .attr('type', 'button')
                         .attr('data-parent-query', $queryDiv.attr('id'))
                         .html('View More&nbsp;')
@@ -97,7 +90,7 @@ class Graph {
                                 .addClass('fa fa-angle-double-down')
                         ),
                     $('<button/>')
-                        .addClass('btn btn-link less')
+                        .addClass('btn btn-link text-sm text-seqblue hover:text-seqorange cursor-pointer less')
                         .attr('type', 'button')
                         .attr('data-parent-query', $queryDiv.attr('id'))
                         .html('View Less&nbsp;')
@@ -143,7 +136,6 @@ class Graph {
             countHits();
             this.graphIt($queryDiv, $graphDiv, shownHits, MIN_HITS_TO_SHOW, opts, hits);
             initButtons();
-            this.setupTooltip();
             e.stopPropagation();
         },this));
 
@@ -161,7 +153,6 @@ class Graph {
                 this.graphIt($queryDiv, $graphDiv, shownHits, MIN_HITS_TO_SHOW - shownHits, opts, hits);
                 initButtons();
             }
-            this.setupTooltip();
             e.stopPropagation();
         },this));
     }
@@ -262,9 +253,7 @@ class Graph {
             .append('g')
             .attr('transform', 'translate(' + options.margin / 2 + ', ' + (1.5 * options.margin) + ')');
 
-        var x = d3.scale
-            .linear()
-            .range([0, width - options.margin]);
+        var x = d3.scaleLinear().range([0, width - options.margin]);
 
         x.domain([1, queryLen]);
 
@@ -274,10 +263,7 @@ class Graph {
         var _tValues = x.ticks(11);
         _tValues.pop();
 
-        var xAxis = d3.svg
-            .axis()
-            .scale(x)
-            .orient('top')
+        var xAxis = d3.axisBottom(x)
             .tickValues(_tValues.concat([1, queryLen]))
             .tickFormat(formatter);
 
@@ -294,16 +280,14 @@ class Graph {
             .attr('y','2px')
             .attr('transform','rotate(-90)');
 
-        var y = d3.scale
-            .ordinal()
-            .rangeBands([0, height - 3 * options.margin - 2 * options.legend], 0.3);
+        var y = d3.scaleBand()
+            .range([0, height - 3 * options.margin - 2 * options.legend], 0.3);
 
         y.domain(hits.map(function (d) {
             return d.hitId;
         }));
 
-        var gradScale = d3.scale
-            .log()
+        var gradScale = d3.scaleLog()
             .domain([
                 d3.min([1e-5, d3.min(hits.map(function (d) {
                     if (parseFloat(d.hitEvalue) === 0.0) return undefined;
@@ -369,7 +353,6 @@ class Graph {
                         d3.select(this)
                             .attr('xlink:href', '#' + q_i + '_hit_' + (i+1))
                             .append('rect')
-                            .attr('data-toggle', 'tooltip')
                             .attr('title', alt_tooltip)
                             .attr('class','bar')
                             .attr('x', function (d) {
@@ -393,8 +376,6 @@ class Graph {
         if (index === 0) {
             this.graphControls($queryDiv, $graphDiv, true, opts, inhits);
         }
-        // Refresh tooltip each time graph is redrawn.
-        this.setupTooltip();
         // Ensure clicking on 'rect' takes user to the relevant hit on all
         // browsers.
         this.setupClick($graphDiv);

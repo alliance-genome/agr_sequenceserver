@@ -18,14 +18,14 @@
     test:
       runs-on: ubuntu-latest
       steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
 
         - name: Get BLAST
           working-directory: /opt
-          run: wget -c "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.15.0/ncbi-blast-2.15.0+-x64-linux.tar.gz" && tar xvf ncbi-blast-*.tar.gz
+          run: wget -c "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.16.0/ncbi-blast-2.16.0+-x64-linux.tar.gz" && tar xvf ncbi-blast-*.tar.gz
 
         - name: BLAST PATH
-          run: mkdir /opt/bin && echo "/opt/bin:/opt/ncbi-blast-2.15.0+/bin" >> $GITHUB_PATH
+          run: mkdir /opt/bin && echo "/opt/bin:/opt/ncbi-blast-2.16.0+/bin" >> $GITHUB_PATH
 
         - name: Get CodeClimate
           working-directory: /opt
@@ -44,9 +44,9 @@
           run: bundle install
 
         - name: Setup Node.js
-          uses: actions/setup-node@v3
+          uses: actions/setup-node@v4
           with:
-            node-version: '16'
+            node-version: '22'
 
         - name: Install NPM Dependencies
           run: npm install
@@ -75,11 +75,11 @@
 
         - name: Run main specs and import spec for BLAST 2.9.0+
           id: rspec_tests
-          run: bundle exec rspec spec/*_spec.rb spec/blast_versions/blast_2.9.0/*
+          run: bundle exec rspec spec
           continue-on-error: true
 
         - name: upload rspec coverage report
-          uses: actions/upload-artifact@v3
+          uses: actions/upload-artifact@v4
           with:
             name: rspec-code-coverage-report
             path: coverage
@@ -93,7 +93,7 @@
           continue-on-error: true
 
         - name: upload Jest coverage report
-          uses: actions/upload-artifact@v3
+          uses: actions/upload-artifact@v4
           with:
             name: jest-code-coverage-report
             path: coverage/lcov-report/

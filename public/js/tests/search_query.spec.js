@@ -1,7 +1,6 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-undef */
 import { render, screen, fireEvent } from '@testing-library/react';
-import { SearchQueryWidget } from '../query';
 import { Form } from '../form';
 import { AMINO_ACID_SEQUENCE, NUCLEOTIDE_SEQUENCE, FASTQ_SEQUENCE, FASTA_OF_FASTQ_SEQUENCE } from './mock_data/sequences';
 import '@testing-library/jest-dom/extend-expect';
@@ -11,10 +10,21 @@ let container;
 let inputEl;
 
 describe('SEARCH COMPONENT', () => {
+    let csrfMetaTag;
+
     beforeEach(() => {
+        csrfMetaTag = document.createElement('meta');
+        csrfMetaTag.setAttribute('name', '_csrf');
+        csrfMetaTag.setAttribute('content', 'test-token');
+        document.head.appendChild(csrfMetaTag);
         container  = render(<Form onSequenceTypeChanged={() => { }
         } />).container;
         inputEl = screen.getByRole('textbox', { name: '' });
+    });
+
+    afterEach(() => {
+        // Remove the CSRF meta tag after each test to clean up
+        document.head.removeChild(csrfMetaTag);
     });
 
     test('should render the search component textarea', () => {

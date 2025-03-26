@@ -60,7 +60,7 @@ module SequenceServer
     #     e.g.,
     #     query_coords = coordinates[0]
     #     hit_coords = coordinates[1]
-
+=begin
     def jbrowse
         database_filepath = whichdb.map(&:name).at(0)
         database_filename = File.basename(database_filepath)
@@ -301,6 +301,7 @@ module SequenceServer
             end
         end
     end
+=end
   end
 end
 # [1]: https://stackoverflow.com/questions/2824126/whats-the-difference-between-ur#{sequence_id}i-escape-and-cgi-escape
