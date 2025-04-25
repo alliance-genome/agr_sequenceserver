@@ -299,6 +299,19 @@ module SequenceServer
       end
     end
 
+    get '/blast/logos/*' do |file|
+      # Combine with the base directory
+      file_path = File.join(settings.root, 'public', 'logos', file)
+      # Check if the file exists
+      if File.exist?(file_path)
+        send_file file_path, disposition: :inline
+      else
+        # Handle case when file doesn't exist
+        status 404
+        'File not found'
+      end
+    end
+
     get '/blast/fonts/*' do |file|
       # Combine with the base directory
       file_path = File.join(settings.root, 'public', 'fonts', file)

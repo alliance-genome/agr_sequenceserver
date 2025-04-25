@@ -36,46 +36,61 @@
   </script>
 </head>
 
+<% segment = request.path.split("/")[2] %>
+<% member_path = case segment
+  when "FB" then "flybase"
+  when "MGD" then "mgd"
+  when "RGD" then "rgd"
+  when "SGD" then "sgd"
+  when "WB" then "wormbase"
+  when "ZFIN" then "zfin"
+  when "XB" then "xenbase"
+  else segment
+end %>
+
+<% member_name = case segment
+  when "FB" then "FlyBase"
+  when "MGD" then "MGD"
+  when "RGD" then "RGD"
+  when "SGD" then "SGD"
+  when "WB" then "WormBase"
+  when "ZFIN" then "ZFIN"
+  when "XB" then "XenBase"
+  else ""
+end %>
+
+<% data_version = request.path.split("/")[3] %>
+
 <body class="text-black relative">
   <header id="header" class="border-b border-seqorange print:hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-none items-center">
-        <div class="pr-8 md:pr-0 py-4">
+        <div class="py-4">
+          <a href="https://alliancegenome.org" target="_blank" class="flex items-end">
+            <img src="/blast/logos/alliance_logo_agr.png" alt="agr_logo" width="405" height="53">
+          </a>
+        </div>
+        <div class="py-8" style="padding-left:20px">
+          <a href="https://www.alliancegenome.org/members/<%= member_path %>" target="_blank" class="flex items-end">
+             <img src="/blast/logos/alliance_logo_<%= member_path %>.png" alt="agr_logo" width="100" height="100">
+             <strong style="font-size: 1.5rem;padding-left: 10px;padding-bottom:40px">Alliance <%= member_name%> BLAST</strong>
+          </a>
+        </div>
+        <div class="pr-8 md:pr-0 py-4" style="padding-left:40px">
+          <strong>Powered by</strong>
           <a href="https://sequenceserver.com" target="_blank" class="flex items-end">
             <img src="<%= "#{base_url}" %>/blast/sequenceserver_logo.webp" alt="sequenceserver_logo" width="1620" height="213" class="h-8 w-auto pr-2">
             <span class="text-sm md:text-base">
               <%= SequenceServer::VERSION %>
             </span>
           </a>
+          <strong style="font-size: 1.5em;float:right; padding-top:10px">Data Version: <%= data_version %></strong>
         </div>
-
-        <div class="flex-grow"></div>
-        <ul class="flex space-x-2">
-          <li>
-            <a
-              href="https://sequenceserver.com/progress-on-BLAST-interface/"
-              class="underline text-seqblue"
-              data-update-check
-              data-version="<%= SequenceServer::VERSION %>"
-              target="_blank">
-            </a>
-          </li>
-          <li>
-            <a
-              class="text-seqblue flex items-center text-sm md:text-base hover:text-seqorange"
-              target="_blank"
-              href="https://sequenceserver.com/support">
-
-              <i class="fa-regular fa-comment w-4 h-4 mr-1 fill-current"></i>
-              Help &amp; Support
-            </a>
-          </li>
-        </ul>
       </div>
     </div>
   </header>
 
-  <script type="text/javascript" src="<%= "#{base_url}" %>/blast/resource_logo.js"></script>
+  <!-- <script type="text/javascript" src="<%= "#{base_url}" %>/blast/resource_logo.js"></script> -->
   <noscript>
     <div class="mx-auto px-4">
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -114,38 +129,7 @@
     <a href="https://doi.org/10.1093/molbev/msz185">https://doi.org/10.1093/molbev/msz185</a>. 
     PMID: <a href="https://pubmed.ncbi.nlm.nih.gov/31411700/">31411700</a>.
 </p>
-
-<!--  Please cite data sources and <a class="text-seqblue" href="https://doi.org/10.1093/molbev/msz185">the paper</a> describing <a class="text-seqblue" href="https://wurmlab.com">our</a> <a class="text-seqblue" href="https://sequenceserver.com">SequenceServer BLAST interface</a>.-->
-        <a class="text-seqblue" href='https://sequenceserver.com'>
-          <em>
-            <%=
-              quote = [
-                "Visualize BLAST results.",
-                "Run BLAST on local computer.",
-                "BLAST on Mac.",
-                "BLAST on Windows.",
-                "Run blast on mac.",
-                "Blast analysis software.",
-                "Sequence Search on local computer.",
-                "Blast DNA sequence search.",
-                "Custom BLAST search.",
-                "Install blast on Mac.",
-                "Perform BLAST analyses.",
-                "Custom BLAST web interface.",
-                "SequenceServer: Local BLAST with bespoke html interface.",
-                "Set up custom BLAST interface with SequenceServer.",
-                "Easy BLASTing with SequenceServer.",
-                "BLAST against a custom, local database with SequenceServer.",
-                "Cloud BLAST custom genome.",
-                "NCBI BLAST alternative.",
-                "BLAST private transcriptome assembly in the Cloud.",
-                "Cloud server for comparative genomics, oligos, crisp, primers and more."
-              ].sample
-            %>
-          </em>
-        </a>
-      </p>
-  </div>
+</div>
 
 </body>
 </html>
