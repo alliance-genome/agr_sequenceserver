@@ -66,3 +66,7 @@ public/vendor/npm
 
 spec/dotdir/*
 spec/downloads/*
+<<<<<<< HEAD
+=======
+spec/tmp
+>>>>>>> upstream/master

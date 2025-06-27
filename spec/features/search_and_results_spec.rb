@@ -16,6 +16,10 @@ describe 'Search and results', type: :feature, js: true do
     File.read File.join(__dir__, '..', 'sequences', 'protein_query.fa')
   end
 
+  let(:duplicated_query) do
+    File.read File.join(__dir__, '..', 'sequences', 'duplicated_query.fa')
+  end
+
   let(:funkyid_query) do
     'GATGAACGCTGGCGGCGTGCCTAATACATGCAAGTCGAG'
   end
@@ -105,6 +109,31 @@ describe 'Search and results', type: :feature, js: true do
     expect(page).to have_content('TBLASTN')
   end
 
+  it 'remembers advanced params for the same algorithm' do
+    visit '/'
+
+    fill_in('sequence', with: protein_query)
+    nucleotide_databases.each { |db| check db }
+    fill_in('advanced', with: '-evalue 0.01 -num_alignments 1')
+    click_button('method')
+    expect(page).to have_content('Query')
+
+    visit '/'
+
+    click_on('[Deselect all]') # Clear database selection populated from the last job - we may want to reconsider if we want this behaviour.
+
+    fill_in('sequence', with: protein_query)
+    check(protein_databases.first)
+
+    expect(page).to have_field('advanced', with: '-evalue 1e-5') # different algorithm, no memories
+    uncheck(protein_databases.first)
+
+    check(nucleotide_databases.first)
+    expect(page).to have_field('advanced', with: '-evalue 0.01 -num_alignments 1')
+    expect(page).to have_checked_field('predefinedOption', with: '-evalue 0.01 -num_alignments 1')
+
+  end
+
   ### Test aspects of the generated report.
 
   it 'can download FASTA of each hit' do
@@ -166,6 +195,16 @@ describe 'Search and results', type: :feature, js: true do
 
     expect(File.basename(downloaded_file)).to eq('sequenceserver-8_hits.fa')
     expect(File.read(downloaded_file)).to eq(File.read('spec/sequences/funky_ids_download.fa'))
+  end
+
+  it 'on download deduplicates by identifiers' do
+    perform_search(query: duplicated_query, databases: nucleotide_databases.values_at(1))
+
+    page.click_link('FASTA of all hits')
+    wait_for_download
+
+    expect(File.basename(downloaded_file)).to eq('sequenceserver-SI2.2.0_13722.fa')
+    expect(File.read(downloaded_file)).to eq(File.read('spec/sequences/sequenceserver-1_hit.fa'))
   end
 
   it 'can download alignment for each hit' do
@@ -235,6 +274,11 @@ describe 'Search and results', type: :feature, js: true do
     wait_for_download
     expect(File.basename(downloaded_file)).to eq('sequenceserver-xml_report.xml')
     clear_downloads
+
+    page.click_link('Full Text report')
+    wait_for_download
+    expect(File.basename(downloaded_file)).to eq('sequenceserver-pairwise_report.txt')
+    clear_downloads
   end
 
   it 'can copy URL to clipboard' do
@@ -289,8 +333,7 @@ describe 'Search and results', type: :feature, js: true do
     end
 
     # Dismiss the modal.
-    page.find('.sequence-viewer').send_keys(:escape)
-    expect(page).to have_no_css('.sequence-viewer')
+    page.find('.sequence-viewer-close').click
 
     # Click on the second sequence viewer link in the report.
     page.find_all('.view-sequence')[1].click
@@ -377,12 +420,12 @@ describe 'Search and results', type: :feature, js: true do
     within('#Query_1_hit_1 .kablammo.grapher') do
       page.click_on('SVG')
       wait_for_download
-      expect(File.basename(downloaded_file)).to eq('Kablammo-Query_1-SI2_2_0_06267.svg')
+      expect(File.basename(downloaded_file)).to eq('Kablammo_query-1_Query_1_SI2_2_0_06267.svg')
       clear_downloads
 
       page.click_on('PNG')
       wait_for_download
-      expect(File.basename(downloaded_file)).to eq('Kablammo-Query_1-SI2_2_0_06267.png')
+      expect(File.basename(downloaded_file)).to eq('Kablammo_query-1_Query_1_SI2_2_0_06267.png')
       clear_downloads
     end
   end

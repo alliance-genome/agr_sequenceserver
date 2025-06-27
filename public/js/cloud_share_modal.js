@@ -15,6 +15,7 @@ export default class CloudShareModal extends React.Component {
       email: '',
       agreeToTos: false,
       shareableurl: '',
+      isModalVisible: false,
     };
     this.modalRef = createRef();
   }
@@ -28,13 +29,11 @@ export default class CloudShareModal extends React.Component {
     this.setState({ [name]: inputValue });
   }
 
-  handleSubmit = (e) => {
+  handleSubmit = async (e) => {
     e.preventDefault();
 
     const { email } = this.state;
-    const regex = /\/([^/]+)(?:\/|#|\?|$)/;
-    const match = window.location.pathname.match(regex);
-    const jobId = match[1];
+    const jobId = this.getJobIdFromPath();
 
     this.setState({ formState: 'loading' });
 
@@ -43,40 +42,55 @@ export default class CloudShareModal extends React.Component {
       sender_email: email
     };
 
-    fetch('/cloud_share', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestData)
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.shareable_url) {
-          // Successful response
-          this.setState({ formState: 'results', shareableurl: data.shareable_url });
-        } else if (data.errors) {
-          // Error response with specific error messages
-          const errorMessages = data.errors;
-          this.setState({ formState: 'error', errorMessages });
-        } else {
-          // Generic error message
-          throw new Error('Unknown error submitting form');
-        }
-      })
-      .catch(error => {
-        this.setState({
-          formState: 'error',
-          errorMessages: [error.message]
-        });
+    try {
+      const response = await fetch('/cloud_share', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
       });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const data = await response.json();
+
+      if (data.shareable_url) {
+        this.setState({ formState: 'results', shareableurl: data.shareable_url });
+      } else if (data.errors) {
+        this.setState({ formState: 'error', errorMessages: data.errors });
+      } else {
+        throw new Error('Unknown error submitting form');
+      }
+    } catch (error) {
+      this.setState({
+        formState: 'error',
+        errorMessages: [error.message]
+      });
+    }
+  }
+
+  getJobIdFromPath = () => {
+    const regex = /\/([^/]+)(?:\/|#|\?|$)/;
+    const match = window.location.pathname.match(regex);
+    return match ? match[1] : match;
+  }
+
+  show = () => {
+    this.modalRef.current?.showModal();
+  }
+
+  hide = () => {
+    this.modalRef.current?.close();
   }
 
   renderLoading() {
     return (
-      <div className="text-center">
+      <div className="text-center pt-3">
         <i className="fa fa-spinner fa-3x fa-spin"></i>
-        <p>Uploading the job to SequenceServer Cloud, please wait...</p>
+        <p className="my-3">Uploading the job to SequenceServer Cloud, please wait...</p>
       </div>
     );
   }
@@ -93,18 +107,13 @@ export default class CloudShareModal extends React.Component {
     return (
       <>
         {
-          _.map(
-            errorMessages,
-            _.bind(function (errorMessage) {
-              return (
-                <div className="fastan">
-                  <div className="section-content">
-                    <div className="modal-error">{errorMessage}</div>
-                  </div>
-                </div>
-              );
-            }, this)
-          )
+          errorMessages.map((errorMessage, index) => (
+            <div key={`fastan-${index}`} className="fastan">
+              <div className="pt-0 px-0 pb-px">
+                <div className="text-danger text-lg border border-danger p-2 my-2">{errorMessage}</div>
+              </div>
+            </div>
+          ))
         }
         {this.renderForm()}
       </>
@@ -117,46 +126,52 @@ export default class CloudShareModal extends React.Component {
 
     return(
       <form onSubmit={this.handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="emailInput">Your Email Address</label>
+        <div className="px-6 py-4 text-sm">
+          <label htmlFor="emailInput" className="text-seqblue hover:text-orange cursor-pointer mb-0">Your Email Address</label>
           <input
             type="email"
             id="emailInput"
-            className="form-control"
+            className="block w-full rounded-md border-0 py-1.5 px-3 mb-3 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-seqblue sm:text-sm sm:leading-6"
             placeholder="person@example.com"
             name="email"
             value={email}
             required="required"
             onChange={this.handleChange}
           />
+          <p className="mb-3">
+            By submitting this form you agree to upload this SequenceServer result set to <a href="https://sequenceserver.com/cloud/" target="_bank" className="text-seqblue hover:text-seqorange">SenquenceServer Cloud</a>
+            , where it will become available on the internet to everyone with the link. You also agree that your email address will be stored on SequenceServer databases as proof of authentication for support and similar purposes.
+          </p>
+          <div className="form-check">
+            <input
+              type="checkbox"
+              id="tosCheckbox"
+              className="form-check-input"
+              name="agreeToTos"
+              checked={agreeToTos}
+              onChange={this.handleChange}
+            />
+            <label htmlFor="tosCheckbox" className="pl-2">
+              &nbsp;I agree to the <b><a href="https://sequenceserver.com/cloud/terms_and_conditions" target="_blank" className="text-seqblue hover:text-seqorange">Terms and Conditions of Service</a></b>
+            </label>
+          </div>
         </div>
-        <p>
-          By submitting this form you agree to upload this SequenceServer result set to <a href="https://sequenceserver.com/cloud/" target="_bank">SenquenceServer Cloud</a>
-          , where it will become available on the internet to everyone with the link. You also agree that your email address will be stored on SequenceServer databases as proof of authentication for support and similar purposes.
-        </p>
-
-        <div className="form-group form-check">
-          <input
-            type="checkbox"
-            id="tosCheckbox"
-            className="form-check-input"
-            name="agreeToTos"
-            checked={agreeToTos}
-            onChange={this.handleChange}
-          />
-          <label htmlFor="tosCheckbox" className="form-check-label">
-            &nbsp;I agree to the <b><a href="https://sequenceserver.com/cloud/terms_and_conditions" target="_blank">Terms and Conditions of Service</a></b>
-          </label>
+        <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+          <button
+              type="submit"
+              style={{ backgroundColor: isSubmitDisabled ? '#C74F13' : '#1B557A' }}
+              className='border-seqblue py-2 px-3 rounded-md text-white'
+              disabled={isSubmitDisabled}
+          >
+              Submit
+          </button>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={isSubmitDisabled}>
-          Submit
-        </button>
       </form>
     )
   }
 
   render() {
-    const { formState } = this.state;
+    const { formState, isModalVisible } = this.state;
 
     let content;
     switch (formState) {
@@ -176,41 +191,23 @@ export default class CloudShareModal extends React.Component {
     }
 
     return (
-      <div className="modal cloud-share" ref={this.modalRef} tabIndex="-1">
-        <div className="modal-dialog">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>Share to SequenceServer Cloud</h3>
+      <div className="relative">
+        <dialog ref={this.modalRef} className="fixed p-4 w-full max-w-2xl bg-transparent focus:outline-none">
+          <div className="relative flex flex-col rounded-lg bg-white shadow">
+            <div className="flex items-start justify-between rounded-t border-b p-5">
+              <h3 className="text-xl font-medium text-gray-900">
+                Share to SequenceServer Cloud
+              </h3>
+              <button className="ml-auto inline-flex items-center rounded-lg bg-transparent p-1.5 text-sm text-gray-400 hover:bg-gray-200" onClick={this.hide}>
+                <i className="fa-solid fa-xmark hover:text-black"></i>
+              </button>
             </div>
-            <div className="modal-body">
+            <div className="dialog-content">
               {content}
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     );
-  }
-
-  /*
-   * Returns jQuery reference to the main modal container.
-   */
-  modal() {
-    return $(this.modalRef.current);
-  }
-
-  /**
-   * Shows share dialogue.
-   */
-  show() {
-    this.setState({ requestCompleted: false }, () => {
-      this.modal().modal("show");
-    });
-  }
-
-  /**
-   * Hide share dialogue.
-   */
-  hide() {
-    this.modal().modal("hide");
   }
 }

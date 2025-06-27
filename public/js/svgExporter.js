@@ -8,6 +8,7 @@
  *
  */
 import * as Exporter from './exporter';
+import * as d3 from 'd3';
 
 /**
  * Exports the given <svg> DOM node as a .svg file.
@@ -54,7 +55,11 @@ var export_as_png = function (svg, filename) {
         Exporter.download_url(canvas.toDataURL('image/png'), filename);
     };
 
-    img.src = 'data:image/svg+xml;base64,' + window.btoa(serialize_svg(svg));
+    var svgString = serialize_svg(svg);
+    var encodedSvg = encodeURIComponent(svgString).replace(/%([0-9A-F]{2})/gi, function(match, p1) {
+        return String.fromCharCode('0x' + p1);
+    });
+    img.src = 'data:image/svg+xml;base64,' + window.btoa(encodedSvg);
 };
 
 var serialize_svg = function(svg) {
@@ -71,8 +76,8 @@ var serialize_svg = function(svg) {
 
     svg.removeAttribute('xmlns');
     svg.removeAttribute('xlink');
-    svg.setAttributeNS(d3.ns.prefix.xmlns, 'xmlns', d3.ns.prefix.svg);
-    svg.setAttributeNS(d3.ns.prefix.xmlns, 'xmlns:xlink', d3.ns.prefix.xlink);
+    svg.setAttributeNS(d3.namespaces.xmlns, 'xmlns', d3.namespaces.svg);
+    svg.setAttributeNS(d3.namespaces.xmlns, 'xmlns:xlink', d3.namespaces.xlink);
 
     var source = (new XMLSerializer()).serializeToString(svg);
     var doctype = '<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC ' +

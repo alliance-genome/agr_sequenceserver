@@ -6,6 +6,7 @@ import LengthDistribution from './length_distribution'; // length distribution o
 import Utils from './utils';
 import { fastqToFasta } from './fastq_to_fasta';
 import CollapsePreferences from './collapse_preferences';
+import './jquery_world';
 
 /**
  * Query component displays query defline, graphical overview, length
@@ -44,21 +45,22 @@ export class ReportQuery extends Component {
         return this.props.query.hits.length;
     }
     headerJSX() {
-        var meta = `length: ${this.queryLength().toLocaleString()}`;
+        var meta = `Length: ${this.queryLength().toLocaleString()}`;
+
         if (this.props.showQueryCrumbs) {
-            meta = `query ${this.props.query.number}, ` + meta;
+            meta = `query ${this.props.query.number}. ${meta}`;
         }
-        return <div className="section-header">
-            <h3>
-                <strong>Query=&nbsp;{this.props.query.id}</strong>&nbsp;
-                {this.props.query.title}
+        return <div className="section-header border-b border-seqorange justify-between w-full flex flex-col sm:flex-row gap-4">
+            <h3 className="text-base cursor-pointer flex flex-col sm:flex-row items-start">
+                <strong>Query=<span className="ml-1">{this.props.query.id}</span></strong>
+                <span className="ml-1">{this.props.query.title}</span>
             </h3>
-            <span className="label label-reset pos-label">{meta}</span>
+            <span className="label first-letter:capitalize text-sm text-right font-normal text-inherit pt-0 px-0">{meta}</span>
         </div>;
     }
 
     hitsListJSX() {
-        return <div className="section-content">
+        return <div className="pt-0 px-0 pb-px">
             <HitsOverview key={'GO_' + this.props.query.number} query={this.props.query} program={this.props.program} collapsed={this.props.veryBig} />
             <LengthDistribution key={'LD_' + this.props.query.id} query={this.props.query} algorithm={this.props.program} />
             <HitsTable key={'HT_' + this.props.query.number} query={this.props.query} imported_xml={this.props.imported_xml} />
@@ -66,14 +68,14 @@ export class ReportQuery extends Component {
     }
 
     noHitsJSX() {
-        return <div className="section-content">
+        return <div className="pt-0 px-0 pb-px">
             <strong> ****** No BLAST hits found ****** </strong>
         </div>;
     }
 
     render() {
         return (
-            <div className="resultn" id={this.domID()}
+            <div className="resultn mt-1.5" id={this.domID()}
                 data-query-len={this.props.query.length}
                 data-algorithm={this.props.program}>
                 {this.headerJSX()}
@@ -124,6 +126,7 @@ export class SearchQueryWidget extends Component {
     componentDidUpdate() {
         this.hideShowButton();
         this.preProcessSequence();
+        this.props.onSequenceChanged(this.residuesCount());
 
         var type = this.type();
         if (!type || type !== this._type) {
@@ -154,6 +157,19 @@ export class SearchQueryWidget extends Component {
             });
             return this;
         }
+    }
+
+    residuesCount() {
+        const sequence = this.value();
+        const lines = sequence.split('\n');
+        const residuesCount = lines.reduce((count, line) => {
+            if (!line.startsWith('>')) {
+                return count + line.length;
+            }
+            return count;
+        }, 0);
+
+        return residuesCount;
     }
 
     /**
@@ -334,9 +350,9 @@ export class SearchQueryWidget extends Component {
                     className="sequence">
                     <textarea
                         id="sequence" ref={this.textareaRef}
-                        className="block w-full p-4 text-gray-900 border border-gray-300 rounded-lg bg-gray-50 text-base text-monospace"
+                        className="block w-full p-4 text-gray-900 border border-gray-300 rounded-l-lg rounded-tr-lg bg-gray-50 text-sm font-mono min-h-52 resize-y"
                         name="sequence" value={this.state.value}
-                        rows="10"
+                        rows="6"
                         required="required"
                         placeholder="Paste query sequence(s) or drag file
                         containing query sequence(s) in FASTA format here ..."
@@ -394,16 +410,16 @@ class HitsTable extends Component {
         if (this.props.imported_xml) seqwidth += 15;
 
         return <table
-            className="table table-hover table-condensed tabular-view ">
+            className="table table-hover table-condensed tabular-view text-sm min-w-full mb-0">
             <thead>
-                <tr>
-                    <th className="text-left">#</th>
-                    <th width={`${seqwidth}%`}>Similar sequences</th>
-                    {hasName && <th width="15%" className="text-left">Species</th>}
-                    {!this.props.imported_xml && <th width="15%" className="text-right">Query coverage (%)</th>}
-                    <th width="10%" className="text-right">Total score</th>
-                    <th width="10%" className="text-right">E value</th>
-                    <th width="10%" className="text-right">Identity (%)</th>
+                <tr className="text-neutral-500">
+                    <th className="text-left font-normal">#</th>
+                    <th style={{ width: `${seqwidth}%` }} className="text-left font-normal">Similar sequences</th>
+                    {hasName && <th className="text-left font-normal w-2/12">Species</th>}
+                    {!this.props.imported_xml && <th className="text-right font-normal w-2/12">Query coverage (%)</th>}
+                    <th className="text-right font-normal w-1/12">Total score</th>
+                    <th className="text-right font-normal w-1/12">E value</th>
+                    <th className="text-right font-normal w-1/12">Identity (%)</th>
                 </tr>
             </thead>
             <tbody>
@@ -412,22 +428,19 @@ class HitsTable extends Component {
                         return (
                             <tr key={hit.number}>
                                 <td className="text-left">{hit.number + '.'}</td>
-                                <td className="nowrap-ellipsis"
-                                    title={`${hit.id} ${hit.title}`}
-                                    data-toggle="tooltip" data-placement="left">
+                                <td>
                                     <a href={'#Query_' + this.props.query.number + '_hit_' + hit.number}
-                                        className="btn-link">{hit.id} {hit.title}</a>
+                                        className="text-sm text-seqblue hover:text-seqorange cursor-pointer pe-1 line-clamp-1 tooltip-item" title={`${hit.id} ${hit.title}`}>{hit.id} {hit.title}</a>
                                 </td>
                                 {hasName &&
-                                    <td className="nowrap-ellipsis" title={hit.sciname}
-                                        data-toggle="tooltip" data-placement="top">
+                                    <td className="pe-1 line-clamp-1 tooltip-item" title={hit.sciname}>
                                         {hit.sciname}
                                     </td>
                                 }
                                 {!this.props.imported_xml && <td className="text-right">{hit.qcovs}</td>}
-                                <td className="text-right">{hit.total_score}</td>
-                                <td className="text-right">{Utils.inExponential(hit.hsps[0].evalue)}</td>
-                                <td className="text-right">{Utils.inPercentage(hit.hsps[0].identity, hit.hsps[0].length)}</td>
+                                <td className="pe-1 text-right">{hit.total_score}</td>
+                                <td className="pe-1 text-right">{Utils.inExponential(hit.hsps[0].evalue)}</td>
+                                <td className="pe-1 text-right">{Utils.inPercentage(hit.hsps[0].identity, hit.hsps[0].length)}</td>
                             </tr>
                         );
                     }, this))
@@ -438,12 +451,14 @@ class HitsTable extends Component {
 
     render() {
         return (
-            <div className="table-hit-overview">
-                <h4 className="caption" onClick={() => this.collapsePreferences.toggleCollapse()}>
-                    {this.collapsePreferences.renderCollapseIcon()}
-                    <span> {this.name}</span>
-                </h4>
-                <div id={'Query_' + this.props.query.number + 'HT_' + this.props.query.number}>
+            <div className={`table-hit-overview ${this.state.collapsed ? 'print:hidden' : ''}`}>
+                <div className="grapher-header pr-px">
+                    <h4 className="inline-block pl-px m-0 caption cursor-pointer text-sm caption" onClick={() => this.collapsePreferences.toggleCollapse()}>
+                        {this.collapsePreferences.renderCollapseIcon()}
+                        <span> {this.name}</span>
+                    </h4>
+                </div>
+                <div id={'Query_' + this.props.query.number + 'HT_' + this.props.query.number} className="overflow-auto md:overflow-hidden">
                     {!this.state.collapsed && this.tableJSX()}
                 </div>
             </div>

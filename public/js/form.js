@@ -4,7 +4,8 @@ import { SearchQueryWidget } from './query';
 import DatabasesTree from './databases_tree';
 import { Databases } from './databases';
 import _ from 'underscore';
-import { Options } from './options';
+import { Options } from 'options';
+import QueryStats from 'query_stats';
 
 /**
  * Search form.
@@ -16,15 +17,26 @@ export class Form extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            databases: [], preDefinedOpts: {}, tree: {}
+            databases: [],
+            preSelectedDbs: [],
+            currentlySelectedDbs: [],
+            preDefinedOpts: {},
+            tree: {},
+            residuesInQuerySequence: 0,
+            blastMethod: ''
         };
         this.useTreeWidget = this.useTreeWidget.bind(this);
-        this.determineBlastMethod = this.determineBlastMethod.bind(this);
+        this.determineBlastMethods = this.determineBlastMethods.bind(this);
         this.handleSequenceTypeChanged = this.handleSequenceTypeChanged.bind(this);
+        this.handleSequenceChanged = this.handleSequenceChanged.bind(this);
         this.handleDatabaseTypeChanged = this.handleDatabaseTypeChanged.bind(this);
+        this.handleDatabaseSelectionChanged = this.handleDatabaseSelectionChanged.bind(this);
         this.handleAlgoChanged = this.handleAlgoChanged.bind(this);
         this.handleFormSubmission = this.handleFormSubmission.bind(this);
         this.formRef = createRef();
+        this.query = createRef();
+        this.button = createRef();
+        this.setButtonState = this.setButtonState.bind(this);
     }
 
     componentDidMount() {
@@ -54,15 +66,26 @@ export class Form extends Component {
                 tree: data['tree'],
                 databases: data['database'],
                 preSelectedDbs: data['preSelectedDbs'],
-                preDefinedOpts: data['options']
+                preDefinedOpts: data['options'],
+                blastTaskMap: data['blastTaskMap'],
+                currentlySelectedDbs: data['preSelectedDbs'] || [],
+            }, () => {
+                this.handleDatabaseSelectionChanged(this.state.currentlySelectedDbs);
+                this.handleFirstSelectionDB();
+                this.setBlastMethods();
             });
 
             /* Pre-populate the form with server sent query sequences
              * (if any).
              */
             if (data['query']) {
-                this.refs.query.value(data['query']);
+                this.query.current.value(data['query']);
             }
+
+            // DB selection
+            setTimeout(() => {
+                this.preselectDatabases(this.state.preSelectedDbs);
+            }, 0);
 
             setTimeout(function () {
                 $('.jstree_div').click();
@@ -77,11 +100,32 @@ export class Form extends Component {
                 $button.trigger('click');
             }
         });
+    }
 
-        // show overlay to create visual feedback on button click
-        $('#method').on('click', () => {
-            $('#overlay').css('display', 'block');
-        });
+    handleFirstSelectionDB() {
+        const firstSelectedDb = this.state.preSelectedDbs != null ? this.state.preSelectedDbs[0].type : null;
+        if (firstSelectedDb) {
+            this.handleDatabaseTypeChanged(firstSelectedDb);
+        }
+    }
+    
+    setBlastMethods() {
+        const methods = this.determineBlastMethods();
+        if (methods.length > 0) {
+            this.setState({ blastMethod: methods[0] });
+        }
+    }
+
+    preselectDatabases(preSelectedDbs) {
+        if (preSelectedDbs) {
+            preSelectedDbs.forEach(db => {
+                const matchCheckbox = this.formRef.current.querySelector(`input.checkbox-database[value="${db.id}"]`);
+                if (matchCheckbox) {
+                    matchCheckbox.click();
+                    matchCheckbox.checked = true;
+                }
+            });
+        }
     }
 
     useTreeWidget() {
@@ -91,14 +135,18 @@ export class Form extends Component {
     handleFormSubmission(evt) {
         evt.preventDefault();
         const form = this.formRef.current;
+
+        document.getElementById('overlay').style.display = 'block';
+
         const formData = new FormData(form);
-        formData.append('method', this.refs.button.state.methods[0]);
+        formData.append('method', this.button.current.state.methods[0]);
+
         fetch(window.location.href, {
             method: 'POST',
             body: formData
         }).then(res => {
             //remove overlay when form is submitted
-            $('#overlay').css('display', 'none');
+            document.getElementById('overlay').style.display = 'none';
             // redirect
             if (res.redirected && res.url) {
                 // setTimeout is needed here as a workaround because safari doesnt allow async calling of window.open
@@ -110,11 +158,11 @@ export class Form extends Component {
         });
     }
 
-    determineBlastMethod() {
+    determineBlastMethods() {
         var database_type = this.databaseType;
         var sequence_type = this.sequenceType;
 
-        if (this.refs.query.isEmpty()) {
+        if (this.query.current.isEmpty()) {
             return [];
         }
 
@@ -145,37 +193,45 @@ export class Form extends Component {
         return [];
     }
 
+    handleSequenceChanged(residuesInQuerySequence) {
+        if(residuesInQuerySequence !== this.state.residuesInQuerySequence)
+            this.setState({ residuesInQuerySequence: residuesInQuerySequence});
+    }
+
     handleSequenceTypeChanged(type) {
         this.sequenceType = type;
-        this.refs.button.setState({
-            hasQuery: !this.refs.query.isEmpty(),
-            hasDatabases: !!this.databaseType,
-            methods: this.determineBlastMethod()
-        });
+        this.setButtonState();
     }
 
     handleDatabaseTypeChanged(type) {
         this.databaseType = type;
-        this.refs.button.setState({
-            hasQuery: !this.refs.query.isEmpty(),
+        this.setButtonState();
+    }
+
+    setButtonState() {
+        this.button.current.setState({
+            hasQuery: !this.query.current.isEmpty(),
             hasDatabases: !!this.databaseType,
-            methods: this.determineBlastMethod()
+            methods: this.determineBlastMethods()
         });
+    }
+
+    handleDatabaseSelectionChanged(selectedDbs) {
+        if (!_.isEqual(selectedDbs, this.state.currentlySelectedDbs))
+            this.setState({ currentlySelectedDbs: selectedDbs });
     }
 
     handleAlgoChanged(algo) {
         if (algo in this.state.preDefinedOpts) {
-            var preDefinedOpts = this.state.preDefinedOpts[algo];
-            this.refs.opts.setState({
-                method: algo,
-                preOpts: preDefinedOpts,
-                value: (preDefinedOpts['last search'] ||
-                    preDefinedOpts['default']).join(' ')
-            });
+            this.setState({ blastMethod: algo });
         }
         else {
-            this.refs.opts.setState({ preOpts: {}, value: '', method: '' });
+            this.setState({ blastMethod: ''});
         }
+    }
+
+    residuesInSelectedDbs() {
+        return this.state.currentlySelectedDbs.reduce((sum, db) => sum + parseInt(db.ncharacters, 10), 0);
     }
 
     render() {
@@ -191,26 +247,41 @@ export class Form extends Component {
                 </div>
 
                 <form id="blast" ref={this.formRef} onSubmit={this.handleFormSubmission}>
-                    <SearchQueryWidget ref="query" onSequenceTypeChanged={this.handleSequenceTypeChanged} />
+                    <input type="hidden" name="_csrf" value={document.querySelector('meta[name="_csrf"]').content} />
+                    <div className="px-4">
+                        <SearchQueryWidget ref={this.query} onSequenceTypeChanged={this.handleSequenceTypeChanged} onSequenceChanged={this.handleSequenceChanged}/>
 
-                    {this.useTreeWidget() ?
-                        <DatabasesTree ref="databases"
-                            databases={this.state.databases} tree={this.state.tree}
-                            preSelectedDbs={this.state.preSelectedDbs}
-                            onDatabaseTypeChanged={this.handleDatabaseTypeChanged} />
-                        :
-                        <Databases ref="databases" databases={this.state.databases}
-                            preSelectedDbs={this.state.preSelectedDbs}
-                            onDatabaseTypeChanged={this.handleDatabaseTypeChanged} />
-                    }
+                        {this.useTreeWidget() ?
+                            <DatabasesTree
+                                databases={this.state.databases} tree={this.state.tree}
+                                preSelectedDbs={this.state.preSelectedDbs}
+                                onDatabaseTypeChanged={this.handleDatabaseTypeChanged}
+                                onDatabaseSelectionChanged={this.handleDatabaseSelectionChanged} />
+                            :
+                            <Databases databases={this.state.databases}
+                                preSelectedDbs={this.state.preSelectedDbs}
+                                onDatabaseTypeChanged={this.handleDatabaseTypeChanged}
+                                onDatabaseSelectionChanged={this.handleDatabaseSelectionChanged} />
+                        }
 
-                    <div className="md:flex flex-row md:space-x-4 items-center my-6">
-                        <Options ref="opts" />
-                        <label className="block my-4 md:my-0">
+                        <Options blastMethod={this.state.blastMethod} predefinedOptions={this.state.preDefinedOpts[this.state.blastMethod] || {}} blastTasks={(this.state.blastTaskMap || {})[this.state.blastMethod]} />
+
+                    </div>
+
+                    <div className="py-6"></div> {/* add a spacer so that the sticky action bar does not hide any contents */}
+
+                    <div className="pb-4 pt-2 px-4 sticky bottom-0 md:flex flex-row md:space-x-4 items-center justify-end bg-gradient-to-t to-gray-100/90 from-white/90">
+                        <QueryStats
+                            residuesInQuerySequence={this.state.residuesInQuerySequence} numberOfDatabasesSelected={this.state.currentlySelectedDbs.length} residuesInSelectedDbs={this.residuesInSelectedDbs()}
+                            currentBlastMethod={this.state.blastMethod}
+                        />
+
+                        <label className="text-seqblue hover:seqorange cursor-pointer block my-4 md:my-2">
                             <input type="checkbox" id="toggleNewTab" /> Open results in new tab
                         </label>
-                        <SearchButton ref="button" onAlgoChanged={this.handleAlgoChanged} />
+                        <SearchButton ref={this.button} onAlgoChanged={this.handleAlgoChanged} />
                     </div>
+
                 </form>
             </div>
         );

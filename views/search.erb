@@ -6,24 +6,20 @@
 <input type="hidden" id="input_sequence" value="<%= @input_sequence %>">
 
 <!-- We will initialise React on this div -->
-<div id="view" class="my-6 container mx-auto max-w-screen-xl px-4 py-6"></div>
-<link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}" %>/blast/css/app.min.css"/>
+<div id="view" class="my-6 container mx-auto max-w-screen-xl py-6"></div>
 
 <!-- JS -->
 <script src="<%= "#{base_url}/blast/sequenceserver-search.min.js?ver=#{SequenceServer::VERSION}" %>"></script>
 
 <!-- Markup for advanced options modal -->
-<div class="hidden fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true" data-help-modal>
-  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
-
-    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-screen-md sm:w-full">
-      <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 border-b">
-        <h3 class="text-xl leading-6 font-medium text-gray-900">Advanced Options</h3>
+<div class="relative">
+  <dialog class="advanced-modal fixed p-4 w-full max-w-7xl bg-transparent focus:outline-none overflow-visible">
+    <div class="relative flex flex-col rounded-lg bg-white shadow">
+      <div class="flex items-start justify-between rounded-t border-b p-5">
+        <h3 class="text-xl font-medium text-gray-900">
+          Options
+        </h3>
       </div>
-
       <div class="overflow-y-scroll max-h-96 bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
         <div id="tblastn">
         <%= erb :tblastn_options %>
@@ -41,12 +37,26 @@
         <%= erb :blastp_options %>
         </div>
       </div>
-
       <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse border-t">
-        <button type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-seqblue text-base font-medium text-white hover:bg-seqorange focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-seqorange sm:ml-3 sm:w-auto sm:text-sm" onclick="document.querySelector('[data-help-modal]').classList.add('hidden')">
+        <button type="button" class="advanced-modal-close w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-seqblue text-xl font-medium text-white hover:bg-seqorange focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-seqorange sm:ml-3 sm:w-auto sm:text-sm">
           Close
         </button>
       </div>
     </div>
-  </div>
+    <p>
+    If you use this service, please cite:
+Data:
+Bult CJ, Sternberg PW. 2023. The Alliance of Genome Resources: transforming comparative
+genomics. Mamm Genome, 2023;34(4):531-44. doi: 10.1007/s00335-023-10015-2. PMID:
+37666946.
+BLAST service:
+Anurag Priyam, Ben J Woodcroft, Vivek Rai, Ismail Moghul, Alekhya Munagala, Filip Ter, Hiten
+Chowdhary, Iwo Pieniak, Lawrence J Maynard, Mark Anthony Gibbins, HongKee Moon, Austin
+Davis-Richardson, Mahmut Uludag, Nathan S Watson-Haigh, Richard Challis, Hiroyuki Nakamura,
+Emeline Favreau, Esteban A Gómez, Tomás Pluskal, Guy Leonard, Wolfgang Rumpf, Yannick Wurm.
+2019. Sequenceserver: A modern graphical user interface for custom BLAST databases.Molecular
+Biology and Evolution 36(12):2922–2924, https://doi.org/10.1093/molbev/msz185. PMID:
+31411700
+    </p>
+  </dialog>
 </div>

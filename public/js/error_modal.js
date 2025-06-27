@@ -2,7 +2,7 @@ import React, { createRef } from 'react';
 
 /**
  * Takes errorData object with title, message, and more_info keys as props. The
- * component displays a bootstrap modal when mounted. errorData.title is used
+ * component displays a tailwind modal when mounted. errorData.title is used
  * to set modal title. errorData.message is inserted as HTML text in modal
  * body. And errorData.more_info is shown using a pre tag in modal body.
  *
@@ -13,46 +13,59 @@ export default class ErrorModal extends React.Component {
 
     constructor(props) {
         super(props);
-        this.state = { errorData: {} };
-        this.modal = createRef();
+        this.state = {
+            errorData: {},
+            isModalVisible: false
+        };
+        this.modalRef = createRef();
     }
 
-    // HTML for Bootstrap modal.
     render() {
+        const { isModalVisible, errorData } = this.state;
+
         return (
-            <div id="error" ref={this.modal} className="modal fade"
-                data-keyboard="false" data-backdrop="static">
-                <div className="modal-dialog modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h3>{this.state.errorData.title}</h3>
+            <div className="relative">
+                <dialog ref={this.modalRef} className="fixed p-4 w-full max-w-2xl bg-transparent focus:outline-none">
+                    <div className="relative flex flex-col rounded-lg bg-white shadow">
+                        <div className="flex items-start justify-between rounded-t border-b p-5">
+                            <h3 className="text-xl font-medium text-gray-900">
+                                {errorData.title}
+                            </h3>
+                            <button className="ml-auto inline-flex items-center rounded-lg bg-transparent p-1.5 text-gray-400 hover:bg-gray-200" onClick={this.hide}>
+                                <i className="fa-solid fa-xmark hover:text-black"></i>
+                            </button>
                         </div>
-
-                        <div className="modal-body">
-                            <p dangerouslySetInnerHTML={{ __html: this.state.errorData.message}}></p>
-
+                        <div className="pt-2 px-6 pb-6 mt-2 text-sm">
+                            <p dangerouslySetInnerHTML={{ __html: errorData.message }} className="mb-4"></p>
                             {
-                                this.state.errorData.more_info &&
-                                    <pre className="pre-scrollable">
-                                        {this.state.errorData.more_info}
-                                    </pre>
+                                errorData.more_info &&
+                                    <pre className="p-2 bg-slate-200 overflow-auto max-h-56">{errorData.more_info}</pre>
                             }
                         </div>
                     </div>
-                </div>
+                </dialog>
             </div>
         );
     }
+
     /**
      * Shows error viewer.
      */
-    show (errorData, beforeShow) {
-        this.setState({errorData: errorData});
+    show = (errorData, beforeShow) => {
+        this.setState({ errorData: errorData });
+
         // Caller can specify an amount of time to wait for before showing the
         // modal. This is helpful if the caller wants to finish some work
         // before showing error modal.
         setTimeout(() => {
-            $(this.modal.current).modal('show');
+            this.modalRef.current?.showModal();
         }, beforeShow || 0);
+    }
+
+    /**
+     * Hide dialogue.
+     */
+    hide = () => {
+        this.modalRef.current?.close();
     }
 }

@@ -1,23 +1,30 @@
+<% require 'net/http' %>
+<% require 'json' %>
+<% require 'uri' %>
+
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <title>SequenceServer: Custom BLAST Server</title>
-  <meta name="author" content="Pragmatic Genomics Ltd">
+  <meta name="author" content="Pragmatic Genomics Limited"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Custom BLAST server provided by SequenceServer (https://sequenceserver.com)"/>
-
   <% base_url_protocol = ENV['HTTPS'] == 'on' ? 'https' : (request.env['HTTP_X_FORWARDED_PROTO'] || request.scheme) %>
   <% base_url = "#{base_url_protocol}://#{request.host}" %>
   <% base_url << ":#{request.port}" unless [80, 443].include?(request.port) %>
   <!-- CSS -->
+  <%= Rack::Csrf.metatag(env) %>
+  <link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}" %>/blast/css/app.min.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!--
   <% if settings.production? || settings.test? %>
     <link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}" %>/blast/css/sequenceserver.min.css?ver=<%= SequenceServer::VERSION %>"/>
   <% else %>
     <link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}/blast/css/sequenceserver.css"%>"/>
   <% end %>
+  -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=UA-98765810-1"></script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-H3F65KGJDR"></script>
   <script>
@@ -33,98 +40,135 @@
   </script>
 </head>
 
-<body>
-  <div
-    class="navbar">
-    <div
-      class="container" id="header">
-      <a
-        class="navbar-brand"
-        href="https://sequenceserver.com" target="_blank">
-        <img class="logo" src="<%= "#{base_url}" %>/blast/sequenceserver_logo.webp" alt="sequenceserver_logo">
-        <small>
-          <%= SequenceServer::VERSION %>
-        </small>
-      </a>
-      <ul class="nav navbar-nav navbar-right hover-reset focus-reset">
-        <li>
-          <a
-            href="https://sequenceserver.com/progress-on-BLAST-interface/"
-            class="update-check"
-            data-version="<%= SequenceServer::VERSION %>"
-            target="_blank">
+<% segment = request.path.split("/")[2] %>
+
+<% member_map = {
+  "FB" => "flybase",
+  "MGD" => "mgd",
+  "RGD" => "rgd",
+  "SGD" => "sgd",
+  "WB" => "wormbase",
+  "ZFIN" => "zfin",
+  "XB" => "xenbase",
+  "AGR" => "agr"
+}
+member_key = member_map[segment] %>
+
+<% member_path = case segment
+  when "FB" then "flybase"
+  when "MGD" then "mgd"
+  when "RGD" then "rgd"
+  when "SGD" then "sgd"
+  when "WB" then "wormbase"
+  when "ZFIN" then "zfin"
+  when "XB" then "xenbase"
+  else segment
+end %>
+
+<% member_name = case segment
+  when "FB" then "FlyBase"
+  when "MGD" then "MGD"
+  when "RGD" then "RGD"
+  when "SGD" then "SGD"
+  when "WB" then "WormBase"
+  when "ZFIN" then "ZFIN"
+  when "XB" then "XenBase"
+  else ""
+end %>
+
+<% data_version = request.path.split("/")[3] %>
+
+<% 
+member_key = member_map[segment.upcase]
+
+member_logo_url = nil
+
+if member_key
+  begin
+    manifest_uri = URI("https://www.alliancegenome.org/asset-manifest.json")
+    manifest_response = Net::HTTP.get(manifest_uri)
+    manifest = JSON.parse(manifest_response)['files']
+    filename_prefix = "static/media/alliance_logo_#{member_key}.png"
+    hashed_path = manifest[filename_prefix]
+
+    if hashed_path
+      member_logo_url = "https://www.alliancegenome.org#{hashed_path}"
+    end
+
+  rescue => e
+    logger.error "[ERROR] Problem fetching/parsing manifest: #{e.message}"
+  end
+end
+%>
+
+  <header id="header" class="border-b border-seqorange print:hidden">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-none items-center">
+        <div class="py-4">
+          <a href="https://alliancegenome.org" target="_blank" class="flex items-end">
+            <img src="/blast/logos/alliance_logo_agr.png" alt="agr_logo" width="405" height="53">
           </a>
-        </li>
-        <li>
-          <a
-            target="_blank"
-            href="https://sequenceserver.com/support">
-            <i class="fa fa-comment-o"></i>
-            &nbsp;Help &amp; Support
+        </div>
+        <div class="py-8" style="padding-left:20px">
+          <a href="https://www.alliancegenome.org/members/<%= member_path %>" target="_blank" class="flex items-end">
+            <img id="alliance-member-logo" src="<%= member_logo_url || '/blast/logos/default_logo.png' %>" alt="Alliance MOD logo" width="100" height="100">
+            <strong style="font-size: 1.5rem; padding-left: 10px; padding-bottom:40px">Alliance <%= member_name %> BLAST</strong>
           </a>
-        </li>
-      </ul>
+        </div>
+        <div class="pr-8 md:pr-0 py-4" style="padding-left:40px">
+          <strong>Powered by</strong>
+          <a href="https://sequenceserver.com" target="_blank" class="flex items-end">
+            <img src="<%= "#{base_url}" %>/blast/sequenceserver_logo.webp" alt="sequenceserver_logo" width="1620" height="213" class="h-8 w-auto pr-2">
+            <span class="text-sm md:text-base">
+              <%= SequenceServer::VERSION %>
+            </span>
+          </a>
+          <strong style="font-size: 1.5em; float:right; padding-top:10px">Data Version: <%= data_version %></strong>
+        </div>
+      </div>
     </div>
-  </div>
-  <script type="text/javascript" src="<%= "#{base_url}" %>/blast/resource_logo.js"></script>
-  <div
-    class="container">
-    <noscript>
-      <div
-        class="nojs-error">
-        <h3>SequenceServer can't work without JavaScript.</h3>
-        <ul>
+  </header>
+
+  <!-- <script type="text/javascript" src="<%= "#{base_url}" %>/blast/resource_logo.js"></script> -->
+  <noscript>
+    <div class="mx-auto px-4">
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <strong class="font-bold">Our website cannot work without JavaScript.</strong>
+        <ul class="mt-2 list-disc list-inside">
           <li>Please see if you can enable JavaScript in your browser's preferences.</li>
           <li>If your browser doesn't support JavaScript, please consider upgrading to the latest version or using Firefox or Chrome.</li>
         </ul>
       </div>
-    </noscript>
-  </div>
+    </div>
+  </noscript>
 
   <%= yield %>
 
-  <div
-    class="footer" id="footer">
-    <hr>
-    <div
-      class="container">
-      <p
-        class="text-center">
-	Please cite data sources and <a style='vertical-align: baseline' href="https://doi.org/10.1093/molbev/msz185">the paper</a> describing <a href="https://wurmlab.com">our</a> <a href="https://sequenceserver.com">SequenceServer BLAST interface</a>.
-        <a style='vertical-align: baseline'
-          href='https://sequenceserver.com'><em>
-          <%=
-            quote = [
-	      "Visualize BLAST results.",
-              "Run BLAST on local computer.",
-	      "BLAST on Mac.",
-	      "BLAST on Windows.",
-	      "Run blast on mac.",
-	      "Blast analysis software.",
-	      "Sequence Search on local computer.",
-	      "Blast DNA sequence search.",
-              "Custom BLAST search.",
-              "Install blast on Mac.",
-              "Perform BLAST analyses.",
-              "Custom BLAST web interface.",
-              "SequenceServer: Local BLAST with bespoke html interface.",
-              "Set up custom BLAST interface with SequenceServer.",
-              "Easy BLASTing with SequenceServer.",
-              "BLAST against a custom, local database with SequenceServer.",
-  	      "Cloud BLAST custom genome.",
-	      "NCBI BLAST alternative.",
-	      "BLAST private transcriptome assembly in the Cloud.",
-	      "Cloud server for comparative genomics, oligos, crisp, primers and more."
-            ][rand(19)]
-          %>
-        </em></a>
-      </p>
-      <% footer_path = File.join(settings.root, '../website-extras/footer.html.erb') %>
-      <%= erb :'../../website-extras/footer.html', locals: { path_prefix: root_path_prefix } if File.exist?(footer_path) %>
-    </div> <!-- /container -->
-  </div>
+  <div class="mx-auto px-4">
+    <div class="container mx-auto max-w-screen-xl">
+      <p class="text-center text-sm print:hidden">
+       <p>If you use this service, please cite:</p>
 
-  <!-- twitter -->
-  <script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src="//platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");</script>
+       <h3><strong>Data:</strong></h3>
+<p>
+    Bult CJ, Sternberg PW. 2023. The Alliance of Genome Resources: transforming comparative genomics. 
+    <i>Mamm Genome</i>, 2023;34(4):531-44. 
+    doi: <a href="https://doi.org/10.1007/s00335-023-10015-2">10.1007/s00335-023-10015-2</a>. 
+    PMID: <a href="https://pubmed.ncbi.nlm.nih.gov/37666946/">37666946</a>.
+</p>
+
+<h3><strong>BLAST service:</strong></h3>
+<p>
+    Anurag Priyam, Ben J Woodcroft, Vivek Rai, Ismail Moghul, Alekhya Munagala, Filip Ter, Hiten
+    Chowdhary, Iwo Pieniak, Lawrence J Maynard, Mark Anthony Gibbins, HongKee Moon, Austin
+    Davis-Richardson, Mahmut Uludag, Nathan S Watson-Haigh, Richard Challis, Hiroyuki Nakamura,
+    Emeline Favreau, Esteban A Gómez, Tomás Pluskal, Guy Leonard, Wolfgang Rumpf, Yannick Wurm. 
+    2019. Sequenceserver: A modern graphical user interface for custom BLAST databases. 
+    <i>Molecular Biology and Evolution</i> 36(12):2922–2924, 
+    <a href="https://doi.org/10.1093/molbev/msz185">https://doi.org/10.1093/molbev/msz185</a>. 
+    PMID: <a href="https://pubmed.ncbi.nlm.nih.gov/31411700/">31411700</a>.
+</p>
+</div>
+
 </body>
 </html>

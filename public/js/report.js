@@ -1,14 +1,12 @@
 import './jquery_world'; // for custom $.tooltip function
 import React, { Component } from 'react';
-import _ from 'underscore';
 
 import Sidebar from './sidebar';
-import Circos from './circos';
-import { ReportQuery } from './query';
-import Hit from './hit';
-import HSP from './hsp';
 import AlignmentExporter from './alignment_exporter';
 import ReportPlugins from 'report_plugins';
+import RunSummary from './report/run_summary';
+import GraphicalOverview from './report/graphical_overview';
+import AlignmentResults from './report/alignment_results';
 
 /**
  * Renders entire report.
@@ -21,11 +19,6 @@ class Report extends Component {
         super(props);
         // Properties below are internal state used to render results in small
         // slices (see updateState).
-        this.numUpdates = 0;
-        this.nextQuery = 0;
-        this.nextHit = 0;
-        this.nextHSP = 0;
-        this.maxHSPs = 3; // max HSPs to render in a cycle
         this.state = {
             user_warning: null,
             download_links: [],
@@ -34,8 +27,8 @@ class Report extends Component {
             program: '',
             program_version: '',
             submitted_at: '',
-            queries: [],
             results: [],
+            queries: [],
             querydb: [],
             params: [],
             stats: [],
@@ -43,7 +36,6 @@ class Report extends Component {
             allQueriesLoaded: false,
             cloud_sharing_enabled: false,
         };
-        this.prepareAlignmentOfSelectedHits = this.prepareAlignmentOfSelectedHits.bind(this);
         this.prepareAlignmentOfAllHits = this.prepareAlignmentOfAllHits.bind(this);
         this.setStateFromJSON = this.setStateFromJSON.bind(this);
         this.plugins = new ReportPlugins(this);
@@ -58,31 +50,66 @@ class Report extends Component {
     }
 
     pollPeriodically(path, callback, errCallback) {
-        var intervals = [200, 400, 800, 1200, 2000, 3000, 5000];
+    var intervals = [200, 400, 800, 1200, 2000, 3000, 5000];
         function poll() {
-            $.getJSON(path).complete(function (jqXHR) {
-                switch (jqXHR.status) {
-                case 202:
-                    var interval;
-                    if (intervals.length === 1) {
-                        interval = intervals[0];
-                    } else {
-                        interval = intervals.shift();
+            fetch(path)
+                .then(response => {
+                    // Handle HTTP status codes
+                    if (!response.ok) throw response;
+
+                    return response.text().then(data => {
+                        if (data) {
+                            data = parseJSON(data);
+                        };
+                        return { status: response.status, data }
+                    });
+                })
+                .then(({ status, data }) => {
+                    switch (status) {
+                        case 202:
+                            var interval;
+                            if (intervals.length === 1) {
+                                interval = intervals[0];
+                            } else {
+                                interval = intervals.shift();
+                            }
+                            setTimeout(poll, interval);
+                            break;
+                        case 200:
+                            callback(data);
+                            break;
                     }
-                    setTimeout(poll, interval);
-                    break;
-                case 200:
-                    callback(jqXHR.responseJSON);
-                    break;
-                case 400:
-                case 422:
-                case 500:
-                    errCallback(jqXHR.responseJSON);
-                    break;
-                }
-            });
+                })
+                .catch(error => {
+                    if (error.text) {
+                        error.text().then(errData => {
+                            errData = parseJSON(errData);
+                            switch (error.status) {
+                                case 400:
+                                case 422:
+                                case 500:
+                                    errCallback(errData);
+                                    break;
+                                default:
+                                    console.error("Unhandled error:", error.status);
+                            }
+                        });
+                    } else {
+                        console.error("Network error:", error);
+                    }
+                });
         }
 
+        function parseJSON(str) {
+            let parsedJson = str;
+            try {
+                parsedJson = JSON.parse(str);
+            } catch (e) {
+                console.error("Error parsing JSON:", e);
+            }
+
+            return parsedJson;
+        }
         poll();
     }
 
@@ -106,144 +133,10 @@ class Report extends Component {
    */
     componentDidMount() {
         this.fetchResults();
-        this.plugins.init();
         // This sets up an event handler which enables users to select text from
         // hit header without collapsing the hit.
         this.preventCollapseOnSelection();
         this.toggleTable();
-    }
-
-    /**
-   * Called for the first time after as BLAST results have been retrieved from
-   * the server and added to this.state by fetchResults. Only summary overview
-   * and circos would have been rendered at this point. At this stage we kick
-   * start iteratively adding 1 HSP to the page every 25 milli-seconds.
-   */
-    componentDidUpdate(prevProps, prevState) {
-        // Log to console how long the last update take?
-        // console.log((Date.now() - this.lastTimeStamp) / 1000);
-
-        // Lock sidebar in its position on the first update.
-        if (this.nextQuery == 0 && this.nextHit == 0 && this.nextHSP == 0) {
-            this.affixSidebar();
-        }
-
-        // Queue next update if we have not rendered all results yet.
-        if (this.nextQuery < this.state.queries.length) {
-            // setTimeout is used to clear call stack and space out
-            // the updates giving the browser a chance to respond
-            // to user interactions.
-            setTimeout(() => this.updateState(), 25);
-        } else {
-            this.componentFinishedUpdating();
-        }
-
-        this.plugins.componentDidUpdate(prevProps, prevState);
-    }
-
-    /**
-   * Push next slice of results to React for rendering.
-   */
-    updateState() {
-        var results = [];
-        var numHSPsProcessed = 0;
-        while (this.nextQuery < this.state.queries.length) {
-            var query = this.state.queries[this.nextQuery];
-
-            // We may see a query multiple times during rendering because only
-            // 3 hsps are rendered in each cycle, but we want to create the
-            // corresponding Query component only the first time we see it.
-            if (this.nextHit == 0 && this.nextHSP == 0) {
-                results.push(
-                    <ReportQuery
-                        key={'Query_' + query.id}
-                        query={query}
-                        program={this.state.program}
-                        querydb={this.state.querydb}
-                        showQueryCrumbs={this.state.queries.length > 1}
-                        non_parse_seqids={this.state.non_parse_seqids}
-                        imported_xml={this.state.imported_xml}
-                        veryBig={this.state.veryBig}
-                    />
-                );
-
-                results.push(...this.plugins.queryResults(query));
-            }
-
-            while (this.nextHit < query.hits.length) {
-                var hit = query.hits[this.nextHit];
-                // We may see a hit multiple times during rendering because only
-                // 10 hsps are rendered in each cycle, but we want to create the
-                // corresponding Hit component only the first time we see it.
-                if (this.nextHSP == 0) {
-                    results.push(
-                        <Hit
-                            key={'Query_' + query.number + '_Hit_' + hit.number}
-                            query={query}
-                            hit={hit}
-                            algorithm={this.state.program}
-                            querydb={this.state.querydb}
-                            selectHit={this.selectHit}
-                            imported_xml={this.state.imported_xml}
-                            non_parse_seqids={this.state.non_parse_seqids}
-                            showQueryCrumbs={this.state.queries.length > 1}
-                            showHitCrumbs={query.hits.length > 1}
-                            veryBig={this.state.veryBig}
-                            onChange={this.prepareAlignmentOfSelectedHits}
-                            {...this.props}
-                        />
-                    );
-                }
-
-                while (this.nextHSP < hit.hsps.length) {
-                    // Get nextHSP and increment the counter.
-                    var hsp = hit.hsps[this.nextHSP++];
-                    results.push(
-                        <HSP
-                            key={
-                                'Query_' +
-                                query.number +
-                                '_Hit_' +
-                                hit.number +
-                                '_HSP_' +
-                                hsp.number
-                            }
-                            query={query}
-                            hit={hit}
-                            hsp={hsp}
-                            algorithm={this.state.program}
-                            showHSPNumbers={hit.hsps.length > 1}
-                            {...this.props}
-                        />
-                    );
-                    numHSPsProcessed++;
-                    if (numHSPsProcessed == this.maxHSPs) break;
-                }
-                // Are we here because we have iterated over all hsps of a hit,
-                // or because of the break clause in the inner loop?
-                if (this.nextHSP == hit.hsps.length) {
-                    this.nextHit = this.nextHit + 1;
-                    this.nextHSP = 0;
-                }
-                if (numHSPsProcessed == this.maxHSPs) break;
-            }
-
-            // Are we here because we have iterated over all hits of a query,
-            // or because of the break clause in the inner loop?
-            if (this.nextHit == query.hits.length) {
-                this.nextQuery = this.nextQuery + 1;
-                this.nextHit = 0;
-            }
-            if (numHSPsProcessed == this.maxHSPs) break;
-        }
-
-        // Push the components to react for rendering.
-        this.numUpdates++;
-        this.lastTimeStamp = Date.now();
-        this.setState({
-            results: this.state.results.concat(results),
-            veryBig: this.numUpdates >= 250,
-        });
     }
 
     /**
@@ -260,21 +153,20 @@ class Report extends Component {
    */
     loadingJSX() {
         return (
-            <div className="row">
-                <div className="col-md-6 col-md-offset-3 text-center">
-                    <h1>
+            <div className="grid grid-cols-6 gap-4">
+                <div className="col-start-1 col-end-7 text-center pt-3">
+                    <h1 className="mb-8 text-4xl">
                         <i className="fa fa-cog fa-spin"></i>&nbsp; BLAST-ing
                     </h1>
-                    <p>
-                        <br />
-            This can take some time depending on the size of your query and
-            database(s). The page will update automatically when BLAST is done.
-                        <br />
-                        <br />
-            You can bookmark the page and come back to it later or share the
-            link with someone.
-                        <br />
-                        <br />
+                    <div className="mb-5 w-full">
+                        <p className="m-auto w-full md:w-6/12 text-sm">This can take some time depending on the size of your query and
+                        database(s). The page will update automatically when BLAST is done.</p>
+                    </div>
+                    <p className="mb-9 text-sm">
+                        You can bookmark the page and come back to it later or share the
+                        link with someone.
+                    </p>
+                    <p className="text-sm">
                         { process.env.targetEnv === 'cloud' && <b>If the job takes more than 10 minutes to complete, we will send you an email upon completion.</b> }
                     </p>
                 </div>
@@ -282,13 +174,14 @@ class Report extends Component {
         );
     }
 
+    /* eslint-disable */
     /**
    * Return results JSX.
    */
     resultsJSX() {
         return (
-            <div className="row" id="results">
-                <div className="col-md-3 hidden-sm hidden-xs">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:grid-cols-1" id="results">
+                <div className="hidden md:col-span-1 md:block print:hidden">
                     <Sidebar
                         data={this.state}
                         atLeastOneHit={this.atLeastOneHit()}
@@ -297,31 +190,46 @@ class Report extends Component {
                         cloudSharingEnabled={this.state.cloud_sharing_enabled}
                     />
                 </div>
-                <div className="col-md-9">
-                    {this.overviewJSX()}
-                    {this.circosJSX()}
-                    {this.plugins.generateStats()}
-                    {this.state.results}
+                <div className="col-span-1 md:col-span-3 print:col-span-1">
+                    <RunSummary
+                        seqserv_version={this.state.seqserv_version}
+                        program_version={this.state.program_version}
+                        submitted_at={this.state.submitted_at}
+                        querydb={this.state.querydb}
+                        stats={this.state.stats}
+                        params={this.state.params}
+                    />
+                    <GraphicalOverview
+                        queries={this.state.queries}
+                        prorgam={this.state.program}
+                        plugins={this.plugins}
+                    />
+                    <AlignmentResults
+                        state={this.state}
+                        populate_hsp_array={this.populate_hsp_array.bind(this)}
+                        componentFinishedUpdating={(_) => this.componentFinishedUpdating(_)}
+                        plugins={this.plugins}
+                        {...this.props}
+                    />
                 </div>
             </div>
         );
     }
+    /* eslint-enable */
 
 
     warningJSX() {
         return(
-            <div className="container">
-                <div className="row">
-                    <div className="col-md-6 col-md-offset-3 text-center">
-                        <h1>
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div className="grid grid-cols-6 gap-4">
+                    <div className="col-start-1 col-end-7 text-center">
+                        <h1 className="mb-4 text-4xl">
                             <i className="fa fa-exclamation-triangle"></i>&nbsp; Warning
                         </h1>
-                        <p>
-                            <br />
+                        <p className="mb-2">
                             The BLAST result might be too large to load in the browser. If you have a powerful machine you can try loading the results anyway. Otherwise, you can download the results and view them locally.
                         </p>
-                        <br />
-                        <p>
+                        <p className="mb-2">
                             {this.state.download_links.map((link, index) => {
                                 return (
                                     <a href={link.url} className="btn btn-secondary" key={'download_link_' + index} >
@@ -330,66 +238,14 @@ class Report extends Component {
                                 );
                             })}
                         </p>
-                        <br />
                         <p>
-                            <a href={location.pathname + '?bypass_file_size_warning=true'} className="btn btn-primary">
+                            <a href={location.pathname + '?bypass_file_size_warning=true'} className="py-2 px-3 border border-transparent rounded-md shadow-sm text-white bg-seqblue hover:bg-seqorange focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-seqorange">
                                 View results in browser anyway
                             </a>
                         </p>
                     </div>
                 </div>
             </div>
-        );
-    }
-    /**
-   * Renders report overview.
-   */
-    overviewJSX() {
-        return (
-            <div className="overview">
-                <p>
-                    <strong>SequenceServer {this.state.seqserv_version}</strong> using{' '}
-                    <strong>{this.state.program_version}</strong>
-                    {this.state.submitted_at &&
-            `, query submitted on ${this.state.submitted_at}`}
-                </p>
-                <p>
-                    <strong> Databases: </strong>
-                    {this.state.querydb
-                        .map((db) => {
-                            return db.title;
-                        })
-                        .join(', ')}{' '}
-          ({this.state.stats.nsequences} sequences,&nbsp;
-                    {this.state.stats.ncharacters} characters)
-                </p>
-                <p>
-                    <strong>Parameters: </strong>{' '}
-                    {_.map(this.state.params, function (val, key) {
-                        return key + ' ' + val;
-                    }).join(', ')}
-                </p>
-                <p>
-          Please cite:{' '}
-                    <a href="https://doi.org/10.1093/molbev/msz185">
-            https://doi.org/10.1093/molbev/msz185
-                    </a>
-                </p>
-            </div>
-        );
-    }
-
-    /**
-   * Return JSX for circos if we have at least one hit.
-   */
-    circosJSX() {
-        return this.atLeastTwoHits() ? (
-            <Circos
-                queries={this.state.queries}
-                program={this.state.program}
-            />
-        ) : (
-            <span></span>
         );
     }
 
@@ -421,18 +277,6 @@ class Report extends Component {
     }
 
     /**
-   * Does the report have at least two hits? This is used to determine
-   * whether Circos should be enabled or not.
-   */
-    atLeastTwoHits() {
-        var hit_num = 0;
-        return this.state.queries.some((query) => {
-            hit_num += query.hits.length;
-            return hit_num > 1;
-        });
-    }
-
-    /**
    * Returns true if index should be shown in the sidebar. Index is shown
    * only for 2 and 8 queries.
    */
@@ -452,7 +296,8 @@ class Report extends Component {
                     // user wants to toggle
                     var hitID = $this.parents('.hit').attr('id');
                     $(`div[data-parent-hit=${hitID}]`).toggle();
-                    $this.find('i').toggleClass('fa-minus-square-o fa-plus-square-o');
+                    $this.find('i').toggleClass('fa-square-minus fa-square-plus');
+                    $($this.data('parent-id')).toggleClass('print:hidden');
                 } else {
                     // user wants to select
                     $this.attr('data-toggle', '');
@@ -463,6 +308,7 @@ class Report extends Component {
     }
 
     /* Handling the fa icon when Hit Table is collapsed */
+    /* TODO:JOKO check if this method still being used? */
     toggleTable() {
         $('body').on(
             'mousedown',
@@ -470,111 +316,41 @@ class Report extends Component {
             function (event) {
                 var $this = $(this);
                 $this.on('mouseup mousemove', function handler(event) {
-                    $this.find('i').toggleClass('fa-minus-square-o fa-plus-square-o');
+                    $this.find('i').toggleClass('fa-square-minus fa-square-plus');
                     $this.off('mouseup mousemove', handler);
                 });
             }
         );
     }
 
-    /**
-   * Affixes the sidebar.
-   */
-    affixSidebar() {
-        var $sidebar = $('.sidebar');
-        var sidebarOffset = $sidebar.offset();
-        if (sidebarOffset) {
-            $sidebar.affix({
-                offset: {
-                    top: sidebarOffset.top,
-                },
-            });
-        }
-    }
+
 
     /**
    * For the query in viewport, highlights corresponding entry in the index.
    */
     setupScrollSpy() {
-        $('body').scrollspy({ target: '.sidebar' });
-    }
+        var sectionIds = $('a.side-nav');
 
-    /**
-   * Event-handler when hit is selected
-   * Adds glow to hit component.
-   * Updates number of Fasta that can be downloaded
-   */
-    selectHit(id) {
-        var checkbox = $('#' + id);
-        var num_checked = $('.hit-links :checkbox:checked').length;
+        $(document).scroll(function(){
+            sectionIds.each(function(){
 
-        if (!checkbox || !checkbox.val()) {
-            return;
-        }
+                var container = $(this).attr('href');
+                var containerOffset = $(container).offset().top;
+                var containerHeight = $(container).outerHeight();
+                var containerBottom = containerOffset + containerHeight;
+                var scrollPosition = $(document).scrollTop();
 
-        var $hit = $(checkbox.data('target'));
-
-        // Highlight selected hit and enable 'Download FASTA/Alignment of
-        // selected' links.
-        if (checkbox.is(':checked')) {
-            $hit.addClass('glow');
-            $hit.next('.hsp').addClass('glow');
-            $('.download-fasta-of-selected').enable();
-            $('.download-alignment-of-selected').enable();
-        } else {
-            $hit.removeClass('glow');
-            $hit.next('.hsp').removeClass('glow');
-            $('.download-fasta-of-selected').attr('href', '#').removeAttr('download');
-        }
-
-        var $a = $('.download-fasta-of-selected');
-        var $b = $('.download-alignment-of-selected');
-
-        if (num_checked >= 1) {
-            $a.find('.text-bold').html(num_checked);
-            $b.find('.text-bold').html(num_checked);
-        }
-
-        if (num_checked == 0) {
-            $a.addClass('disabled').find('.text-bold').html('');
-            $b.addClass('disabled').find('.text-bold').html('');
-        }
-    }
-    populate_hsp_array(hit, query_id){
-        return hit.hsps.map(hsp => Object.assign(hsp, {hit_id: hit.id, query_id}));
-    }
-
-    prepareAlignmentOfSelectedHits() {
-        var sequence_ids = $('.hit-links :checkbox:checked').map(function () {
-            return this.value;
-        }).get();
-
-        if(!sequence_ids.length){
-            // remove attributes from link if sequence_ids array is empty
-            $('.download-alignment-of-selected').attr('href', '#').removeAttr('download');
-            return;
-
-        }
-        if(this.state.alignment_blob_url){
-            // always revoke existing url if any because this method will always create a new url
-            window.URL.revokeObjectURL(this.state.alignment_blob_url);
-        }
-        var hsps_arr = [];
-        var aln_exporter = new AlignmentExporter();
-        const self = this;
-        _.each(this.state.queries, _.bind(function (query) {
-            _.each(query.hits, function (hit) {
-                if (_.indexOf(sequence_ids, hit.id) != -1) {
-                    hsps_arr = hsps_arr.concat(self.populate_hsp_array(hit, query.id));
+                if(scrollPosition < containerBottom - 20 && scrollPosition >= containerOffset - 20){
+                    $(this).addClass('active');
+                } else {
+                    $(this).removeClass('active');
                 }
             });
-        }, this));
-        const filename = 'alignment-' + sequence_ids.length + '_hits.txt';
-        const blob_url = aln_exporter.prepare_alignments_for_export(hsps_arr, filename);
-        // set required download attributes for link
-        $('.download-alignment-of-selected').attr('href', blob_url).attr('download', filename);
-        // track new url for future removal
-        this.setState({alignment_blob_url: blob_url});
+        });
+    }
+
+    populate_hsp_array(hit, query_id){
+        return hit.hsps.map(hsp => Object.assign(hsp, {hit_id: hit.id, query_id}));
     }
 
     prepareAlignmentOfAllHits() {

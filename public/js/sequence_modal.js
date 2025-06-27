@@ -13,6 +13,7 @@ export default class SequenceModal extends React.Component {
       error_msgs: [],
       sequences: [],
       requestCompleted: false,
+      isModalVisible: false,
     };
     this.modalRef = createRef();
   }
@@ -20,98 +21,88 @@ export default class SequenceModal extends React.Component {
   // Lifecycle methods. //
 
   render() {
-    return (
-      <div className="modal sequence-viewer" ref={this.modalRef} tabIndex="-1">
-        <div className="modal-dialog">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>View sequence</h3>
-            </div>
+    const { isModalVisible, requestCompleted } = this.state;
 
-            {(this.state.requestCompleted && this.resultsJSX()) ||
-              this.loadingJSX()}
+    return (
+      <div className="relative sequence-viewer-wrap">
+        <dialog ref={this.modalRef} className="sequence-viewer fixed p-4 w-full max-w-2xl bg-transparent focus:outline-none overflow-visible z-50">
+          <div className="relative flex flex-col rounded-lg bg-white shadow">
+            <div className="flex items-start justify-between rounded-t border-b p-5">
+              <h3 className="text-xl font-medium text-gray-900">
+                View sequence
+              </h3>
+              <button className="sequence-viewer-close ml-auto inline-flex items-center rounded-lg bg-transparent p-1.5 text-gray-400 hover:bg-gray-200" onClick={this.hide}>
+                <i className="fa-solid fa-xmark hover:text-black"></i>
+              </button>
+            </div>
+            <div className="sequence-viewer-content max-h-[80vh] overflow-y-scroll">
+              {(requestCompleted && this.resultsJSX()) || this.loadingJSX()}
+            </div>
           </div>
-        </div>
+        </dialog>
       </div>
     );
-  }
-
-  /*
-   * Returns jQuery reference to the main modal container.
-   */
-  modal() {
-    return $(this.modalRef.current);
   }
 
   /**
    * Shows sequence viewer.
    */
-  show(url) {
-    this.setState({ requestCompleted: false }, () => {
-      this.modal().modal("show");
-      this.loadJSON(url);
-    });
+  show = (url) => {
+    this.modalRef.current?.showModal();
+    this.setState({ requestCompleted: false });
+    this.loadJSON(url);
   }
 
   /**
    * Hide sequence viewer.
    */
-  hide() {
-    this.modal().modal("hide");
+  hide = () => {
+    this.modalRef.current?.close();
   }
 
   /**
    * Loads sequence using AJAX and updates modal state.
    */
-  loadJSON(url) {
+  async loadJSON(url) {
     // Fetch sequence and update state.
-    $.getJSON(url)
-      .done(
-        _.bind(function (response) {
-          this.setState({
-            sequences: response.sequences,
-            error_msgs: response.error_msgs,
-            requestCompleted: true,
-          });
-        }, this)
-      )
-      .fail((jqXHR, status, error) => {
-        this.hide();
-        this.props.showErrorModal(jqXHR.responseJSON);
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      this.setState({
+        sequences: data.sequences,
+        error_msgs: data.error_msgs,
+        requestCompleted: true,
       });
+    } catch (error) {
+      console.log('Error fetching sequence:', error);
+      this.hide();
+      this.props.showErrorModal(error);
+    }
   }
 
   resultsJSX() {
     return (
-      <div className="modal-body">
-        {_.map(
-          this.state.error_msgs,
-          _.bind(function (error_msg) {
-            return (
-              <div className="fastan">
-                <div className="section-header">
-                  <h4>{error_msg[0]}</h4>
-                </div>
-                <div className="section-content">
-                  <pre className="pre-reset">{error_msg[1]}</pre>
-                </div>
-              </div>
-            );
-          }, this)
-        )}
-        {_.map(
-          this.state.sequences,
-          _.bind(function (sequence) {
-            return <SequenceViewer sequence={sequence} />;
-          }, this)
-        )}
+      <div className="pt-2 px-6 pb-6 mt-2">
+        {this.state.error_msgs.map((error_msg, index) => (
+          <div key={`error-message-${index}`} className="fastan">
+            <div className="section-header border-b border-seqorange pl-px table mb-0 w-full pb-2">
+              <h4 className="text-sm table-cell">{error_msg[0]}</h4>
+            </div>
+            <div className="pt-0 px-0 pb-px">
+              <pre className="m-0 p-0 rounded-none border-0 bg-inherit whitespace-pre-wrap break-keep">{error_msg[1]}</pre>
+            </div>
+          </div>
+        ))}
+        {this.state.sequences.map((sequence, index) => (
+          <SequenceViewer key={`sequence-viewer-${index}`} sequence={sequence} />
+        ))}
       </div>
     );
   }
 
   loadingJSX() {
     return (
-      <div className="modal-body text-center">
+      <div className="my-4 text-center">
         <i className="fa fa-spinner fa-3x fa-spin"></i>
       </div>
     );
@@ -132,13 +123,13 @@ class SequenceViewer extends React.Component {
 
     return (
       <div className="fastan">
-        <div className="section-header">
-          <h4>
+        <div className="section-header border-b border-seqorange pl-px table mb-0 w-full pb-2">
+          <h4 className="text-sm table-cell">
             {this.props.sequence.id}
-            <small>&nbsp; {this.props.sequence.title}</small>
+            <small className="text-inherit">&nbsp; {this.props.sequence.title}</small>
           </h4>
         </div>
-        <div className="section-content">
+        <div className="fastan-content relative pt-0 px-0 pb-px">
           <div className={this.widgetClass} id={this.widgetID}></div>
         </div>
       </div>
@@ -160,6 +151,8 @@ class SequenceViewer extends React.Component {
         footer: false,
       },
     });
-    widget.hideFormatSelector();
+    setTimeout(function() {
+      requestAnimationFrame(() => { widget.hideFormatSelector() }); // ensure React is done painting the DOM of the element before calling a function on it.
+    });
   }
 }

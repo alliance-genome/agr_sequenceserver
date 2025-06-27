@@ -22,7 +22,8 @@ module SequenceServer
     # (Array of values and Arrays) and information extracted from the
     # intermediate representation (ir).
     class Report < Report
-      def initialize(job)
+      def initialize(job, env_config)
+        @env_config = env_config
         super do
           @querydb = job.databases
         end
@@ -93,7 +94,11 @@ module SequenceServer
       def xml_ir
         @xml_ir ||=
           if job.imported_xml_file
-            parse_xml File.read(job.imported_xml_file)
+            parse_xml(File.read(job.imported_xml_file)).tap do |xml_ir|
+              if xml_ir.size < 9 || !xml_ir[0].is_a?(String) || !xml_ir[1].is_a?(String) || !xml_ir[7].is_a?(Array) || !xml_ir[8].is_a?(Array)
+                raise SequenceServer::XmlImportError
+              end
+            end
           else
             job.raise!
             parse_xml(xml_formatter.read_file)

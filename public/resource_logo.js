@@ -30,4 +30,3 @@ var url = url_parts.join("/");
 fetch(url)
     .then((response) => response.json())
     .then((json) => add_logo(json));
-

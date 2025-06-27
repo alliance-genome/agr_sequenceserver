@@ -4,30 +4,43 @@ import _ from 'underscore';
 export class Databases extends Component {
     constructor(props) {
         super(props);
-        this.state = { type: '' };
+        this.state = {
+            type: '',
+            currentlySelectedDatabases: [],
+        };
+
         this.preSelectedDbs = this.props.preSelectedDbs;
         this.databases = this.databases.bind(this);
         this.nselected = this.nselected.bind(this);
         this.categories = this.categories.bind(this);
-        this.handleClick = this.handleClick.bind(this);
         this.handleToggle = this.handleToggle.bind(this);
         this.renderDatabases = this.renderDatabases.bind(this);
         this.renderDatabase = this.renderDatabase.bind(this);
     }
-    componentDidUpdate() {
-        if (this.databases() && this.databases().length === 1) {
-            $('.databases').find('input').prop('checked', true);
-            this.handleClick(this.databases()[0]);
+
+    componentDidUpdate(_prevProps, prevState) {
+        // If there's only one database, select it.
+        if (this.databases() && this.databases().length === 1 && this.state.currentlySelectedDatabases.length === 0) {
+            this.setState({currentlySelectedDatabases: this.databases()});
         }
 
-        if (this.preSelectedDbs) {
-            var selectors = this.preSelectedDbs.map((db) => `input[value=${db.id}]`);
-            $(selectors.join(',')).prop('checked', true);
-            this.handleClick(this.preSelectedDbs[0]);
+        if (this.preSelectedDbs && this.preSelectedDbs.length !== 0) {
+            this.setState({currentlySelectedDatabases: this.preSelectedDbs});
             this.preSelectedDbs = null;
         }
-        this.props.onDatabaseTypeChanged(this.state.type);
+        const type = this.state.currentlySelectedDatabases[0] ? this.state.currentlySelectedDatabases[0].type : '';
+        if (type != this.state.type) {
+            this.setState({ type: type });
+            this.props.onDatabaseTypeChanged(type);
+        }
+
+        if (prevState.currentlySelectedDatabases !== this.state.currentlySelectedDatabases) {
+            // Call the prop function with the new state
+            this.props.onDatabaseSelectionChanged(this.state.currentlySelectedDatabases);
+        }
+
     }
+
     databases(category) {
         var databases = this.props.databases;
         if (category) {
@@ -38,29 +51,24 @@ export class Databases extends Component {
     }
 
     nselected() {
-        return $('input[name="databases[]"]:checked').length;
+        return this.state.currentlySelectedDatabases.length;
     }
 
     categories() {
         return _.uniq(_.map(this.props.databases, _.iteratee('type'))).sort();
     }
 
-    handleClick(database) {
-        var type = this.nselected() ? database.type : '';
-        if (type != this.state.type) this.setState({ type: type });
-    }
-
     handleToggle(toggleState, type) {
         switch (toggleState) {
         case '[Select all]':
-            $(`.${type} .database input:not(:checked)`).click();
+            this.setState({ currentlySelectedDatabases: this.databases(type) });
             break;
         case '[Deselect all]':
-            $(`.${type} .database input:checked`).click();
+            this.setState({ currentlySelectedDatabases: [] });
             break;
         }
-        this.forceUpdate();
     }
+
     renderDatabases(category) {
     // Panel name and column width.
         var panelTitle = category[0].toUpperCase() + category.substring(1).toLowerCase() + ' databases';
@@ -68,7 +76,7 @@ export class Databases extends Component {
 
         // Toggle button.
         var toggleState = '[Select all]';
-        var toggleClass = 'px-2 text-sm';
+        var toggleClass = 'px-2 text-base md:text-lg';
         var toggleShown = this.databases(category).length > 1;
         var toggleDisabled = this.state.type && this.state.type !== category;
         if (toggleShown && toggleDisabled) {
@@ -86,7 +94,7 @@ export class Databases extends Component {
             <div className={columnClass} key={'DB_' + category}>
                 <div>
                     <div className="border-b border-seqorange mb-2">
-                        <h4 style={{ display: 'inline' }} className="font-medium">
+                        <h4 className="font-medium inline text-base md:text-lg">
                             {panelTitle}
                         </h4>
                         <button
@@ -105,7 +113,7 @@ export class Databases extends Component {
                             this.databases(category),
                             _.bind(function (database, index) {
                                 return (
-                                    <li key={'DB_' + category + index}>
+                                    <li key={'DB_' + category + index} className="text-base md:text-lg leading-tight md:leading-tight">
                                         {this.renderDatabase(database)}
                                     </li>
                                 );
@@ -117,20 +125,38 @@ export class Databases extends Component {
         );
     }
 
+    handleDatabaseSelectionClick(database) {
+        const isSelected = this.state.currentlySelectedDatabases.some(db => db.id === database.id);
+
+        if (isSelected) {
+            this.setState(prevState => ({
+                currentlySelectedDatabases: prevState.currentlySelectedDatabases.filter(db => db.id !== database.id)
+            }));
+        } else {
+            this.setState(prevState => ({
+                currentlySelectedDatabases: [...prevState.currentlySelectedDatabases, database]
+            }));
+        }
+    }
+
     renderDatabase(database) {
-        var disabled = this.state.type && this.state.type !== database.type;
+        const isDisabled = this.state.type && this.state.type !== database.type;
+        const isChecked = this.state.currentlySelectedDatabases.some(db => db.id === database.id);
 
         return (
-            <label className={(disabled && 'database text-gray-400') || 'database text-seqblue'}>
+            <label className={(isDisabled && 'database text-gray-400') || 'database text-seqblue'}>
                 <input
                     type="checkbox"
                     name="databases[]"
                     value={database.id}
                     data-type={database.type}
-                    disabled={disabled}
+                    disabled={isDisabled}
+                    checked={isChecked}
+                    className="checkbox-database"
                     onChange={_.bind(function () {
-                        this.handleClick(database);
+                        this.handleDatabaseSelectionClick(database);
                     }, this)}
+
                 />
                 {' ' + (database.title || database.name)}
             </label>
