@@ -174,9 +174,6 @@ module SequenceServer
       env_file_path = File.join('/sequenceserver', 'public', 'environments', params[:segment1], params[:segment2], 'environment.json')
       env_config = JSON.parse(File.read(env_file_path))
 
-      puts "env_config: #{env_config.inspect}"
-      puts "env_config['data']: #{env_config['data'].inspect}"
-
       report = BLAST::Report.new(job, env_config["data"])
 
       halt 202 unless report.done?
