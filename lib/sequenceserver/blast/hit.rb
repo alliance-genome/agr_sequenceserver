@@ -38,11 +38,17 @@ module SequenceServer
       # instance methods of the Links module.
       def links
         database_filepath = getdbpath
+        
+        # Return empty links if database path cannot be determined
+        return [] unless database_filepath
 
         database_filename = File.basename(database_filepath)
         database_filename.sub!(/db\z/, "")
         fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
         database_config = query.report.instance_variable_get(:@env_config)
+        
+        # Return empty links if database config is not available
+        return [] unless database_config
 
         links = []
         for reference_sequence in database_config
@@ -94,6 +100,8 @@ module SequenceServer
 
       # returns the first database that it finds based on the id
       def getdbpath
+          return nil unless report.querydb
+          
           db = report.querydb.find { |db| db.include?(id) }
           return db&.name
       end
