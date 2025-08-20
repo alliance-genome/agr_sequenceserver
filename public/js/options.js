@@ -143,10 +143,15 @@ export class Options extends Component {
                             }}
                         >
                             <option value="">Select E-value</option>
-                            <option value="1e-3">1e-3</option>
-                            <option value="1e-5">1e-5</option>
-                            <option value="1e-10">1e-10</option>
-                            <option value="1e-20">1e-20</option>
+                            <option value="1e-32">1E-32</option>
+                            <option value="1e-16">1E-16</option>
+                            <option value="1e-8">1E-8</option>
+                            <option value="1e-4">1E-4</option>
+                            <option value="1e-2">1E-2</option>
+                            <option value="1e+0">1E+0</option>
+                            <option value="1e+1">1E+1</option>
+                            <option value="1e+2">1E+2</option>
+                            <option value="1e+4">1E+4</option>
                         </select>
                     </div>
     

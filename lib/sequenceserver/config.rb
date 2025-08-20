@@ -101,31 +101,31 @@ module SequenceServer
           blastn: {
             default: {
               description: nil,
-              attributes: ['-task blastn', '-evalue 1e-5']
+              attributes: ['-task blastn', '-evalue 1e-4']
             }
           },
           blastp: {
             default: {
               description: nil,
-              attributes: ['-evalue 1e-5']
+              attributes: ['-evalue 1e-4']
             }
           },
           blastx: {
             default: {
               description: nil,
-              attributes: ['-evalue 1e-5']
+              attributes: ['-evalue 1e-4']
             }
           },
           tblastx: {
             default: {
               description: nil,
-              attributes: ['-evalue 1e-5']
+              attributes: ['-evalue 1e-4']
             }
           },
           tblastn: {
             default: {
               description: nil,
-              attributes: ['-evalue 1e-5']
+              attributes: ['-evalue 1e-4']
             }
           }
         },
