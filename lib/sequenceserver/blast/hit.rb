@@ -1,3 +1,6 @@
+require 'pp'
+require 'open3'
+
 module SequenceServer
   # Define BLAST::Hit.
   module BLAST
@@ -37,8 +40,8 @@ module SequenceServer
       # in the client. These are derived by calling link generators, that is,
       # instance methods of the Links module.
       def links
+        return []
         database_filepath = getdbpath
-
         database_filename = File.basename(database_filepath)
         database_filename.sub!(/db\z/, "")
         fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
@@ -94,8 +97,19 @@ module SequenceServer
 
       # returns the first database that it finds based on the id
       def getdbpath
-          db = report.querydb.find { |db| db.include?(id) }
-          return db&.name
+          report.querydb.each do |db|
+            stdout, stderr, status = Open3.capture3("blastdbcmd -db #{db.name} -entry #{seq_id}")
+
+            if !status.success?
+              puts "Error accessing #{db.name}: #{stderr.strip}"
+            elsif stdout.strip.empty?
+              puts "No match for #{seq_id} in #{db.title}"
+            else
+              puts "Found #{seq_id} in #{db.title}"
+              return db
+            end
+          end 
+          return ''
       end
 
 

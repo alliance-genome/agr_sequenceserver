@@ -158,7 +158,6 @@ module SequenceServer
         end
 
         redirect_url = "#{protocol}://#{host}/blast/#{params[:segment1]}/#{params[:segment2]}/#{job.id}"
-        puts redirect_url
         redirect to(redirect_url)
       end
     end
@@ -374,6 +373,7 @@ module SequenceServer
         send_file file_path, disposition: :inline
       else
         puts "file does not exist"
+        puts file
         # Handle case when file doesn't exist
         status 404
         'File not found'

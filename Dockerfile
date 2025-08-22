@@ -1,6 +1,6 @@
 # Build variables. These need to be declared befored the first FROM
 # for the variables to be accessible in FROM instruction.
-ARG BLAST_VERSION=2.16.0
+ARG BLAST_VERSION=2.15.0
 
 ## Stage 1: gem dependencies.
 FROM docker.io/library/ruby:3.2-bookworm AS builder

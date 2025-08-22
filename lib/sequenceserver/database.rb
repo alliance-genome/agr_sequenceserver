@@ -83,9 +83,10 @@ module SequenceServer
       return if alias?
       case format
       when '5'
-        (%w[nog nos pog pos] & extensions).length != 2
+        # Check that at least one ID index exists (pjs or njs)
+        !(extensions & %w[njs pjs]).any?
       when '4'
-        (%w[nog nsd nsi pod psd psi] & extensions).length != 3
+        !(extensions & %w[nsi psi]).any?
       end
     end
 
