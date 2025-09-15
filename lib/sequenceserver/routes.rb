@@ -172,10 +172,14 @@ module SequenceServer
       halt 202 unless job.done?
 
       env_file_path = File.join('/sequenceserver', 'public', 'environments', params[:segment1], params[:segment2], 'environment.json')
-      env_config = JSON.parse(File.read(env_file_path))
-
-      puts "env_config: #{env_config.inspect}"
-      puts "env_config['data']: #{env_config['data'].inspect}"
+      
+      # Load environment config if it exists, otherwise use empty config
+      env_config = if File.exist?(env_file_path)
+        JSON.parse(File.read(env_file_path))
+      else
+        puts "WARNING: Environment config not found at #{env_file_path}"
+        { "data" => [] }
+      end
 
       report = BLAST::Report.new(job, env_config["data"])
 

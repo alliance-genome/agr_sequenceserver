@@ -61,6 +61,27 @@ module SequenceServer
     #     query_coords = coordinates[0]
     #     hit_coords = coordinates[1]
 
+    # Extract proper reference sequence name from BLAST accession
+    def self.extract_ref_name(blast_accession)
+      # Handle BLAST internal format like "gnl|BL_ORD_ID|18" -> "I" for C. elegans
+      if blast_accession.include?("gnl|BL_ORD_ID|")
+        # Extract the number and convert to Roman numeral for C. elegans chromosomes
+        chr_num = blast_accession.split("|").last.to_i
+        case chr_num
+        when 1 then "I"
+        when 2 then "II" 
+        when 3 then "III"
+        when 4 then "IV"
+        when 5 then "V"
+        when 6 then "X"
+        when 7 then "MtDNA"
+        else blast_accession # fallback to original
+        end
+      else
+        blast_accession # return as-is if not in expected format
+      end
+    end
+
     def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession)
         assembly = genome_browser_metadata["assembly"]
         if genome_browser_metadata["type"] == "jbrowse"
@@ -69,7 +90,7 @@ module SequenceServer
             features_start = -1
             features_end = -1
             for hsp in hsps
-              refname = hsp["hit"]["accession"]
+              refname = extract_ref_name(hsp["hit"]["accession"])
               if hsp["sstart"] > hsp["send"]
                   sequence_start = hsp["send"]
                   sequence_end = hsp["sstart"]
@@ -93,9 +114,10 @@ module SequenceServer
               subfeatures.push(subfeature)
             end
 
-            loc = ERB::Util.url_encode(accession + ":" + features_start.to_s + ".." + features_end.to_s)
+            ref_name = extract_ref_name(accession)
+            loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
             features = ERB::Util.url_encode(JSON.generate([{
-                :seq_id => accession,
+                :seq_id => ref_name,
                 :start => features_start,
                 :end => features_end,
                 :type => "match",
@@ -119,7 +141,7 @@ module SequenceServer
             features_end = -1
             count = 1
             for hsp in hsps
-              refname = hsp["hit"]["accession"]
+              refname = extract_ref_name(hsp["hit"]["accession"])
               if hsp["sstart"] > hsp["send"]
                   sequence_start = hsp["send"]
                   sequence_end = hsp["sstart"]
@@ -160,7 +182,8 @@ module SequenceServer
                                                       "name": "Hits",
                                                       "subfeatures": subfeatures}]}}].to_json)
             tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",blasthits")
-            loc = ERB::Util.url_encode(accession + ":" + features_start.to_s + ".." + features_end.to_s)
+            ref_name = extract_ref_name(accession)
+            loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
 
             url = "#{genome_browser_metadata['url']}?" \
                          "loc=#{loc}" \

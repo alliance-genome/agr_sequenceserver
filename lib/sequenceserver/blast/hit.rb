@@ -37,18 +37,36 @@ module SequenceServer
       # in the client. These are derived by calling link generators, that is,
       # instance methods of the Links module.
       def links
-        database_filepath = getdbpath
-
-        database_filename = File.basename(database_filepath)
-        fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
+        # Skip the database path lookup entirely for chromosome-level hits
         database_config = query.report.instance_variable_get(:@env_config)
+        
+        puts "DEBUG: database_config count = #{database_config&.length}"
+        
+        # Return empty links if no environment config
+        return [] if database_config.nil? || database_config.empty?
+
+        # Get the first database name and extract basename for matching
+        first_db = report.querydb.first
+        puts "DEBUG: first_db = #{first_db&.name}"
+        return [] if first_db.nil?
+        
+        database_filename = File.basename(first_db.name)
+        fasta_file_basename = File.basename(database_filename, File.extname(database_filename))
+        
+        # Extract species identifier from database name (e.g., "c_elegansdb" -> "c_elegans")
+        species_identifier = fasta_file_basename.sub(/db$/, '')
+        
+        puts "DEBUG: database_filename = #{database_filename}"
+        puts "DEBUG: fasta_file_basename = #{fasta_file_basename}"
+        puts "DEBUG: species_identifier = #{species_identifier}"
 
         links = []
         for reference_sequence in database_config
-          if reference_sequence["uri"].include? fasta_file_basename
+          puts "DEBUG: Checking URI: #{reference_sequence['uri']} against #{species_identifier}"
+          if reference_sequence["uri"].include? species_identifier
              if reference_sequence.key?("genome_browser")
                 genome_browser_metadata = reference_sequence["genome_browser"]
-                filepath_parts = database_filepath.split(File::SEPARATOR)
+                filepath_parts = first_db.name.split(File::SEPARATOR)
                 links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession))
 
                 if genome_browser_metadata.has_key?("gene_track")
@@ -84,6 +102,7 @@ module SequenceServer
              break
           end
         end
+        return links
       end
 
       # Returns the database type (nucleotide or protein).
@@ -93,7 +112,17 @@ module SequenceServer
 
       # returns the first database that it finds based on the id
       def getdbpath
-          db = report.querydb.find { |db| db.include?(id) }
+          puts "DEBUG: getdbpath - hit id = #{id.inspect}"
+          puts "DEBUG: getdbpath - report.querydb count = #{report.querydb&.length}"
+          puts "DEBUG: getdbpath - report.querydb = #{report.querydb&.map(&:name)}"
+          
+          db = report.querydb.find { |db| 
+            puts "DEBUG: Testing db #{db.name} for hit id #{id}"
+            result = db.include?(id)
+            puts "DEBUG: db.include?(#{id}) = #{result}"
+            result
+          }
+          puts "DEBUG: getdbpath - found db = #{db&.name}"
           return db&.name
       end
 
