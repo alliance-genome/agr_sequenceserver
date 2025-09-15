@@ -61,28 +61,39 @@ module SequenceServer
     #     query_coords = coordinates[0]
     #     hit_coords = coordinates[1]
 
-    # Extract proper reference sequence name from BLAST accession
-    def self.extract_ref_name(blast_accession)
-      # Handle BLAST internal format like "gnl|BL_ORD_ID|18" -> "I" for C. elegans
-      if blast_accession.include?("gnl|BL_ORD_ID|")
-        # Extract the number and convert to Roman numeral for C. elegans chromosomes
-        chr_num = blast_accession.split("|").last.to_i
-        case chr_num
-        when 1 then "I"
-        when 2 then "II" 
-        when 3 then "III"
-        when 4 then "IV"
-        when 5 then "V"
-        when 6 then "X"
-        when 7 then "MtDNA"
-        else blast_accession # fallback to original
+    # Extract proper reference sequence name from hit title or accession
+    def self.extract_ref_name(hit_title, blast_accession, database_path = nil)
+      puts "DEBUG: extract_ref_name - title = #{hit_title}, accession = #{blast_accession}, db = #{database_path}"
+      puts "DEBUG: blast_accession includes PRJEB28388: #{blast_accession.include?("PRJEB28388")}"
+
+      # First try to extract chromosome name from the hit title
+      if hit_title && !hit_title.empty?
+        # Extract the first word which is typically the chromosome/sequence name
+        seq_name = hit_title.split(/[\s,;]/)[0]
+
+        # For C. elegans CB4856 strain (PRJEB28388), map standard names to JBrowse format
+        if database_path&.include?("WS297") && blast_accession.include?("PRJEB28388")
+          case seq_name
+          when "I" then return "chrI_pilon"
+          when "II" then return "chrII_pilon"
+          when "III" then return "chrIII_pilon"
+          when "IV" then return "chrIV_pilon"
+          when "V" then return "chrV_pilon"
+          when "X" then return "chrX_pilon"
+          when "MtDNA" then return "chrM_pilon"
+          end
         end
-      else
-        blast_accession # return as-is if not in expected format
+
+        puts "DEBUG: extracted sequence name from title = '#{seq_name}'"
+        return seq_name unless seq_name.empty?
       end
+
+      # Fallback: return the original accession
+      puts "DEBUG: Using fallback, returning original accession"
+      blast_accession
     end
 
-    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession)
+    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession, hit_title = nil, database_path = nil)
         assembly = genome_browser_metadata["assembly"]
         if genome_browser_metadata["type"] == "jbrowse"
             subfeatures = []
@@ -90,7 +101,8 @@ module SequenceServer
             features_start = -1
             features_end = -1
             for hsp in hsps
-              refname = extract_ref_name(hsp["hit"]["accession"])
+              # Use hit title if available, otherwise fall back to accession
+              refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
               if hsp["sstart"] > hsp["send"]
                   sequence_start = hsp["send"]
                   sequence_end = hsp["sstart"]
@@ -114,7 +126,7 @@ module SequenceServer
               subfeatures.push(subfeature)
             end
 
-            ref_name = extract_ref_name(accession)
+            ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
             loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
             features = ERB::Util.url_encode(JSON.generate([{
                 :seq_id => ref_name,
@@ -141,7 +153,7 @@ module SequenceServer
             features_end = -1
             count = 1
             for hsp in hsps
-              refname = extract_ref_name(hsp["hit"]["accession"])
+              refname = Links.extract_ref_name(hit_title, accession, database_path)
               if hsp["sstart"] > hsp["send"]
                   sequence_start = hsp["send"]
                   sequence_end = hsp["sstart"]
@@ -182,7 +194,7 @@ module SequenceServer
                                                       "name": "Hits",
                                                       "subfeatures": subfeatures}]}}].to_json)
             tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",blasthits")
-            ref_name = extract_ref_name(accession)
+            ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
             loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
 
             url = "#{genome_browser_metadata['url']}?" \
