@@ -62,12 +62,23 @@ module SequenceServer
     #     hit_coords = coordinates[1]
 
     # Extract proper reference sequence name from hit title or accession
-    def self.extract_ref_name(hit_title, blast_accession, database_path = nil)
+    def self.extract_ref_name(hit_title, blast_accession, database_path = nil, genome_browser_metadata = nil)
       puts "DEBUG: extract_ref_name - title = #{hit_title}, accession = #{blast_accession}, db = #{database_path}"
       puts "DEBUG: blast_accession includes PRJEB28388: #{blast_accession.include?("PRJEB28388")}"
 
       # First try to extract chromosome name from the hit title
       if hit_title && !hit_title.empty?
+        # Handle FlyBase format: "type=golden_path; loc=2R:1..25286936; ID=2R; ..."
+        if hit_title.include?("type=golden_path") && hit_title.include?("ID=")
+          # Extract from ID= field which contains the chromosome name
+          id_match = hit_title.match(/ID=([^;]+)/)
+          if id_match
+            seq_name = id_match[1].strip
+            puts "DEBUG: extracted FlyBase sequence name from ID = '#{seq_name}'"
+            return seq_name unless seq_name.empty?
+          end
+        end
+
         # Extract the first word which is typically the chromosome/sequence name
         seq_name = hit_title.split(/[\s,;]/)[0]
 
@@ -146,14 +157,13 @@ module SequenceServer
                   "&tracks=#{tracks}" \
                   "&highlight="
         elsif genome_browser_metadata["type"] == "jbrowse2"
-            unique_ids = []
             subfeatures = []
-
             features_start = -1
             features_end = -1
             count = 1
+
             for hsp in hsps
-              refname = Links.extract_ref_name(hit_title, accession, database_path)
+              refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
               if hsp["sstart"] > hsp["send"]
                   sequence_start = hsp["send"]
                   sequence_end = hsp["sstart"]
@@ -169,37 +179,39 @@ module SequenceServer
               if features_end == -1 || features_end < sequence_end
                 features_end = sequence_end
               end
- 
-              unique_id = sequence_start.to_s + "-" + sequence_end.to_s + "-" + count.to_s
-              count = count + 1
-              unique_ids = unique_ids.push(unique_id)
 
-              subfeature = {"uniqueId": unique_id,
-                            "refName": refname,
-                            "start": sequence_start,
-                            "end": sequence_end}
+              subfeature = {
+                "uniqueId": "blast_hit_#{count}",
+                "refName": refname,
+                "start": sequence_start - 1,  # JBrowse2 uses 0-based coordinates
+                "end": sequence_end,
+                "type": "match"
+              }
               subfeatures.push(subfeature)
+              count += 1
             end
 
-            session_tracks = ERB::Util.url_encode(
-                             [{"type": "FeatureTrack",
-                              "trackId":"blasthits",
-                              "name": "BLAST Hits",
-                              "assemblyNames": [assembly],
-                              "adapter":{"type":"FromConfigAdapter",
-                                         "features": [{"uniqueId": unique_ids.join(","),
-                                                      "refName": refname,
-                                                      "start": features_start,
-                                                      "end": features_end,
-                                                      "name": "Hits",
-                                                      "subfeatures": subfeatures}]}}].to_json)
-            tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",blasthits")
             ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
             loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
 
+            # Create track configuration for BLAST hits
+            blast_track = {
+              "type": "FeatureTrack",
+              "trackId": "blast_hits",
+              "name": "BLAST Hits",
+              "assemblyNames": [assembly],
+              "adapter": {
+                "type": "FromConfigAdapter",
+                "features": subfeatures
+              }
+            }
+
+            session_tracks = ERB::Util.url_encode([blast_track].to_json)
+            tracks = ERB::Util.url_encode((genome_browser_metadata["tracks"] + ["blast_hits"]).join(","))
+
             url = "#{genome_browser_metadata['url']}?" \
                          "loc=#{loc}" \
-                         "&tracks=#{tracks}"\
+                         "&tracks=#{tracks}" \
                          "&sessionTracks=#{session_tracks}" \
                          "&assembly=#{assembly}"
        end
