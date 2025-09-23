@@ -60,7 +60,7 @@ export default class extends Databases {
             }
         });
 
-        // Expand C. elegans nodes after tree is loaded for WormBase
+        // Expand specific nodes after tree is loaded for WormBase and FlyBase
         $(tree_id).on('ready.jstree', function () {
             // Check if this is WormBase
             const isWormBase = window.location.hostname.includes('wormbase') ||
@@ -68,8 +68,14 @@ export default class extends Databases {
                               document.querySelector('img[alt*="wormbase" i]') ||
                               document.querySelector('img[src*="wormbase" i]');
 
-            if (!isWormBase) {
-                return; // Only run on WormBase pages
+            // Check if this is FlyBase
+            const isFlyBase = window.location.hostname.includes('flybase') ||
+                             window.location.pathname.includes('/FB/') ||
+                             document.querySelector('img[alt*="flybase" i]') ||
+                             document.querySelector('img[src*="flybase" i]');
+
+            if (!isWormBase && !isFlyBase) {
+                return; // Only run on WormBase or FlyBase pages
             }
 
             // Use setTimeout to ensure tree is fully rendered
@@ -84,22 +90,45 @@ export default class extends Databases {
                 allNodes.forEach(function(node) {
                     const nodeText = node.text ? node.text.toLowerCase() : '';
 
-                    // Only expand specific nodes:
-                    // 1. Caenorhabditis genus folder
-                    if (nodeText === 'caenorhabditis' ||
-                        nodeText.startsWith('caenorhabditis (')) {
-                        treeInstance.open_node(node.id);
+                    // WormBase: Expand C. elegans nodes
+                    if (isWormBase) {
+                        // 1. Caenorhabditis genus folder
+                        if (nodeText === 'caenorhabditis' ||
+                            nodeText.startsWith('caenorhabditis (')) {
+                            treeInstance.open_node(node.id);
+                        }
+                        // 2. C. elegans species folder (but not other species)
+                        else if ((nodeText === 'c. elegans' ||
+                                 nodeText === 'elegans' ||
+                                 nodeText.includes('c. elegans (') ||
+                                 nodeText.includes('elegans (')) &&
+                                !nodeText.includes('briggsae') &&
+                                !nodeText.includes('brenneri') &&
+                                !nodeText.includes('remanei') &&
+                                !nodeText.includes('japonica')) {
+                            treeInstance.open_node(node.id);
+                        }
                     }
-                    // 2. C. elegans species folder (but not other species)
-                    else if ((nodeText === 'c. elegans' ||
-                             nodeText === 'elegans' ||
-                             nodeText.includes('c. elegans (') ||
-                             nodeText.includes('elegans (')) &&
-                            !nodeText.includes('briggsae') &&
-                            !nodeText.includes('brenneri') &&
-                            !nodeText.includes('remanei') &&
-                            !nodeText.includes('japonica')) {
-                        treeInstance.open_node(node.id);
+
+                    // FlyBase: Expand D. melanogaster nodes
+                    if (isFlyBase) {
+                        // 1. Drosophila genus folder
+                        if (nodeText === 'drosophila' ||
+                            nodeText.startsWith('drosophila (')) {
+                            treeInstance.open_node(node.id);
+                        }
+                        // 2. D. melanogaster species folder (but not other species)
+                        else if ((nodeText === 'd. melanogaster' ||
+                                 nodeText === 'melanogaster' ||
+                                 nodeText.includes('d. melanogaster (') ||
+                                 nodeText.includes('melanogaster (')) &&
+                                !nodeText.includes('simulans') &&
+                                !nodeText.includes('yakuba') &&
+                                !nodeText.includes('pseudoobscura') &&
+                                !nodeText.includes('virilis') &&
+                                !nodeText.includes('mojavensis')) {
+                            treeInstance.open_node(node.id);
+                        }
                     }
                 });
             }, 500);
