@@ -19,6 +19,9 @@ export default class extends Databases {
         window.jstree_rapid_timeout = null
         const _this = this;
 
+        // Debug log
+        console.log('handleLoadTree called for category:', category, 'tree_id:', tree_id);
+
         $(tree_id).on('select_node.jstree deselect_node.jstree', function (_, _data) {
             if (window.jstree_node_change_timeout) clearTimeout(window.jstree_node_change_timeout);
             if (window.jstree_rapid_timeout) clearTimeout(window.jstree_rapid_timeout);
@@ -55,6 +58,51 @@ export default class extends Databases {
             'checkbox': {
                 'keep_selected_style': false
             }
+        });
+
+        // Expand C. elegans nodes after tree is loaded for WormBase
+        $(tree_id).on('ready.jstree', function () {
+            // Check if this is WormBase
+            const isWormBase = window.location.hostname.includes('wormbase') ||
+                              window.location.pathname.includes('/WB/') ||
+                              document.querySelector('img[alt*="wormbase" i]') ||
+                              document.querySelector('img[src*="wormbase" i]');
+
+            if (!isWormBase) {
+                return; // Only run on WormBase pages
+            }
+
+            // Use setTimeout to ensure tree is fully rendered
+            setTimeout(function() {
+                const treeInstance = $(tree_id).jstree(true);
+                if (!treeInstance) {
+                    return;
+                }
+
+                const allNodes = treeInstance.get_json('#', { flat: true });
+
+                allNodes.forEach(function(node) {
+                    const nodeText = node.text ? node.text.toLowerCase() : '';
+
+                    // Only expand specific nodes:
+                    // 1. Caenorhabditis genus folder
+                    if (nodeText === 'caenorhabditis' ||
+                        nodeText.startsWith('caenorhabditis (')) {
+                        treeInstance.open_node(node.id);
+                    }
+                    // 2. C. elegans species folder (but not other species)
+                    else if ((nodeText === 'c. elegans' ||
+                             nodeText === 'elegans' ||
+                             nodeText.includes('c. elegans (') ||
+                             nodeText.includes('elegans (')) &&
+                            !nodeText.includes('briggsae') &&
+                            !nodeText.includes('brenneri') &&
+                            !nodeText.includes('remanei') &&
+                            !nodeText.includes('japonica')) {
+                        treeInstance.open_node(node.id);
+                    }
+                });
+            }, 500);
         });
     }
 
