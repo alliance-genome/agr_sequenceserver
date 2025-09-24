@@ -150,6 +150,10 @@ module SequenceServer
         @input_sequence = params[:input_sequence]
         erb :search, layout: settings.layout
       else
+        # Map blast_params from frontend to advanced parameter expected by backend
+        if params[:blast_params] && !params[:advanced]
+          params[:advanced] = params[:blast_params]
+        end
         job = Job.create(params)
         # Use same protocol detection logic as templates to avoid mixed content issues
         if request.env['HTTP_X_FORWARDED_PROTO'] == 'https' || request.port == 443 || ENV['HTTPS'] == 'on' || request.host.include?('alliancegenome.org')
