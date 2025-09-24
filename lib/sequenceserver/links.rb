@@ -102,30 +102,41 @@ module SequenceServer
       nil # Return nil if no WormBase-specific pattern matched
     end
 
+    # Check if extracted name looks like a real chromosome (not a scaffold)
+    def self.is_valid_flybase_chromosome(name)
+      # Valid FlyBase chromosomes: X, Y, 2L, 2R, 3L, 3R, 4, rDNA, mitochondrion_genome
+      return false if name.nil? || name.empty?
+      # Reject long numeric IDs (scaffolds)
+      return false if name.match(/^\d{10,}$/)
+      # Accept short names typical of chromosomes
+      return true if name.match(/^[XY234]$/) || name.match(/^[234][LR]$/) || name.match(/^rDNA$/) || name.match(/^mitochondrion/)
+      # Accept other short names
+      return name.length <= 20
+    end
+
     # Extract chromosome name for FlyBase hits
     def self.extract_flybase_chromosome(hit_title, blast_accession)
       return nil unless hit_title && !hit_title.empty?
 
-      # Handle FlyBase format: "type=golden_path; loc=2R:1..25286936; ID=2R; ..."
-      if hit_title.include?("type=golden_path") && hit_title.include?("ID=")
-        id_match = hit_title.match(/ID=([^;]+)/)
-        if id_match
-          seq_name = id_match[1].strip
-          return seq_name unless seq_name.empty?
-        end
-      end
-
-      # Handle FlyBase intergenic regions and other formats with loc= field
-      # Format: "type=intergenic_region; loc=X:1..122492; ..."
+      # Try loc= field first (more reliable for chromosomes)
       if hit_title.include?("loc=")
         loc_match = hit_title.match(/loc=([^:]+):/)
         if loc_match
           seq_name = loc_match[1].strip
-          return seq_name unless seq_name.empty?
+          return seq_name if is_valid_flybase_chromosome(seq_name)
         end
       end
 
-      nil # Return nil if no FlyBase-specific pattern matched
+      # Fall back to ID= field for golden_path types
+      if hit_title.include?("type=golden_path") && hit_title.include?("ID=")
+        id_match = hit_title.match(/ID=([^;]+)/)
+        if id_match
+          seq_name = id_match[1].strip
+          return seq_name if is_valid_flybase_chromosome(seq_name)
+        end
+      end
+
+      nil # Return nil if no valid chromosome found
     end
 
     # Main extraction method that delegates to MOD-specific methods
@@ -202,6 +213,10 @@ module SequenceServer
             end
 
             ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
+
+            # Don't generate JBrowse link if we don't have a valid chromosome/reference name
+            return nil if ref_name.nil? || ref_name.empty? || ref_name.start_with?("type=") || ref_name.include?("gnl|BL_ORD_ID")
+
             loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
             features = ERB::Util.url_encode(JSON.generate([{
                 :seq_id => ref_name,
@@ -292,6 +307,10 @@ module SequenceServer
                                                       "subfeatures": subfeatures}]}}].to_json)
             tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",blasthits")
             ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
+
+            # Don't generate JBrowse2 link if we don't have a valid chromosome/reference name
+            return nil if ref_name.nil? || ref_name.empty? || ref_name.start_with?("type=") || ref_name.include?("gnl|BL_ORD_ID")
+
             loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
 
             url = "#{genome_browser_metadata['url']}?" \

@@ -1,4 +1,9 @@
-<% base_url_protocol = ENV['HTTPS'] == 'on' ? 'https' : (request.env['HTTP_X_FORWARDED_PROTO'] || request.scheme) %>
+<% # Detect protocol properly to avoid mixed content issues %>
+<% if request.env['HTTP_X_FORWARDED_PROTO'] == 'https' || request.port == 443 || ENV['HTTPS'] == 'on' || request.host.include?('alliancegenome.org') %>
+  <% base_url_protocol = 'https' %>
+<% else %>
+  <% base_url_protocol = request.scheme %>
+<% end %>
 <% base_url = "#{base_url_protocol}://#{request.host}" %>
 <% base_url << ":#{request.port}" unless [80, 443].include?(request.port) %>
 

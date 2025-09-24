@@ -151,11 +151,13 @@ module SequenceServer
         erb :search, layout: settings.layout
       else
         job = Job.create(params)
-        protocol = request.env['HTTP_X_FORWARDED_PROTO'] == 'https' ? 'https' : 'http'
-        host = request.host_with_port # Get the host with port
-        if host == "blast.alliancegenome.org" or host == "www.alliancegenome.org"
-            protocol = "https"
+        # Use same protocol detection logic as templates to avoid mixed content issues
+        if request.env['HTTP_X_FORWARDED_PROTO'] == 'https' || request.port == 443 || ENV['HTTPS'] == 'on' || request.host.include?('alliancegenome.org')
+          protocol = 'https'
+        else
+          protocol = request.scheme
         end
+        host = request.host_with_port
 
         redirect_url = "#{protocol}://#{host}/blast/#{params[:segment1]}/#{params[:segment2]}/#{job.id}"
         puts redirect_url
