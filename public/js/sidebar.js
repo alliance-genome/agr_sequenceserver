@@ -482,12 +482,6 @@ export default class extends Component {
                 {this.topPanelJSX()}
                 {this.downloadsPanelJSX()}
                 {this.sharingPanelJSX()}
-                <div className="referral-panel">
-                    <div className="pl-px table mb-0 w-full text-sm">
-                        <h4 className="font-bold mb-0 mt-2.5">Recommend SequenceServer</h4>
-                        <p><a href="https://sequenceserver.com/referral-program" target="_blank" className="text-seqblue hover:text-seqorange">Earn up to $400 per signup</a></p>
-                    </div>
-                </div>
             </div>
         );
     }
