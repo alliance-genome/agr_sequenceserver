@@ -90,6 +90,11 @@ module SequenceServer
       erb :search, layout: settings.layout
     end
 
+    # Returns features/roadmap page
+    get '/blast/features' do
+      erb :features, layout: settings.layout
+    end
+
     get '/blast/sitemap.xml' do
         send_file("/db/sitemap.xml",
                 type: 'application/xml',
