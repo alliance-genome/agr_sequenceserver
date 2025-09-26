@@ -7,67 +7,88 @@
 <% base_url = "#{base_url_protocol}://#{request.host}" %>
 <% base_url << ":#{request.port}" unless [80, 443].include?(request.port) %>
 
-<div class="container mx-auto max-w-4xl p-8">
-  <div style="margin-bottom: 3rem;">
-    <h2 class="text-2xl font-bold" style="margin-bottom: 1.5rem;">Current Features</h2>
-    <div class="bg-white border rounded-lg p-6">
-      <ul class="space-y-3 text-lg">
-        <li>✅ JBrowse2 genome browser integration</li>
-        <li>✅ Extended E-value options (1e+4 to 1e-32)</li>
-        <li>✅ WormBase and FlyBase chromosome links</li>
-        <li>✅ Auto-expansion of common organisms</li>
-        <li>✅ MOD-specific database organization</li>
-      </ul>
-    </div>
-  </div>
-
-  <div style="margin-bottom: 3rem;">
-    <h2 class="text-2xl font-bold" style="margin-bottom: 1.5rem;">Next Priorities</h2>
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
-      <ul class="space-y-3 text-lg">
-        <li>🔧 Add remaining MODs (SGD, ZFIN, MGI, RGD, Xenbase)</li>
-        <li>🔧 Improve database tree to accommodate SGD's strain grouping</li>
-        <li>🔧 Improve search interface based on FlyBase and WormBase feedback
-          <ul style="margin-left: 2rem; margin-top: 0.5rem; color: #666;">
-            <li style="margin-bottom: 0.25rem;">• Move BLAST program selection above species list</li>
-            <li style="margin-bottom: 0.25rem;">• Add database type dropdown (genome/proteins/transcripts)</li>
-            <li style="margin-bottom: 0.25rem;">• Implement smart species pre-selection per MOD</li>
-            <li style="margin-bottom: 0.25rem;">• Simplify nested menus to single-level selection</li>
-            <li style="margin-bottom: 0.25rem;">• Limit database selection to avoid long running jobs</li>
-            <li>• Remember user's last selections</li>
-          </ul>
-        </li>
-        <li>🔧 Pre-select primary species for each MOD</li>
-        <li>🔧 Move controls above species selection</li>
-      </ul>
-    </div>
-  </div>
-
-  <div style="margin-bottom: 3rem;">
-    <h2 class="text-2xl font-bold" style="margin-bottom: 1.5rem;">Coming Soon</h2>
-    <div class="bg-white border rounded-lg p-6">
-      <div class="space-y-6">
-        <div>
-          <h3 class="text-xl font-semibold mb-3">Search Experience</h3>
-          <ul class="space-y-2 text-lg">
-            <li>• FASTQ to FASTA conversion</li>
-            <li>• Search history and audit trails</li>
+<div class="container mx-auto max-w-7xl p-8">
+  <div style="display: flex; gap: 3rem;">
+    <!-- Left Column -->
+    <div style="flex: 1;">
+      <div style="margin-bottom: 3rem;">
+        <h2 class="text-2xl font-bold" style="margin-bottom: 1.5rem;">Current Features</h2>
+        <div class="bg-white border rounded-lg p-6">
+          <ul class="space-y-3 text-lg">
+            <li>✅ JBrowse2 genome browser integration</li>
+            <li>✅ Extended E-value options (1e+4 to 1e-32)</li>
+            <li>✅ WormBase and FlyBase chromosome links</li>
+            <li>✅ Auto-expansion of common organisms</li>
+            <li>✅ MOD-specific database organization</li>
           </ul>
         </div>
-        <div>
-          <h3 class="text-xl font-semibold mb-3">API & Export</h3>
-          <ul class="space-y-2 text-lg">
-            <li>• RESTful API for programmatic access</li>
-            <li>• Python and CLI integration</li>
-            <li>• Export to multiple formats (XML, TSV, JSON)</li>
+      </div>
+
+      <div style="margin-bottom: 3rem;">
+        <h2 class="text-2xl font-bold" style="margin-bottom: 1.5rem;">Next Priorities</h2>
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <ul class="space-y-3 text-lg">
+            <li>🔧 Add remaining MODs (SGD, ZFIN, MGI, RGD, Xenbase)</li>
+            <li>🔧 Improve database tree to accommodate SGD's strain grouping</li>
+            <li>🔧 Improve search interface based on FlyBase and WormBase feedback
+              <ul style="margin-left: 2rem; margin-top: 0.5rem; color: #666;">
+                <li style="margin-bottom: 0.25rem;">• Move BLAST program selection above species list</li>
+                <li style="margin-bottom: 0.25rem;">• Add database type dropdown (genome/proteins/transcripts)</li>
+                <li style="margin-bottom: 0.25rem;">• Implement smart species pre-selection per MOD</li>
+                <li style="margin-bottom: 0.25rem;">• Simplify nested menus to single-level selection</li>
+                <li style="margin-bottom: 0.25rem;">• Limit database selection to avoid long running jobs</li>
+                <li>• Remember user's last selections</li>
+              </ul>
+            </li>
+            <li>🔧 Pre-select primary species for each MOD</li>
+            <li>🔧 Move controls above species selection</li>
           </ul>
         </div>
-        <div>
-          <h3 class="text-xl font-semibold mb-3">Data Standardization</h3>
-          <ul class="space-y-2 text-lg">
-            <li>• Standardize FASTA headers across all MODs</li>
-            <li>• Improve hit retrieval and service connections</li>
-            <li>• Consistent gene/protein identifiers</li>
+      </div>
+    </div>
+
+    <!-- Right Column -->
+    <div style="flex: 1;">
+      <div style="margin-bottom: 3rem;">
+        <h2 class="text-2xl font-bold" style="margin-bottom: 1.5rem;">Coming Soon</h2>
+        <div class="bg-white border rounded-lg p-6">
+          <div class="space-y-6">
+            <div>
+              <h3 class="text-xl font-semibold mb-3">Search Experience</h3>
+              <ul class="space-y-2 text-lg">
+                <li>• FASTQ to FASTA conversion</li>
+                <li>• Search history and audit trails</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="text-xl font-semibold mb-3">API & Export</h3>
+              <ul class="space-y-2 text-lg">
+                <li>• RESTful API for programmatic access</li>
+                <li>• Python and CLI integration</li>
+                <li>• Export to multiple formats (XML, TSV, JSON)</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="text-xl font-semibold mb-3">Data Standardization</h3>
+              <ul class="space-y-2 text-lg">
+                <li>• Standardize FASTA headers across all MODs</li>
+                <li>• Improve hit retrieval and service connections</li>
+                <li>• Consistent gene/protein identifiers</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 3rem;">
+        <h2 class="text-2xl font-bold" style="margin-bottom: 1.5rem;">Future Vision</h2>
+        <div class="bg-gray-50 border border-gray-300 rounded-lg p-6">
+          <ul class="space-y-3 text-lg">
+            <li>🔮 Cloud-based job processing</li>
+            <li>🔮 Machine learning for parameter optimization</li>
+            <li>🔮 Real-time collaboration features</li>
+            <li>🔮 Advanced visualization dashboards</li>
+            <li>🔮 Integration with Alliance knowledge base</li>
           </ul>
         </div>
       </div>
