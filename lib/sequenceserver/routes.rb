@@ -92,7 +92,7 @@ module SequenceServer
 
     # Returns features/roadmap page
     get '/blast/features' do
-      erb :features, layout: settings.layout
+      erb :features, layout: :layout_simple
     end
 
     get '/blast/sitemap.xml' do
