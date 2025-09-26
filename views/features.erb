@@ -8,8 +8,6 @@
 <% base_url << ":#{request.port}" unless [80, 443].include?(request.port) %>
 
 <div class="container mx-auto max-w-4xl p-8">
-  <h1 class="text-3xl font-bold mb-8">Features & Roadmap</h1>
-
   <div class="mb-12">
     <h2 class="text-2xl font-bold mb-6">Current Features</h2>
     <div class="bg-white border rounded-lg p-6">
@@ -36,41 +34,36 @@
   </div>
 
   <div class="mb-12">
-    <h2 class="text-2xl font-bold mb-6">Future Plans</h2>
+    <h2 class="text-2xl font-bold mb-6">Coming Soon</h2>
     <div class="bg-white border rounded-lg p-6">
       <div class="space-y-6">
         <div>
-          <h3 class="text-xl font-semibold mb-3">Search & Results</h3>
+          <h3 class="text-xl font-semibold mb-3">Visualizations (from SequenceServer)</h3>
           <ul class="space-y-2 text-lg">
-            <li>• Interactive alignment visualization</li>
-            <li>• Batch sequence processing</li>
-            <li>• Search history and bookmarks</li>
-            <li>• Export to external tools</li>
+            <li>• Pairwise alignment graphs</li>
+            <li>• Circos-style overview plots</li>
+            <li>• Length distribution histograms</li>
+            <li>• Publication-ready export (PNG/SVG)</li>
           </ul>
         </div>
         <div>
-          <h3 class="text-xl font-semibold mb-3">Integration</h3>
+          <h3 class="text-xl font-semibold mb-3">Search Intelligence</h3>
+          <ul class="space-y-2 text-lg">
+            <li>• Automatic sequence type detection</li>
+            <li>• FASTQ to FASTA conversion</li>
+            <li>• Smart BLAST method selection</li>
+            <li>• Search history and audit trails</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-xl font-semibold mb-3">API & Export</h3>
           <ul class="space-y-2 text-lg">
             <li>• RESTful API for programmatic access</li>
-            <li>• MOD website embedding</li>
-            <li>• Galaxy workflow integration</li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="text-xl font-semibold mb-3">User Features</h3>
-          <ul class="space-y-2 text-lg">
-            <li>• User accounts and saved searches</li>
-            <li>• Job notifications</li>
-            <li>• Collaborative workspaces</li>
+            <li>• Python and CLI integration</li>
+            <li>• Export to multiple formats (XML, TSV, JSON)</li>
           </ul>
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="text-center">
-    <a href="<%= base_url %>/blast/" class="text-blue-600 hover:text-blue-800 text-lg">
-      ← Back to BLAST Search
-    </a>
   </div>
 </div>
