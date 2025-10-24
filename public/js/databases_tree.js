@@ -50,17 +50,77 @@ export default class extends Databases {
         });
 
 
-        $(tree_id).jstree({
+        // Check if this is SGD by looking for S288C in the tree data
+        const treeData = this.props.tree[category];
+        const isSGD = JSON.stringify(treeData).includes('S288C');
+
+        const jstreeConfig = {
             'core': {
-                'data': this.props.tree[category]
+                'data': treeData
             },
             'plugins': ['checkbox', 'search', 'sort'],
             'checkbox': {
                 'keep_selected_style': false
             }
-        });
+        };
 
-        // Expand specific nodes after tree is loaded for WormBase and FlyBase
+        // Add custom sort for SGD
+        if (isSGD) {
+            jstreeConfig.sort = function(a, b) {
+                const nodeA = this.get_node(a);
+                const nodeB = this.get_node(b);
+                const textA = nodeA.text || '';
+                const textB = nodeB.text || '';
+
+                // Define strain group priorities
+                const getStrainGroup = (text) => {
+                    if (text.includes('S288C')) return 1;
+                    if (text.includes('Alternative Reference Strains')) return 2;
+                    if (text.includes('Other Strains')) return 3;
+                    return 4; // Unknown, put at end
+                };
+
+                // Define database type priorities
+                const typeOrder = {
+                    'Genomic DNA': 1,
+                    'ORFs DNA only': 2,
+                    'RNA': 3,
+                    'Non genic DNA': 4,
+                    'Vectors': 5,
+                    'Coding DNA': 6
+                };
+
+                const getTypeOrder = (text) => {
+                    for (const [type, order] of Object.entries(typeOrder)) {
+                        if (text.includes(type)) return order;
+                    }
+                    return 99; // Unknown type, put at end
+                };
+
+                const groupA = getStrainGroup(textA);
+                const groupB = getStrainGroup(textB);
+
+                // First sort by strain group
+                if (groupA !== groupB) {
+                    return groupA - groupB;
+                }
+
+                // Then sort by database type within the same group
+                const typeA = getTypeOrder(textA);
+                const typeB = getTypeOrder(textB);
+
+                if (typeA !== typeB) {
+                    return typeA - typeB;
+                }
+
+                // If same group and type, sort alphabetically
+                return textA.localeCompare(textB);
+            };
+        }
+
+        $(tree_id).jstree(jstreeConfig);
+
+        // Expand specific nodes after tree is loaded for WormBase, FlyBase, and RGD
         $(tree_id).on('ready.jstree', function () {
             // Check if this is WormBase
             const isWormBase = window.location.hostname.includes('wormbase') ||
@@ -74,8 +134,14 @@ export default class extends Databases {
                              document.querySelector('img[alt*="flybase" i]') ||
                              document.querySelector('img[src*="flybase" i]');
 
-            if (!isWormBase && !isFlyBase) {
-                return; // Only run on WormBase or FlyBase pages
+            // Check if this is RGD
+            const isRGD = window.location.hostname.includes('rgd') ||
+                         window.location.pathname.includes('/RGD/') ||
+                         document.querySelector('img[alt*="rgd" i]') ||
+                         document.querySelector('img[src*="rgd" i]');
+
+            if (!isWormBase && !isFlyBase && !isRGD) {
+                return; // Only run on WormBase, FlyBase, or RGD pages
             }
 
             // Use setTimeout to ensure tree is fully rendered
@@ -127,6 +193,22 @@ export default class extends Databases {
                                 !nodeText.includes('pseudoobscura') &&
                                 !nodeText.includes('virilis') &&
                                 !nodeText.includes('mojavensis')) {
+                            treeInstance.open_node(node.id);
+                        }
+                    }
+
+                    // RGD: Expand R. norvegicus nodes
+                    if (isRGD) {
+                        // 1. Rattus genus folder
+                        if (nodeText === 'rattus' ||
+                            nodeText.startsWith('rattus (')) {
+                            treeInstance.open_node(node.id);
+                        }
+                        // 2. R. norvegicus species folder
+                        else if (nodeText === 'r. norvegicus' ||
+                                 nodeText === 'norvegicus' ||
+                                 nodeText.includes('r. norvegicus (') ||
+                                 nodeText.includes('norvegicus (')) {
                             treeInstance.open_node(node.id);
                         }
                     }

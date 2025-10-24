@@ -47,6 +47,61 @@ export class Databases extends Component {
             databases = _.select(databases, (database) => database.type === category);
         }
 
+        // Check if this is SGD by looking for S288C in any database title
+        const isSGD = databases.some(db => (db.title || db.name || '').includes('S288C'));
+
+        if (isSGD) {
+            // Custom sorting for SGD
+            return databases.sort((a, b) => {
+                const titleA = a.title || a.name || '';
+                const titleB = b.title || b.name || '';
+
+                // Define strain group priorities
+                const getStrainGroup = (title) => {
+                    if (title.includes('S288C')) return 1;
+                    if (title.includes('Alternative Reference Strains')) return 2;
+                    if (title.includes('Other Strains')) return 3;
+                    return 4; // Unknown, put at end
+                };
+
+                // Define database type priorities
+                const typeOrder = {
+                    'Genomic DNA': 1,
+                    'ORFs DNA only': 2,
+                    'RNA': 3,
+                    'Non genic DNA': 4,
+                    'Vectors': 5,
+                    'Coding DNA': 6
+                };
+
+                const getTypeOrder = (title) => {
+                    for (const [type, order] of Object.entries(typeOrder)) {
+                        if (title.includes(type)) return order;
+                    }
+                    return 99; // Unknown type, put at end
+                };
+
+                const groupA = getStrainGroup(titleA);
+                const groupB = getStrainGroup(titleB);
+
+                // First sort by strain group
+                if (groupA !== groupB) {
+                    return groupA - groupB;
+                }
+
+                // Then sort by database type within the same group
+                const typeA = getTypeOrder(titleA);
+                const typeB = getTypeOrder(titleB);
+
+                if (typeA !== typeB) {
+                    return typeA - typeB;
+                }
+
+                // If same group and type, sort alphabetically
+                return titleA.localeCompare(titleB);
+            });
+        }
+
         return _.sortBy(databases, 'title');
     }
 
