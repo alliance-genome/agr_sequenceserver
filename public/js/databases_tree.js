@@ -140,8 +140,15 @@ export default class extends Databases {
                          document.querySelector('img[alt*="rgd" i]') ||
                          document.querySelector('img[src*="rgd" i]');
 
-            if (!isWormBase && !isFlyBase && !isRGD) {
-                return; // Only run on WormBase, FlyBase, or RGD pages
+            // Check if this is SGD fungal (pathname contains SGD and ends with 'f')
+            const isSGDFungal = (window.location.pathname.includes('/SGD/') ||
+                                window.location.hostname.includes('sgd') ||
+                                document.querySelector('img[alt*="sgd" i]') ||
+                                document.querySelector('img[src*="sgd" i]')) &&
+                               /\/[^/]+f$/.test(window.location.pathname.replace(/\/$/, ''));
+
+            if (!isWormBase && !isFlyBase && !isRGD && !isSGDFungal) {
+                return; // Only run on WormBase, FlyBase, RGD, or SGD fungal pages
             }
 
             // Use setTimeout to ensure tree is fully rendered
@@ -209,6 +216,22 @@ export default class extends Databases {
                                  nodeText === 'norvegicus' ||
                                  nodeText.includes('r. norvegicus (') ||
                                  nodeText.includes('norvegicus (')) {
+                            treeInstance.open_node(node.id);
+                        }
+                    }
+
+                    // SGD Fungal: Expand S. cerevisiae nodes
+                    if (isSGDFungal) {
+                        // 1. Saccharomyces genus folder
+                        if (nodeText === 'saccharomyces' ||
+                            nodeText.startsWith('saccharomyces (')) {
+                            treeInstance.open_node(node.id);
+                        }
+                        // 2. S. cerevisiae species folder
+                        else if (nodeText === 's. cerevisiae' ||
+                                 nodeText === 'cerevisiae' ||
+                                 nodeText.includes('s. cerevisiae (') ||
+                                 nodeText.includes('cerevisiae (')) {
                             treeInstance.open_node(node.id);
                         }
                     }
