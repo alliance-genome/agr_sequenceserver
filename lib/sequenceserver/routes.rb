@@ -229,6 +229,11 @@ module SequenceServer
     # in identifiers) and retreival_databases (we don't allow whitespace in a
     # database's name, so it's safe).
     get '/blast/:segment1/:segment2/get_sequence/' do
+      # Initialize database collection for this request
+      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      makeblastdb(env_database_dir).scan
+      Database.collection = makeblastdb(env_database_dir).formatted_fastas
+
       sequence_ids = params[:sequence_ids].to_s.split(',').uniq
       database_ids = params[:database_ids].to_s.split(',')
       if sequence_ids.empty?
@@ -245,6 +250,11 @@ module SequenceServer
     end
 
     post '/blast/:segment1/:segment2/get_sequence' do
+      # Initialize database collection for this request
+      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      makeblastdb(env_database_dir).scan
+      Database.collection = makeblastdb(env_database_dir).formatted_fastas
+
       sequence_ids = params['sequence_ids'].to_s.split(',').uniq
       database_ids = params['database_ids'].to_s.split(',')
 
