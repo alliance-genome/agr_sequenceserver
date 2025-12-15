@@ -25,21 +25,29 @@ export class Options extends Component {
     }
 
     componentDidUpdate(prevProps) {
-        if (prevProps.predefinedOptions !== this.props.predefinedOptions) {
+        if (prevProps.predefinedOptions !== this.props.predefinedOptions ||
+            prevProps.blastMethod !== this.props.blastMethod) {
             // Determine which set of options to use
             let selectedOptions = this.props.predefinedOptions.default || {attributes: []};
-            
+
             // Check if there's a 'short-seq' option and use it if available
             if (this.props.predefinedOptions['short-seq']) {
                 selectedOptions = this.props.predefinedOptions['short-seq'];
             }
-    
+
             let initialTextValue = selectedOptions.attributes.join(' ').trim();
             let parsedOptions = this.parsedOptions(initialTextValue);
-            
-            this.setState({ 
-                textValue: initialTextValue, 
-                objectValue: parsedOptions 
+
+            // If no task is specified in options, default to the blast method name
+            if (!parsedOptions.task && this.props.blastMethod) {
+                parsedOptions.task = this.props.blastMethod.toLowerCase();
+                // Add task to the text value
+                initialTextValue = `-task ${parsedOptions.task} ${initialTextValue}`.trim();
+            }
+
+            this.setState({
+                textValue: initialTextValue,
+                objectValue: parsedOptions
             });
         }
     }
