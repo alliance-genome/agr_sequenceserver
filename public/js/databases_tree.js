@@ -50,9 +50,24 @@ export default class extends Databases {
         });
 
 
-        // Check if this is SGD by looking for S288C in the tree data
         const treeData = this.props.tree[category];
-        const isSGD = JSON.stringify(treeData).includes('S288C');
+        const databaseOrder = this.props.databaseOrder || {};
+
+        // Find matching config based on detection rules
+        const findMatchingConfig = () => {
+            const treeString = JSON.stringify(treeData);
+            for (const [modName, config] of Object.entries(databaseOrder)) {
+                if (config.detection && config.detection.titleContains) {
+                    const hasMatch = config.detection.titleContains.some(term => treeString.includes(term));
+                    if (hasMatch) {
+                        return config;
+                    }
+                }
+            }
+            return null;
+        };
+
+        const matchedConfig = findMatchingConfig();
 
         const jstreeConfig = {
             'core': {
@@ -64,37 +79,33 @@ export default class extends Databases {
             }
         };
 
-        // Add custom sort for SGD
-        if (isSGD) {
+        // Add custom sort if we have a matching config
+        if (matchedConfig) {
+            const strainGroups = matchedConfig.strainGroups || {};
+            const typeOrder = matchedConfig.typeOrder || {};
+            const defaultStrainOrder = matchedConfig.defaultStrainOrder || 99;
+            const defaultTypeOrder = matchedConfig.defaultTypeOrder || 99;
+
             jstreeConfig.sort = function(a, b) {
                 const nodeA = this.get_node(a);
                 const nodeB = this.get_node(b);
                 const textA = nodeA.text || '';
                 const textB = nodeB.text || '';
 
-                // Define strain group priorities
+                // Get strain group priority from config
                 const getStrainGroup = (text) => {
-                    if (text.includes('S288C')) return 1;
-                    if (text.includes('Alternative Reference Strains')) return 2;
-                    if (text.includes('Other Strains')) return 3;
-                    return 4; // Unknown, put at end
+                    for (const [strain, order] of Object.entries(strainGroups)) {
+                        if (text.includes(strain)) return order;
+                    }
+                    return defaultStrainOrder;
                 };
 
-                // Define database type priorities
-                const typeOrder = {
-                    'Genomic DNA': 1,
-                    'ORFs DNA only': 2,
-                    'RNA': 3,
-                    'Non genic DNA': 4,
-                    'Vectors': 5,
-                    'Coding DNA': 6
-                };
-
+                // Get type priority from config
                 const getTypeOrder = (text) => {
                     for (const [type, order] of Object.entries(typeOrder)) {
                         if (text.includes(type)) return order;
                     }
-                    return 99; // Unknown type, put at end
+                    return defaultTypeOrder;
                 };
 
                 const groupA = getStrainGroup(textA);

@@ -133,6 +133,12 @@ module SequenceServer
 
       searchdata.update(tree: Database.tree) if SequenceServer.config[:databases_widget] == 'tree'
 
+      # Load database ordering config if it exists
+      database_order_path = File.join(settings.root, 'public', 'configs', 'database_order.json')
+      if File.exist?(database_order_path)
+        searchdata[:databaseOrder] = JSON.parse(File.read(database_order_path))
+      end
+
       # If a job_id is specified, update searchdata from job meta data (i.e.,
       # query, pre-selected databases, advanced options used). Query is only
       # updated if params[:query] is not specified.

@@ -47,62 +47,81 @@ export class Databases extends Component {
             databases = _.select(databases, (database) => database.type === category);
         }
 
-        // Check if this is SGD by looking for S288C in any database title
-        const isSGD = databases.some(db => (db.title || db.name || '').includes('S288C'));
-
-        if (isSGD) {
-            // Custom sorting for SGD
-            return databases.sort((a, b) => {
-                const titleA = a.title || a.name || '';
-                const titleB = b.title || b.name || '';
-
-                // Define strain group priorities
-                const getStrainGroup = (title) => {
-                    if (title.includes('S288C')) return 1;
-                    if (title.includes('Alternative Reference Strains')) return 2;
-                    if (title.includes('Other Strains')) return 3;
-                    return 4; // Unknown, put at end
-                };
-
-                // Define database type priorities
-                const typeOrder = {
-                    'Genomic DNA': 1,
-                    'ORFs DNA only': 2,
-                    'RNA': 3,
-                    'Non genic DNA': 4,
-                    'Vectors': 5,
-                    'Coding DNA': 6
-                };
-
-                const getTypeOrder = (title) => {
-                    for (const [type, order] of Object.entries(typeOrder)) {
-                        if (title.includes(type)) return order;
-                    }
-                    return 99; // Unknown type, put at end
-                };
-
-                const groupA = getStrainGroup(titleA);
-                const groupB = getStrainGroup(titleB);
-
-                // First sort by strain group
-                if (groupA !== groupB) {
-                    return groupA - groupB;
-                }
-
-                // Then sort by database type within the same group
-                const typeA = getTypeOrder(titleA);
-                const typeB = getTypeOrder(titleB);
-
-                if (typeA !== typeB) {
-                    return typeA - typeB;
-                }
-
-                // If same group and type, sort alphabetically
-                return titleA.localeCompare(titleB);
-            });
+        // Check if we have a database order config
+        const databaseOrder = this.props.databaseOrder;
+        if (databaseOrder) {
+            // Find which MOD config to use based on detection rules
+            const matchedConfig = this.findMatchingOrderConfig(databases, databaseOrder);
+            if (matchedConfig) {
+                return this.sortWithConfig(databases, matchedConfig);
+            }
         }
 
         return _.sortBy(databases, 'title');
+    }
+
+    // Find which MOD's ordering config matches the current databases
+    findMatchingOrderConfig(databases, databaseOrder) {
+        for (const [modName, config] of Object.entries(databaseOrder)) {
+            if (config.detection && config.detection.titleContains) {
+                const hasMatch = databases.some(db => {
+                    const title = db.title || db.name || '';
+                    return config.detection.titleContains.some(term => title.includes(term));
+                });
+                if (hasMatch) {
+                    return config;
+                }
+            }
+        }
+        return null;
+    }
+
+    // Sort databases using the provided config
+    sortWithConfig(databases, config) {
+        const strainGroups = config.strainGroups || {};
+        const typeOrder = config.typeOrder || {};
+        const defaultStrainOrder = config.defaultStrainOrder || 99;
+        const defaultTypeOrder = config.defaultTypeOrder || 99;
+
+        return databases.sort((a, b) => {
+            const titleA = a.title || a.name || '';
+            const titleB = b.title || b.name || '';
+
+            // Get strain group priority
+            const getStrainGroup = (title) => {
+                for (const [strain, order] of Object.entries(strainGroups)) {
+                    if (title.includes(strain)) return order;
+                }
+                return defaultStrainOrder;
+            };
+
+            // Get type priority
+            const getTypeOrder = (title) => {
+                for (const [type, order] of Object.entries(typeOrder)) {
+                    if (title.includes(type)) return order;
+                }
+                return defaultTypeOrder;
+            };
+
+            const groupA = getStrainGroup(titleA);
+            const groupB = getStrainGroup(titleB);
+
+            // First sort by strain group
+            if (groupA !== groupB) {
+                return groupA - groupB;
+            }
+
+            // Then sort by database type within the same group
+            const typeA = getTypeOrder(titleA);
+            const typeB = getTypeOrder(titleB);
+
+            if (typeA !== typeB) {
+                return typeA - typeB;
+            }
+
+            // If same group and type, sort alphabetically
+            return titleA.localeCompare(titleB);
+        });
     }
 
     nselected() {

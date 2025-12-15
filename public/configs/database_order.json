@@ -1,0 +1,34 @@
+{
+  "SGD": {
+    "detection": {
+      "titleContains": ["S288C"]
+    },
+    "strainGroups": {
+      "S288C": 1,
+      "Alternative Reference Strains": 2,
+      "Other Strains": 3
+    },
+    "typeOrder": {
+      "Genomic DNA": 1,
+      "ORFs DNA only": 2,
+      "ORFs": 2,
+      "DNA only": 3,
+      "RNA": 4,
+      "Non genic DNA": 5,
+      "Non-genic Sequences": 5,
+      "Vectors": 6,
+      "Coding DNA": 7
+    },
+    "defaultStrainOrder": 99,
+    "defaultTypeOrder": 99
+  },
+  "RGD": {
+    "detection": {
+      "titleContains": ["R. norvegicus", "Rattus"]
+    },
+    "strainGroups": {},
+    "typeOrder": {},
+    "defaultStrainOrder": 99,
+    "defaultTypeOrder": 99
+  }
+}
