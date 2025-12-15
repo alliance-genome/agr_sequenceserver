@@ -116,7 +116,7 @@ end
         <div class="py-8" style="padding-left:20px">
           <a href="https://www.alliancegenome.org/members/<%= member_path %>" target="_blank" class="flex items-end">
             <img id="alliance-member-logo" src="<%= member_logo_url || '/blast/logos/alliance_logo_agr.png' %>" alt="Alliance MOD logo" width="100" height="100">
-            <strong style="font-size: 1.5rem; padding-left: 10px; padding-bottom:40px">Alliance <%= member_name %> BLAST</strong>
+            <strong style="font-size: 1.5rem; padding-left: 10px; padding-bottom:40px">Alliance <%= member_name %><%= data_version && data_version.end_with?('f') ? ' Fungal' : '' %> BLAST</strong>
           </a>
         </div>
         <div class="pr-8 md:pr-0 py-4" style="padding-left:40px">
