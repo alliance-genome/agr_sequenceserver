@@ -24,9 +24,12 @@
   },
   "RGD": {
     "detection": {
-      "titleContains": ["R. norvegicus", "Rattus"]
+      "titleContains": ["R. norvegicus", "Rattus", "GRCr8", "mRatBN7"]
     },
-    "strainGroups": {},
+    "strainGroups": {
+      "GRCr8": 1,
+      "mRatBN7": 2
+    },
     "typeOrder": {},
     "defaultStrainOrder": 99,
     "defaultTypeOrder": 99
