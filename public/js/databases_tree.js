@@ -158,8 +158,14 @@ export default class extends Databases {
                                 document.querySelector('img[src*="sgd" i]')) &&
                                /\/[^/]+f$/.test(window.location.pathname.replace(/\/$/, ''));
 
-            if (!isWormBase && !isFlyBase && !isRGD && !isSGDFungal) {
-                return; // Only run on WormBase, FlyBase, RGD, or SGD fungal pages
+            // Check if this is ZFIN
+            const isZFIN = window.location.hostname.includes('zfin') ||
+                          window.location.pathname.includes('/ZFIN/') ||
+                          document.querySelector('img[alt*="zfin" i]') ||
+                          document.querySelector('img[src*="zfin" i]');
+
+            if (!isWormBase && !isFlyBase && !isRGD && !isSGDFungal && !isZFIN) {
+                return; // Only run on WormBase, FlyBase, RGD, SGD fungal, or ZFIN pages
             }
 
             // Use setTimeout to ensure tree is fully rendered
@@ -243,6 +249,22 @@ export default class extends Databases {
                                  nodeText === 'cerevisiae' ||
                                  nodeText.includes('s. cerevisiae (') ||
                                  nodeText.includes('cerevisiae (')) {
+                            treeInstance.open_node(node.id);
+                        }
+                    }
+
+                    // ZFIN: Expand D. rerio nodes
+                    if (isZFIN) {
+                        // 1. Danio genus folder
+                        if (nodeText === 'danio' ||
+                            nodeText.startsWith('danio (')) {
+                            treeInstance.open_node(node.id);
+                        }
+                        // 2. D. rerio species folder
+                        else if (nodeText === 'd. rerio' ||
+                                 nodeText === 'rerio' ||
+                                 nodeText.includes('d. rerio (') ||
+                                 nodeText.includes('rerio (')) {
                             treeInstance.open_node(node.id);
                         }
                     }
