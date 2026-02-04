@@ -139,6 +139,26 @@ module SequenceServer
       nil # Return nil if no valid chromosome found
     end
 
+    # Extract chromosome name for RGD hits
+    # RGD hit titles look like: "Rattus norvegicus strain BN/NHsdMcwi chromosome 1, GRCr8, whole genome shotgun sequence"
+    # JBrowse2 primary names: Chr1, Chr2, ..., ChrX, ChrY, ChrMT
+    def self.extract_rgd_chromosome(hit_title, blast_accession)
+      return nil unless hit_title && !hit_title.empty?
+
+      # Match "chromosome N" where N is a number, X, or Y
+      chr_match = hit_title.match(/chromosome\s+(\d+|X|Y)/i)
+      if chr_match
+        return "Chr#{chr_match[1]}"
+      end
+
+      # Handle mitochondrial sequences
+      if hit_title.match(/mitochondri/i)
+        return "ChrMT"
+      end
+
+      nil # Return nil for scaffolds and unlocalized sequences
+    end
+
     # Main extraction method that delegates to MOD-specific methods
     def self.extract_ref_name(hit_title, blast_accession, database_path = nil, genome_browser_metadata = nil)
       # Determine which MOD based on genome browser metadata or database path
@@ -150,6 +170,10 @@ module SequenceServer
         elsif genome_browser_metadata["url"]&.include?("wormbase")
           # Try WormBase-specific extraction
           ref_name = extract_wormbase_chromosome(hit_title, blast_accession, database_path)
+          return ref_name if ref_name
+        elsif genome_browser_metadata["url"]&.include?("rgd")
+          # Try RGD-specific extraction
+          ref_name = extract_rgd_chromosome(hit_title, blast_accession)
           return ref_name if ref_name
         end
       end
@@ -164,6 +188,12 @@ module SequenceServer
       if database_path&.include?("FB") || (hit_title && (hit_title.include?("type=golden_path") || hit_title.include?("type=intergenic")))
         # Try FlyBase extraction
         ref_name = extract_flybase_chromosome(hit_title, blast_accession)
+        return ref_name if ref_name
+      end
+
+      if database_path&.include?("RGD") || (hit_title && hit_title.include?("Rattus norvegicus"))
+        # Try RGD extraction
+        ref_name = extract_rgd_chromosome(hit_title, blast_accession)
         return ref_name if ref_name
       end
 
