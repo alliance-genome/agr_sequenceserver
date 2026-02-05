@@ -247,7 +247,21 @@ module SequenceServer
             # Don't generate JBrowse link if we don't have a valid chromosome/reference name
             return nil if ref_name.nil? || ref_name.empty? || ref_name.start_with?("type=") || ref_name.include?("gnl|BL_ORD_ID")
 
-            loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
+            # Zoom to the first (best) HSP with padding
+            first_hsp = limited_hsps.first
+            if first_hsp["sstart"] > first_hsp["send"]
+              first_start = first_hsp["send"]
+              first_end = first_hsp["sstart"]
+            else
+              first_start = first_hsp["sstart"]
+              first_end = first_hsp["send"]
+            end
+            hsp_length = first_end - first_start
+            padding = [hsp_length * 2, 1000].max
+            loc_start = [first_start - padding, 1].max
+            loc_end = first_end + padding
+
+            loc = ERB::Util.url_encode(ref_name + ":" + loc_start.to_s + ".." + loc_end.to_s)
             features = ERB::Util.url_encode(JSON.generate([{
                 :seq_id => ref_name,
                 :start => features_start,
@@ -341,7 +355,22 @@ module SequenceServer
             # Don't generate JBrowse2 link if we don't have a valid chromosome/reference name
             return nil if ref_name.nil? || ref_name.empty? || ref_name.start_with?("type=") || ref_name.include?("gnl|BL_ORD_ID")
 
-            loc = ERB::Util.url_encode(ref_name + ":" + features_start.to_s + ".." + features_end.to_s)
+            # Zoom to the first (best) HSP with padding, so hits are visible
+            # even when multiple HSPs are far apart on the chromosome
+            first_hsp = limited_hsps.first
+            if first_hsp["sstart"] > first_hsp["send"]
+              first_start = first_hsp["send"]
+              first_end = first_hsp["sstart"]
+            else
+              first_start = first_hsp["sstart"]
+              first_end = first_hsp["send"]
+            end
+            hsp_length = first_end - first_start
+            padding = [hsp_length * 2, 1000].max
+            loc_start = [first_start - padding, 1].max
+            loc_end = first_end + padding
+
+            loc = ERB::Util.url_encode(ref_name + ":" + loc_start.to_s + ".." + loc_end.to_s)
 
             url = "#{genome_browser_metadata['url']}?" \
                          "loc=#{loc}" \
