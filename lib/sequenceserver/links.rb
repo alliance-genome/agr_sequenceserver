@@ -64,6 +64,12 @@ module SequenceServer
     # MOD-specific chromosome extraction methods
     # =============================================
 
+    # C. elegans chromosome mapping: Arabic numerals to Roman numerals
+    WORMBASE_ARABIC_TO_ROMAN = {
+      "1" => "I", "2" => "II", "3" => "III",
+      "4" => "IV", "5" => "V"
+    }.freeze
+
     # Extract chromosome name for WormBase hits
     def self.extract_wormbase_chromosome(hit_title, blast_accession, database_path = nil)
       # Handle C. elegans length-only format: "length=14890789"
@@ -97,6 +103,14 @@ module SequenceServer
         when "X" then return "chrX_pilon"
         when "MtDNA" then return "chrM_pilon"
         end
+      end
+
+      # Handle titles with Arabic numeral chromosome names (e.g., "1", "2", ...)
+      # WormBase JBrowse2 expects Roman numerals (I, II, III, IV, V, X)
+      if hit_title && !hit_title.empty?
+        first_word = hit_title.split(/[\s,;]/)[0]
+        roman = WORMBASE_ARABIC_TO_ROMAN[first_word]
+        return roman if roman
       end
 
       nil # Return nil if no WormBase-specific pattern matched
