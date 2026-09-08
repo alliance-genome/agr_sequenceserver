@@ -64,10 +64,11 @@ module SequenceServer
     # MOD-specific chromosome extraction methods
     # =============================================
 
-    # C. elegans chromosome mapping: Arabic numerals to Roman numerals
-    WORMBASE_ARABIC_TO_ROMAN = {
-      "1" => "I", "2" => "II", "3" => "III",
-      "4" => "IV", "5" => "V"
+    # C. elegans chromosome name normalization to JBrowse2 ref names
+    WORMBASE_CHROMOSOME_MAP = {
+      "1" => "I", "2" => "II", "3" => "III", "4" => "IV", "5" => "V",
+      "I" => "I", "II" => "II", "III" => "III", "IV" => "IV", "V" => "V",
+      "X" => "X", "MtDNA" => "MtDNA"
     }.freeze
 
     # Extract chromosome name for WormBase hits
@@ -105,12 +106,18 @@ module SequenceServer
         end
       end
 
-      # Handle titles with Arabic numeral chromosome names (e.g., "1", "2", ...)
-      # WormBase JBrowse2 expects Roman numerals (I, II, III, IV, V, X)
+      # Normalize chromosome names from title or accession
+      # WormBase JBrowse2 expects: I, II, III, IV, V, X, MtDNA
       if hit_title && !hit_title.empty?
         first_word = hit_title.split(/[\s,;]/)[0]
-        roman = WORMBASE_ARABIC_TO_ROMAN[first_word]
-        return roman if roman
+        mapped = WORMBASE_CHROMOSOME_MAP[first_word]
+        return mapped if mapped
+      end
+
+      # Also check the accession (some DBs have Roman/Arabic accessions with empty titles)
+      if blast_accession
+        mapped = WORMBASE_CHROMOSOME_MAP[blast_accession]
+        return mapped if mapped
       end
 
       nil # Return nil if no WormBase-specific pattern matched
