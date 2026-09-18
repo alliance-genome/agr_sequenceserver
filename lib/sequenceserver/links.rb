@@ -393,7 +393,9 @@ module SequenceServer
 
             loc = ERB::Util.url_encode(ref_name + ":" + loc_start.to_s + ".." + loc_end.to_s)
 
-            url = "#{genome_browser_metadata['url']}?" \
+            base_url = genome_browser_metadata['url']
+            separator = base_url.include?('?') ? '&' : '?'
+            url = "#{base_url}#{separator}" \
                          "loc=#{loc}" \
                          "&tracks=#{tracks}"\
                          "&sessionTracks=#{session_tracks}" \
