@@ -90,6 +90,24 @@ module SequenceServer
       erb :search, layout: settings.layout
     end
 
+    # Redirect /blast/:mod/ to the latest version for that MOD
+    get '/blast/:mod/' do
+      mod = params[:mod]
+      db_base = "/db/#{mod}"
+      if Dir.exist?(db_base)
+        versions = Dir.entries(db_base).reject { |e| e.start_with?('.') || !File.directory?(File.join(db_base, e)) || e == 'dev' }
+        unless versions.empty?
+          latest = versions.sort_by { |v|
+            # Extract numeric parts for proper version sorting
+            v.scan(/\d+/).map(&:to_i)
+          }.last
+          redirect "/blast/#{mod}/#{latest}/", 302
+          return
+        end
+      end
+      halt 404, "No databases found for #{mod}"
+    end
+
     # Returns features/roadmap page
     get '/blast/features' do
       erb :features, layout: :layout_simple
