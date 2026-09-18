@@ -82,7 +82,7 @@ export class Options extends Component {
     optionsPresetsJSX() {
         return (
             <div id="options-presets" className="w-full">
-                { Object.keys(this.props.predefinedOptions).length > 1 && <>
+                { Object.keys(this.props.predefinedOptions).length > 0 && <>
                     <div className="flex items-center border-b border-seqorange mb-2">
                         <h3 className="text-base md:text-lg font-medium pr-1">Settings</h3>
                         <p className="text-base text-gray-500">Choose a predefined setting or customize parameters.</p>

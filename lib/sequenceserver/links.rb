@@ -458,38 +458,43 @@ module SequenceServer
         }
     end
 
+    # RefSeq accession prefixes, and whether each names a protein record.
+    # BLAST reports Hit_accession without the version suffix, so the version is
+    # optional here even though the FASTA deflines carry it.
+    REFSEQ_ACCESSION = /\A(N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?\z/
+    REFSEQ_PROTEIN_PREFIX = /\A[NXYAZ]P_/
+
     def self.ncbi_link(accession, hit_title, dbtype)
       return nil if accession.nil? || accession.empty?
 
       ncbi_acc = nil
-      is_protein = false
+      is_protein = nil
 
-      # Try protein_id from title (e.g., [protein_id=NP_009332.1])
+      # Prefer an explicit protein_id from the defline, e.g. [protein_id=NP_009332.1]
       if hit_title
-        protein_match = hit_title.match(/\[protein_id=([^\]]+)\]/)
+        protein_match = hit_title.match(/\[protein_id=([A-Za-z0-9_.]+)\]/)
         if protein_match
           ncbi_acc = protein_match[1]
           is_protein = true
         end
       end
 
-      # Try RefSeq accession from the hit accession itself
+      # Otherwise accept the hit accession only if it really looks like RefSeq.
+      # A looser pattern would link MOD-native identifiers (SGD's Q0010, WormBase
+      # gene names) to NCBI records that do not exist.
       unless ncbi_acc
-        if accession.match(/(N[MP]_\d+\.\d+)/)
-          ncbi_acc = $1
-          is_protein = ncbi_acc.start_with?('NP_')
-        elsif accession.match(/^(NC_\d+\.\d+)/)
-          ncbi_acc = $1
-        elsif accession.match(/(NR_\d+\.\d+)/)
-          ncbi_acc = $1
-        elsif accession.match(/^([A-Z]{1,2}_?\d+(\.\d+)?)$/)
-          ncbi_acc = $1
-        end
+        embedded = accession[/(?:N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?/]
+        candidate = accession.match?(REFSEQ_ACCESSION) ? accession : embedded
+        ncbi_acc = candidate if candidate
       end
 
       return nil unless ncbi_acc
 
-      db = (is_protein || dbtype == :protein) ? 'protein' : 'nucleotide'
+      is_protein = ncbi_acc.match?(REFSEQ_PROTEIN_PREFIX) if is_protein.nil?
+      # dbtype is a String ('protein'/'nucleotide'), never a Symbol.
+      is_protein ||= dbtype.to_s == 'protein'
+
+      db = is_protein ? 'protein' : 'nuccore'
       encoded_acc = ERB::Util.url_encode(ncbi_acc)
 
       {

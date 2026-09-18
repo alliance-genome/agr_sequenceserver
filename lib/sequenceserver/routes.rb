@@ -90,22 +90,34 @@ module SequenceServer
       erb :search, layout: settings.layout
     end
 
-    # Redirect /blast/:mod/ to the latest version for that MOD
+    # Directory names that must never be the target of a bare /blast/:mod/ link:
+    # they hold in-progress or test data that curators should not be sent to.
+    NON_PUBLIC_VERSION_DIR = /\A(dev|test|staging)\z|test\z/i
+
+    # Redirect /blast/:mod/ to the newest published version for that MOD, so that
+    # /blast/WB/ is a stable bookmark that survives a data release.
     get '/blast/:mod/' do
       mod = params[:mod]
-      db_base = "/db/#{mod}"
-      if Dir.exist?(db_base)
-        versions = Dir.entries(db_base).reject { |e| e.start_with?('.') || !File.directory?(File.join(db_base, e)) || e == 'dev' }
-        unless versions.empty?
-          latest = versions.sort_by { |v|
-            # Extract numeric parts for proper version sorting
-            v.scan(/\d+/).map(&:to_i)
-          }.last
-          redirect "/blast/#{mod}/#{latest}/", 302
-          return
-        end
+      # Reject anything that is not a bare MOD name before it reaches the
+      # filesystem or the Location header (traversal, CRLF, scheme injection).
+      halt 404, 'No databases found' unless mod =~ /\A[A-Za-z0-9_-]+\z/
+
+      db_base = File.join('/db', mod)
+      halt 404, 'No databases found' unless File.directory?(db_base)
+
+      versions = Dir.children(db_base).reject do |e|
+        e.start_with?('.') ||
+          !File.directory?(File.join(db_base, e)) ||
+          e.match?(NON_PUBLIC_VERSION_DIR)
       end
-      halt 404, "No databases found for #{mod}"
+      halt 404, 'No databases found' if versions.empty?
+
+      # Sort on the numeric components so WS298 beats WS99, then on the name so
+      # that ties (e.g. two datasets sharing a release number) resolve the same
+      # way on every host rather than following directory order.
+      latest = versions.max_by { |v| [v.scan(/\d+/).map(&:to_i), v] }
+
+      redirect to("/blast/#{mod}/#{latest}/"), 302
     end
 
     # Returns features/roadmap page
@@ -300,7 +312,16 @@ module SequenceServer
         return 'No database ids provided'
       end
 
-      sequences = Sequence::Retriever.new(sequence_ids, database_ids, true)
+      begin
+        sequences = Sequence::Retriever.new(sequence_ids, database_ids, true)
+      rescue StandardError => e
+        # This route is reached by a form submission, so the browser navigates to
+        # the response. Return a readable message instead of a stack trace page.
+        status 500
+        content_type :text
+        return "Could not retrieve sequence: #{e.message}"
+      end
+
       send_file(sequences.file.path,
                 type: sequences.mime,
                 filename: sequences.filename)
@@ -530,30 +551,68 @@ module SequenceServer
       @makeblastdb ||= MAKEBLASTDB.new(database_dir)
     end
 
-    def lookup_sequence_by_name(name, type, database_dir)
-      return nil unless name =~ /\A[a-zA-Z0-9_\-\.]+\z/
+    # Longest a ?name= lookup may spend scanning databases.
+    #
+    # Resolving a name means reading deflines out of every database until one
+    # matches; on the SGD fungal set that is ~100 coding databases and ~1.3M
+    # entries, so a lookup takes seconds and a miss has to read all of them. The
+    # cap keeps an unauthenticated request from running unbounded. Making this
+    # fast needs a name -> accession index emitted alongside the databases at
+    # build time rather than a scan here.
+    NAME_LOOKUP_BUDGET_SECONDS = 15
 
-      is_protein = (type == 'protein' || type == 'prot')
+    # Resolve a gene name or locus tag (e.g. YFL039C) to a FASTA sequence, so
+    # that /blast/SGD/<version>/?name=YFL039C&type=dna can prefill the query box.
+    def lookup_sequence_by_name(name, type, _database_dir)
+      return nil unless name =~ /\A[a-zA-Z0-9_\-.]+\z/
+
+      want_protein = %w[protein prot aa].include?(type.to_s.downcase)
       search_pattern = /\[locus_tag=#{Regexp.escape(name)}\]|\[gene=#{Regexp.escape(name)}\]/
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + NAME_LOOKUP_BUDGET_SECONDS
 
-      Database.each do |db|
-        next if is_protein && db.type != 'protein'
-        next if !is_protein && db.type != 'nucleotide'
+      candidates = Database.select { |db| want_protein == (db.type == 'protein') }
 
-        begin
-          out = `blastdbcmd -db '#{db.name}' -entry all -outfmt '%a %t' 2>/dev/null`
-          out.each_line do |line|
-            if line.match?(search_pattern)
-              accession = line.split(/\s/, 2).first
-              seq = `blastdbcmd -db '#{db.name}' -entry '#{accession}' 2>/dev/null`
-              return seq.chomp unless seq.empty?
-            end
-          end
-        rescue
-          next
+      # gene= and locus_tag= tags only occur on coding-sequence deflines, so try
+      # those databases first; a hit then usually costs one scan instead of many.
+      candidates.sort_by! { |db| db.title.to_s.match?(/coding|cds/i) ? 0 : 1 }
+
+      candidates.each do |db|
+        if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+          logger.warn "?name= lookup for #{name} gave up after #{NAME_LOOKUP_BUDGET_SECONDS}s"
+          break
         end
+
+        accession = scan_database_for_name(db, search_pattern)
+        next unless accession
+        next unless accession =~ SequenceServer::BLAST::VALID_SEQUENCE_ID
+
+        sequence = db.retrieve(accession)
+        return sequence unless sequence.nil? || sequence.empty?
       end
 
+      nil
+    end
+
+    # Stream deflines out of a BLAST database looking for a gene name or locus
+    # tag, returning the accession of the first match.
+    #
+    # blastdbcmd is spawned without a shell: database paths and accessions are
+    # passed as argv entries so they can never be parsed as shell syntax.
+    def scan_database_for_name(db, search_pattern)
+      env = {}
+      bin = SequenceServer.config[:bin]
+      env['PATH'] = "#{bin}:#{ENV.fetch('PATH', '')}" if bin
+
+      argv = ['blastdbcmd', '-db', db.name, '-entry', 'all', '-outfmt', '%a %t']
+      IO.popen([env, *argv], err: File::NULL) do |io|
+        io.each_line do |line|
+          # Closing the pipe on a match stops blastdbcmd rather than reading the
+          # rest of the database.
+          return line.split(/\s/, 2).first if line.match?(search_pattern)
+        end
+      end
+      nil
+    rescue SystemCallError, IOError
       nil
     end
 
