@@ -27,13 +27,7 @@ export class Options extends Component {
     componentDidUpdate(prevProps) {
         if (prevProps.predefinedOptions !== this.props.predefinedOptions ||
             prevProps.blastMethod !== this.props.blastMethod) {
-            // Determine which set of options to use
             let selectedOptions = this.props.predefinedOptions.default || {attributes: []};
-
-            // Check if there's a 'short-seq' option and use it if available
-            if (this.props.predefinedOptions['short-seq']) {
-                selectedOptions = this.props.predefinedOptions['short-seq'];
-            }
 
             let initialTextValue = selectedOptions.attributes.join(' ').trim();
             let parsedOptions = this.parsedOptions(initialTextValue);

@@ -67,6 +67,18 @@ export default class SequenceModal extends React.Component {
     // Fetch sequence and update state.
     try {
       const response = await fetch(url);
+      if (!response.ok) {
+        let errorMsg = `Server error (${response.status})`;
+        try {
+          const data = await response.json();
+          errorMsg = data.error || errorMsg;
+          if (data.error_msgs && data.sequences) {
+            this.setState({ sequences: data.sequences, error_msgs: data.error_msgs, requestCompleted: true });
+            return;
+          }
+        } catch (_) { /* response wasn't JSON */ }
+        throw new Error(errorMsg);
+      }
       const data = await response.json();
       this.setState({
         sequences: data.sequences,

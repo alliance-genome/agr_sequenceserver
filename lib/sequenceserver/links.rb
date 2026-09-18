@@ -180,6 +180,30 @@ module SequenceServer
       nil # Return nil for scaffolds and unlocalized sequences
     end
 
+    # Extract chromosome name for SGD hits
+    # BLAST titles: "Saccharomyces cerevisiae S288C chromosome I, complete sequence"
+    # JBrowse names: chrI, chrII, ..., chrXVI, chrmt
+    SGD_ROMAN_MAP = {
+      "I" => "chrI", "II" => "chrII", "III" => "chrIII", "IV" => "chrIV",
+      "V" => "chrV", "VI" => "chrVI", "VII" => "chrVII", "VIII" => "chrVIII",
+      "IX" => "chrIX", "X" => "chrX", "XI" => "chrXI", "XII" => "chrXII",
+      "XIII" => "chrXIII", "XIV" => "chrXIV", "XV" => "chrXV", "XVI" => "chrXVI"
+    }.freeze
+
+    def self.extract_sgd_chromosome(hit_title, blast_accession)
+      return nil unless hit_title && !hit_title.empty?
+
+      chr_match = hit_title.match(/chromosome\s+([IVXL]+)/i)
+      if chr_match
+        roman = chr_match[1].upcase
+        return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
+      end
+
+      return "chrmt" if hit_title.match(/mitochondri/i)
+
+      nil
+    end
+
     # Main extraction method that delegates to MOD-specific methods
     def self.extract_ref_name(hit_title, blast_accession, database_path = nil, genome_browser_metadata = nil)
       # Determine which MOD based on genome browser metadata or database path
@@ -195,6 +219,10 @@ module SequenceServer
         elsif genome_browser_metadata["url"]&.include?("rgd")
           # Try RGD-specific extraction
           ref_name = extract_rgd_chromosome(hit_title, blast_accession)
+          return ref_name if ref_name
+        elsif genome_browser_metadata["url"]&.include?("yeastgenome")
+          # Try SGD-specific extraction
+          ref_name = extract_sgd_chromosome(hit_title, blast_accession)
           return ref_name if ref_name
         end
       end
@@ -215,6 +243,11 @@ module SequenceServer
       if database_path&.include?("RGD") || (hit_title && hit_title.include?("Rattus norvegicus"))
         # Try RGD extraction
         ref_name = extract_rgd_chromosome(hit_title, blast_accession)
+        return ref_name if ref_name
+      end
+
+      if database_path&.include?("SGD") || (hit_title && hit_title.include?("Saccharomyces cerevisiae"))
+        ref_name = extract_sgd_chromosome(hit_title, blast_accession)
         return ref_name if ref_name
       end
 
@@ -300,10 +333,8 @@ module SequenceServer
             end
             add_tracks = ERB::Util.url_encode('[{"label":"Hits","type":"JBrowse/View/Track/CanvasFeatures","store":"url","subParts":"match_part","glyph":"JBrowse/View/FeatureGlyph/Segments"}]')
 
-            # Check if FlyBase URL already has data parameter
             base_url = genome_browser_metadata['url']
-            if base_url.include?("flybase") && base_url.include?("data=")
-              # FlyBase URL already has data parameter, just add other parameters
+            if assembly.nil? || assembly.empty? || base_url.include?("data=")
               separator = base_url.include?('?') ? '&' : '?'
               url = "#{base_url}#{separator}loc=#{loc}" \
                     "&addFeatures=#{features}" \
@@ -311,7 +342,6 @@ module SequenceServer
                     "&tracks=#{tracks}" \
                     "&highlight="
             else
-              # Standard URL construction
               url = "#{base_url}" \
                     "?data=data/#{assembly}" \
                     "&loc=#{loc}" \
@@ -426,6 +456,48 @@ module SequenceServer
          url: "https://www.alliancegenome.org/gene/#{filepath_parts[2]}:#{url_data['id']}",
          icon: 'fa-external-link'
         }
+    end
+
+    def self.ncbi_link(accession, hit_title, dbtype)
+      return nil if accession.nil? || accession.empty?
+
+      ncbi_acc = nil
+      is_protein = false
+
+      # Try protein_id from title (e.g., [protein_id=NP_009332.1])
+      if hit_title
+        protein_match = hit_title.match(/\[protein_id=([^\]]+)\]/)
+        if protein_match
+          ncbi_acc = protein_match[1]
+          is_protein = true
+        end
+      end
+
+      # Try RefSeq accession from the hit accession itself
+      unless ncbi_acc
+        if accession.match(/(N[MP]_\d+\.\d+)/)
+          ncbi_acc = $1
+          is_protein = ncbi_acc.start_with?('NP_')
+        elsif accession.match(/^(NC_\d+\.\d+)/)
+          ncbi_acc = $1
+        elsif accession.match(/(NR_\d+\.\d+)/)
+          ncbi_acc = $1
+        elsif accession.match(/^([A-Z]{1,2}_?\d+(\.\d+)?)$/)
+          ncbi_acc = $1
+        end
+      end
+
+      return nil unless ncbi_acc
+
+      db = (is_protein || dbtype == :protein) ? 'protein' : 'nucleotide'
+      encoded_acc = ERB::Util.url_encode(ncbi_acc)
+
+      {
+        order: 3,
+        title: "NCBI: #{ncbi_acc}",
+        url: "https://www.ncbi.nlm.nih.gov/#{db}/#{encoded_acc}",
+        icon: 'fa-external-link'
+      }
     end
   end
 end

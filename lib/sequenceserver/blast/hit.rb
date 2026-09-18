@@ -37,73 +37,52 @@ module SequenceServer
       # in the client. These are derived by calling link generators, that is,
       # instance methods of the Links module.
       def links
-        # Get environment configuration for link generation
         database_config = query.report.instance_variable_get(:@env_config)
-        
-        puts "DEBUG: database_config count = #{database_config&.length}"
-        
-        # Return empty links if no environment config
-        return [] if database_config.nil? || database_config.empty?
 
-        # Find the actual database that contains this hit instead of just using the first one
+        # If no environment config, still try NCBI link
+        if database_config.nil? || database_config.empty?
+          ncbi = Links.ncbi_link(accession, title, dbtype)
+          return ncbi ? [ncbi] : []
+        end
+
         hit_db = nil
-        
-        # Try each database to find which one actually contains this hit
         report.querydb.each do |db|
-          puts "DEBUG: Testing database #{db.name} for hit #{id}"
           begin
             if db.include?(id)
               hit_db = db
-              puts "DEBUG: Found hit in database: #{db.name}"
               break
             end
           rescue => e
-            puts "DEBUG: Error testing database #{db.name}: #{e.message}"
             next
           end
         end
-        
-        # Fallback to first database if we can't find the hit (shouldn't happen but safety net)
+
         hit_db ||= report.querydb.first
-        puts "DEBUG: Using database = #{hit_db&.name}"
         return [] if hit_db.nil?
-        
+
         database_filename = File.basename(hit_db.name)
         fasta_file_basename = File.basename(database_filename, File.extname(database_filename))
-        
-        # Extract species identifier from database name
         species_identifier = fasta_file_basename.sub(/db$/, '')
-        
-        puts "DEBUG: database_filename = #{database_filename}"
-        puts "DEBUG: fasta_file_basename = #{fasta_file_basename}"
-        puts "DEBUG: species_identifier = #{species_identifier}"
 
         links = []
+
+        ncbi = Links.ncbi_link(accession, title, dbtype)
+        links.push(ncbi) if ncbi
+
         for reference_sequence in database_config
-          puts "DEBUG: Checking URI: #{reference_sequence['uri']} against #{species_identifier}"
-
-          # More specific matching - check for project ID in database path
           uri_matches = false
-
-          # Extract project ID from URI (e.g., PRJNA13758, PRJEB28388)
           uri_project = reference_sequence["uri"].match(/PRJ[A-Z]+\d+/i)&.to_s
 
-          # Check if this is the standard C. elegans reference
           if species_identifier == "c_elegans" && database_filename == "c_elegansdb"
-            # Standard reference should match PRJNA13758
             uri_matches = uri_project == "PRJNA13758"
           elsif reference_sequence["uri"].include?(species_identifier)
-            # For other databases, use the original matching
             uri_matches = true
           end
-
-          puts "DEBUG: URI project = #{uri_project}, matches = #{uri_matches}"
 
           if uri_matches
              if reference_sequence.key?("genome_browser")
                 genome_browser_metadata = reference_sequence["genome_browser"]
                 filepath_parts = hit_db.name.split(File::SEPARATOR)
-                puts "DEBUG: Passing to jbrowse - title='#{title}', accession='#{accession}'"
                 links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession, title, hit_db.name))
 
                 if genome_browser_metadata.has_key?("gene_track")
@@ -147,26 +126,12 @@ module SequenceServer
         report.dbtype
       end
 
-      # returns the first database that it finds based on the id
       def getdbpath
-          puts "DEBUG: getdbpath - hit id = #{id.inspect}"
-          puts "DEBUG: getdbpath - report.querydb count = #{report.querydb&.length}"
-          puts "DEBUG: getdbpath - report.querydb = #{report.querydb&.map(&:name)}"
-          
-          db = report.querydb.find { |db| 
-            puts "DEBUG: Testing db #{db.name} for hit id #{id}"
-            result = db.include?(id)
-            puts "DEBUG: db.include?(#{id}) = #{result}"
-            result
-          }
-          puts "DEBUG: getdbpath - found db = #{db&.name}"
+          db = report.querydb.find { |db| db.include?(id) }
           return db&.name
       end
 
-
       # Returns a list of databases that contain this hit.
-      #
-      # e.g., whichdb('SI_2.2.23') => [<Database: ...>, ...]
       def whichdb
         report.querydb.select { |db| db.include? id }
       end

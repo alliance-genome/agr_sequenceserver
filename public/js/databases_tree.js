@@ -369,16 +369,19 @@ export default class extends Databases {
         const data = this.props.tree[category];
 
         return (
-            <div
-                id={tree_id}
-                className={'jstree_div'}
-                onClick=
-                    {
-                        _.bind(function () {
-                            this.handleLoadTree(category);
-                        }, this)
-                    }
-            >
+            <div>
+                <p className="text-xs text-gray-500 mb-1 italic">Click arrows to expand/collapse groups. Use checkboxes to select databases.</p>
+                <div
+                    id={tree_id}
+                    className={'jstree_div'}
+                    onClick=
+                        {
+                            _.bind(function () {
+                                this.handleLoadTree(category);
+                            }, this)
+                        }
+                >
+                </div>
             </div>
         );
     }

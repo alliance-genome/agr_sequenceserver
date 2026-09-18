@@ -123,8 +123,15 @@ module SequenceServer
       fail NO_BLAST_DATABASE_FOUND, env_database_dir if !makeblastdb(env_database_dir).any_formatted?
       Database.collection = makeblastdb(env_database_dir).formatted_fastas
 
+      query_sequence = Database.retrieve(params[:query])
+
+      # Support ?name=YFL039C&type=dna to look up a gene by locus tag
+      if !query_sequence && params[:name]
+        query_sequence = lookup_sequence_by_name(params[:name], params[:type] || 'dna', env_database_dir)
+      end
+
       searchdata = {
-        query: Database.retrieve(params[:query]),
+        query: query_sequence,
         database: Database.all,
         #options: Database.config[:options] deleted when pulled upstream
         options: SequenceServer.config[:options],
@@ -229,6 +236,8 @@ module SequenceServer
     # in identifiers) and retreival_databases (we don't allow whitespace in a
     # database's name, so it's safe).
     get '/blast/:segment1/:segment2/get_sequence/' do
+      content_type :json
+
       # Initialize database collection for this request
       env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
       makeblastdb(env_database_dir).scan
@@ -245,8 +254,13 @@ module SequenceServer
         status 422
         return { error: 'No database ids provided' }.to_json
       end
-      sequences = Sequence::Retriever.new(sequence_ids, database_ids)
-      sequences.to_json
+      begin
+        sequences = Sequence::Retriever.new(sequence_ids, database_ids)
+        sequences.to_json
+      rescue => e
+        status 500
+        { error: e.message, error_msgs: [[e.class.to_s, e.message]], sequences: [] }.to_json
+      end
     end
 
     post '/blast/:segment1/:segment2/get_sequence' do
@@ -496,6 +510,33 @@ module SequenceServer
 
     def makeblastdb(database_dir)
       @makeblastdb ||= MAKEBLASTDB.new(database_dir)
+    end
+
+    def lookup_sequence_by_name(name, type, database_dir)
+      return nil unless name =~ /\A[a-zA-Z0-9_\-\.]+\z/
+
+      is_protein = (type == 'protein' || type == 'prot')
+      search_pattern = /\[locus_tag=#{Regexp.escape(name)}\]|\[gene=#{Regexp.escape(name)}\]/
+
+      Database.each do |db|
+        next if is_protein && db.type != 'protein'
+        next if !is_protein && db.type != 'nucleotide'
+
+        begin
+          out = `blastdbcmd -db '#{db.name}' -entry all -outfmt '%a %t' 2>/dev/null`
+          out.each_line do |line|
+            if line.match?(search_pattern)
+              accession = line.split(/\s/, 2).first
+              seq = `blastdbcmd -db '#{db.name}' -entry '#{accession}' 2>/dev/null`
+              return seq.chomp unless seq.empty?
+            end
+          end
+        rescue
+          next
+        end
+      end
+
+      nil
     end
 
     def display_large_result_warning?(xml_file_size)
