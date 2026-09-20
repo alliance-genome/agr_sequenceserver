@@ -180,9 +180,16 @@ module SequenceServer
       nil # Return nil for scaffolds and unlocalized sequences
     end
 
-    # Extract chromosome name for SGD hits
-    # BLAST titles: "Saccharomyces cerevisiae S288C chromosome I, complete sequence"
-    # JBrowse names: chrI, chrII, ..., chrXVI, chrmt
+    # Extract chromosome name for SGD hits.
+    #
+    # Two defline styles are in use across the SGD datasets:
+    #   NCBI style (R64-5-1f): "... S288C chromosome I, complete sequence"
+    #   SGD style  (R64-5-1m): "[org=...] [strain=S288C] [chromosome=XVI]"
+    # so the separator after "chromosome" may be whitespace or '='.
+    #
+    # JBrowse refseq names are chrI..chrXVI and chrmt. Anything else (the
+    # 2-micron plasmid, scaffolds, the ~200 other fungal species) returns nil so
+    # that no JBrowse link is generated for a reference JBrowse cannot resolve.
     SGD_ROMAN_MAP = {
       "I" => "chrI", "II" => "chrII", "III" => "chrIII", "IV" => "chrIV",
       "V" => "chrV", "VI" => "chrVI", "VII" => "chrVII", "VIII" => "chrVIII",
@@ -193,7 +200,7 @@ module SequenceServer
     def self.extract_sgd_chromosome(hit_title, blast_accession)
       return nil unless hit_title && !hit_title.empty?
 
-      chr_match = hit_title.match(/chromosome\s+([IVXL]+)/i)
+      chr_match = hit_title.match(/chromosome[\s=]+([IVXL]+)\b/i)
       if chr_match
         roman = chr_match[1].upcase
         return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]

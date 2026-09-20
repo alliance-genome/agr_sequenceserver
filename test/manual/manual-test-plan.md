@@ -165,7 +165,22 @@ catch-all regex did this, producing links to records that do not exist.
 refseq names are `chrI`…`chrXVI`/`chrmt` and will not resolve — or the URL has
 a doubled `?` / a stray `data=` segment.
 
-- [ ] **T3e** **Regression — other MODs' JBrowse still works.** On
+- [ ] **T3e** **The main SGD dataset.** `R64-5-1m` is SGD's primary dataset and
+      is where `/blast/SGD/` lands. Open
+      `http://localhost:4570/blast/SGD/R64-5-1m/`, paste the **nucleotide**
+      sequence and tick **S288C_Reference_Strain_Genomic_DNA →
+      Nuclear_chromosomes**. The hit must also carry a **JBrowse** link with
+      `loc=chrVI:…`.
+
+> The two datasets label chromosomes differently — `R64-5-1f` uses NCBI-style
+> `chromosome VI, complete sequence`, `R64-5-1m` uses SGD-style
+> `[chromosome=VI]`. Both must resolve to `chrVI`.
+
+- [ ] **T3f** Repeat against **Mitochondrial_chromosome** — `loc=chrmt:…`.
+- [ ] **T3g** Repeat against **2_micron_plasmid** — there must be **no JBrowse
+      link**. SGD's JBrowse has no 2-micron reference, so a link would 404.
+
+- [ ] **T3h** **Regression — other MODs' JBrowse still works.** On
       `http://localhost:4570/blast/WB/WS298/`, run a genome search and confirm
       the **JBrowse** link still opens WormBase JBrowse 2 at the right location.
 
@@ -248,7 +263,8 @@ plain-text error.
 
 - [ ] **T7a** `http://localhost:4570/blast/WB/` → lands on `/blast/WB/WS298/`
       (the newest release), fully loaded.
-- [ ] **T7b** `http://localhost:4570/blast/SGD/` → lands on an `R64-…` dataset.
+- [ ] **T7b** `http://localhost:4570/blast/SGD/` → lands on **`/blast/SGD/R64-5-1m/`**,
+      SGD's main dataset, and hits there carry JBrowse links (see T3e).
 - [ ] **T7c** `http://localhost:4570/blast/ZFIN/` → lands on **`/blast/ZFIN/prod/`**.
 
 **Fails if:** ZFIN lands on `zfintest`. Sending curators to a test dataset is

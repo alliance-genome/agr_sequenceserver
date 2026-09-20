@@ -230,6 +230,8 @@ puts bad.empty? ? "OK" : "MISMATCH: #{bad.map(&:first).join(", ")}"
   [ "$ncbi_out" = "OK" ] && ok "NCBI links: protein/nuccore routing + no links on MOD-native ids" \
                          || bad "NCBI link generation" "$ncbi_out"
 
+  # Both defline styles must resolve: the NCBI-style titles in the fungal set
+  # (R64-5-1f) and the [chromosome=XVI] tags in the main set (R64-5-1m).
   sgd_out=$(docker exec agr-blast-dev ruby -e '
 require "/sequenceserver/lib/sequenceserver/links"
 L = SequenceServer::Links
@@ -238,12 +240,27 @@ cases = {
   "Saccharomyces cerevisiae S288C chromosome IX, complete sequence"   => "chrIX",
   "Saccharomyces cerevisiae S288C chromosome XVI, complete sequence"  => "chrXVI",
   "Saccharomyces cerevisiae S288c mitochondrion, complete genome"     => "chrmt",
+  "[org=Saccharomyces cerevisiae] [strain=S288C] [chromosome=XVI]"    => "chrXVI",
+  "[org=Saccharomyces cerevisiae] [strain=S288C] [chromosome=II]"     => "chrII",
+  "[org=Saccharomyces cerevisiae] [strain=S288C] [location=mitochondrion]" => "chrmt",
+  "[org=Saccharomyces cerevisiae] [strain=A364A D5] [chromosome=2-micron]" => nil,
 }
 bad = cases.reject { |t, want| L.extract_sgd_chromosome(t, nil) == want }
 puts bad.empty? ? "OK" : "MISMATCH: #{bad.keys.join(" | ")}"
 ' 2>&1 | tail -1)
-  [ "$sgd_out" = "OK" ] && ok "SGD chromosome names map to JBrowse refseqs (chrI..chrXVI, chrmt)" \
+  [ "$sgd_out" = "OK" ] && ok "SGD chromosome names map to JBrowse refseqs (both defline styles)" \
                         || bad "SGD chromosome extraction" "$sgd_out"
+
+  # The dataset /blast/SGD/ lands on must carry JBrowse config, or the linkout
+  # silently disappears for anyone following the permanent URL.
+  sgd_target=$(curl -sI "$BASE_URL/blast/SGD/" | tr -d '\r' \
+    | awk 'BEGIN{IGNORECASE=1}/^Location:/{print $2}' | sed 's|.*/blast/SGD/||;s|/$||')
+  for v in $(printf '%s\n' "$sgd_target" R64-5-1f R64-5-1m | awk 'NF && !seen[$0]++'); do
+    gb=$(docker exec agr-blast-dev sh -c \
+      "grep -c genome_browser /sequenceserver/public/environments/SGD/$v/environment.json 2>/dev/null" || echo 0)
+    if [ "${gb:-0}" -ge 1 ]; then ok "SGD/$v has JBrowse genome_browser config ($gb entries)"
+    else bad "SGD/$v has no genome_browser config" "JBrowse linkout will not render there"; fi
+  done
 else
   printf '%s  SKIP  docker/agr-blast-dev unavailable; NCBI+SGD unit checks skipped%s\n' "$DIM" "$RST"
 fi
