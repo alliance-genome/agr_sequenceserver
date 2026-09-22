@@ -211,10 +211,25 @@ else ok "no open redirect via :mod"; fi
 
 # --- 7. NCBI links on hits -------------------------------------------------
 section "7. NCBI link generation"
-# ncbi_link is a pure function; exercise it directly where a container is
-# available. Skipped automatically when docker or the container is absent.
-if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^agr-blast-dev$'; then
-  ncbi_out=$(docker exec agr-blast-dev ruby -e '
+# ncbi_link and extract_sgd_chromosome are pure functions, so exercise them
+# directly rather than inferring them from a BLAST run.
+#
+# That means exec'ing into a container, which must be the one actually serving
+# BASE_URL — otherwise these checks silently report on a different build than
+# every other section, which is worse than not running them. Resolve it from the
+# published port, allow an explicit override, and skip outright if unsure.
+TEST_CONTAINER="${CONTAINER:-}"
+if [ -z "$TEST_CONTAINER" ] && command -v docker >/dev/null 2>&1; then
+  _port=$(printf '%s' "$BASE_URL" | sed -nE 's#^[a-z]+://[^/:]+:([0-9]+).*#\1#p')
+  if [ -n "${_port:-}" ]; then
+    TEST_CONTAINER=$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null \
+      | awk -v p=":${_port}->" 'index($0, p) { print $1; exit }')
+  fi
+fi
+
+if [ -n "$TEST_CONTAINER" ] && docker exec "$TEST_CONTAINER" true >/dev/null 2>&1; then
+  printf '%s  (exec target: %s)%s\n' "$DIM" "$TEST_CONTAINER" "$RST"
+  ncbi_out=$(docker exec "$TEST_CONTAINER" ruby -e '
 require "/sequenceserver/lib/sequenceserver/links"
 L = SequenceServer::Links
 cases = [
@@ -238,7 +253,7 @@ puts bad.empty? ? "OK" : "MISMATCH: #{bad.map(&:first).join(", ")}"
 
   # Both defline styles must resolve: the NCBI-style titles in the fungal set
   # (R64-5-1f) and the [chromosome=XVI] tags in the main set (R64-5-1m).
-  sgd_out=$(docker exec agr-blast-dev ruby -e '
+  sgd_out=$(docker exec "$TEST_CONTAINER" ruby -e '
 require "/sequenceserver/lib/sequenceserver/links"
 L = SequenceServer::Links
 cases = {
@@ -262,13 +277,14 @@ puts bad.empty? ? "OK" : "MISMATCH: #{bad.keys.join(" | ")}"
   sgd_target=$(curl -sI "$BASE_URL/blast/SGD/" | tr -d '\r' \
     | awk 'BEGIN{IGNORECASE=1}/^Location:/{print $2}' | sed 's|.*/blast/SGD/||;s|/$||')
   for v in $(printf '%s\n' "$sgd_target" R64-5-1f R64-5-1m | awk 'NF && !seen[$0]++'); do
-    gb=$(docker exec agr-blast-dev sh -c \
+    gb=$(docker exec "$TEST_CONTAINER" sh -c \
       "grep -c genome_browser /sequenceserver/public/environments/SGD/$v/environment.json 2>/dev/null" || echo 0)
     if [ "${gb:-0}" -ge 1 ]; then ok "SGD/$v has JBrowse genome_browser config ($gb entries)"
     else bad "SGD/$v has no genome_browser config" "JBrowse linkout will not render there"; fi
   done
 else
-  printf '%s  SKIP  docker/agr-blast-dev unavailable; NCBI+SGD unit checks skipped%s\n' "$DIM" "$RST"
+  printf '%s  SKIP  could not resolve a container for %s; NCBI+SGD unit checks skipped.%s\n' "$DIM" "$BASE_URL" "$RST"
+  printf '%s        Set CONTAINER=<name> to run them against a specific container.%s\n' "$DIM" "$RST"
 fi
 
 # --- 8. other MODs still respond ------------------------------------------
