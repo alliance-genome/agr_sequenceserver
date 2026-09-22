@@ -551,15 +551,19 @@ module SequenceServer
       @makeblastdb ||= MAKEBLASTDB.new(database_dir)
     end
 
-    # Longest a ?name= lookup may spend scanning databases.
-    #
-    # Resolving a name means reading deflines out of every database until one
-    # matches; on the SGD fungal set that is ~100 coding databases and ~1.3M
-    # entries, so a lookup takes seconds and a miss has to read all of them. The
-    # cap keeps an unauthenticated request from running unbounded. Making this
-    # fast needs a name -> accession index emitted alongside the databases at
-    # build time rather than a scan here.
+    # Longest a ?name= lookup may spend scanning databases that have no name
+    # index. Scanning reads deflines out of a database until one matches; on the
+    # SGD fungal set that is ~100 coding databases and ~1.3M entries, so a miss
+    # has to read all of them. The cap keeps an unauthenticated request from
+    # running unbounded on databases built before agr_blastdb_manager started
+    # emitting indexes.
     NAME_LOOKUP_BUDGET_SECONDS = 15
+
+    # Written next to each BLAST database by agr_blastdb_manager: a JSON object
+    # mapping a lower-cased identifier (accession, locus tag or gene symbol) to
+    # the accession to retrieve. An empty object means the database holds no
+    # names, which is different from having no index at all.
+    NAME_INDEX_SUFFIX = '.names.json'
 
     # Resolve a gene name or locus tag (e.g. YFL039C) to a FASTA sequence, so
     # that /blast/SGD/<version>/?name=YFL039C&type=dna can prefill the query box.
@@ -567,22 +571,30 @@ module SequenceServer
       return nil unless name =~ /\A[a-zA-Z0-9_\-.]+\z/
 
       want_protein = %w[protein prot aa].include?(type.to_s.downcase)
+      key = name.downcase
       search_pattern = /\[locus_tag=#{Regexp.escape(name)}\]|\[gene=#{Regexp.escape(name)}\]/
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + NAME_LOOKUP_BUDGET_SECONDS
 
       candidates = Database.select { |db| want_protein == (db.type == 'protein') }
 
       # gene= and locus_tag= tags only occur on coding-sequence deflines, so try
-      # those databases first; a hit then usually costs one scan instead of many.
+      # those databases first; a hit then usually costs one lookup instead of many.
       candidates.sort_by! { |db| db.title.to_s.match?(/coding|cds/i) ? 0 : 1 }
 
       candidates.each do |db|
-        if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-          logger.warn "?name= lookup for #{name} gave up after #{NAME_LOOKUP_BUDGET_SECONDS}s"
-          break
+        index = name_index_for(db)
+
+        if index
+          # An index is authoritative for its database: a miss here needs no scan.
+          accession = index[key]
+        else
+          if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+            logger.warn "?name= lookup for #{name} gave up after #{NAME_LOOKUP_BUDGET_SECONDS}s"
+            break
+          end
+          accession = scan_database_for_name(db, search_pattern)
         end
 
-        accession = scan_database_for_name(db, search_pattern)
         next unless accession
         next unless accession =~ SequenceServer::BLAST::VALID_SEQUENCE_ID
 
@@ -590,6 +602,21 @@ module SequenceServer
         return sequence unless sequence.nil? || sequence.empty?
       end
 
+      nil
+    end
+
+    # Read the name index sitting next to a BLAST database, or nil when the
+    # database was built before indexes were emitted (callers then fall back to
+    # scanning). Deliberately not cached: the indexes across a MOD are far larger
+    # than any one lookup needs, and parsing one is milliseconds.
+    def name_index_for(db)
+      path = "#{db.name}#{NAME_INDEX_SUFFIX}"
+      return nil unless File.exist?(path)
+
+      index = JSON.parse(File.read(path))
+      index.is_a?(Hash) ? index : nil
+    rescue JSON::ParserError, SystemCallError => e
+      logger.warn "Ignoring unreadable name index #{path}: #{e.message}"
       nil
     end
 

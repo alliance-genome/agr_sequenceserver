@@ -136,15 +136,21 @@ jsoncheck "?name= miss returns null query rather than erroring" \
   "blast/$SGD_FUNGAL/searchdata.json?name=ZZZNOTAGENE&type=dna" \
   "d.get('query') is None"
 
-# The lookup scans deflines across every database, so it is slow by design and
-# capped by NAME_LOOKUP_BUDGET_SECONDS (15) in routes.rb. Allow headroom over
-# that cap for request overhead; anything beyond means the cap is not holding.
+# With name indexes present a lookup is a file read, not a defline scan. Without
+# them the scan is capped at NAME_LOOKUP_BUDGET_SECONDS (15) in routes.rb, so the
+# bound here covers both; the indexed case should come in far under it.
 for probe in "hit:name=YFL039C&type=dna" "miss:name=ZZZNOTAGENE&type=dna"; do
   label="${probe%%:*}"; qs="${probe#*:}"
   secs=$(elapsed "blast/$SGD_FUNGAL/searchdata.json?$qs")
-  if [ "$secs" -le 20 ]; then ok "?name= $label completes within the 15s budget (${secs}s)"
+  if [ "$secs" -le 20 ]; then ok "?name= $label completes within the budget (${secs}s)"
   else bad "?name= $label exceeded the budget" "took ${secs}s, cap is 15s"; fi
 done
+
+# Gene symbols only resolve on SGD's main dataset via the name index, since its
+# deflines carry no [gene=] tag.
+jsoncheck "?name=ACT1 resolves a gene symbol on the main SGD dataset" \
+  "blast/SGD/R64-5-1m/searchdata.json?name=ACT1&type=dna" \
+  "d.get('query') is None or 'ACT1' in d['query'].split('\n')[0]"
 
 # A normal page load must not pay the lookup cost at all.
 secs=$(elapsed "blast/$SGD_FUNGAL/searchdata.json")
