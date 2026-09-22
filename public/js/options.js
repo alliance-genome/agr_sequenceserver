@@ -25,21 +25,23 @@ export class Options extends Component {
     }
 
     componentDidUpdate(prevProps) {
-        if (prevProps.predefinedOptions !== this.props.predefinedOptions) {
-            // Determine which set of options to use
+        if (prevProps.predefinedOptions !== this.props.predefinedOptions ||
+            prevProps.blastMethod !== this.props.blastMethod) {
             let selectedOptions = this.props.predefinedOptions.default || {attributes: []};
-            
-            // Check if there's a 'short-seq' option and use it if available
-            if (this.props.predefinedOptions['short-seq']) {
-                selectedOptions = this.props.predefinedOptions['short-seq'];
-            }
-    
+
             let initialTextValue = selectedOptions.attributes.join(' ').trim();
             let parsedOptions = this.parsedOptions(initialTextValue);
-            
-            this.setState({ 
-                textValue: initialTextValue, 
-                objectValue: parsedOptions 
+
+            // If no task is specified in options, default to the blast method name
+            if (!parsedOptions.task && this.props.blastMethod) {
+                parsedOptions.task = this.props.blastMethod.toLowerCase();
+                // Add task to the text value
+                initialTextValue = `-task ${parsedOptions.task} ${initialTextValue}`.trim();
+            }
+
+            this.setState({
+                textValue: initialTextValue,
+                objectValue: parsedOptions
             });
         }
     }
@@ -80,7 +82,7 @@ export class Options extends Component {
     optionsPresetsJSX() {
         return (
             <div id="options-presets" className="w-full">
-                { Object.keys(this.props.predefinedOptions).length > 1 && <>
+                { Object.keys(this.props.predefinedOptions).length > 0 && <>
                     <div className="flex items-center border-b border-seqorange mb-2">
                         <h3 className="text-base md:text-lg font-medium pr-1">Settings</h3>
                         <p className="text-base text-gray-500">Choose a predefined setting or customize parameters.</p>
@@ -143,10 +145,14 @@ export class Options extends Component {
                             }}
                         >
                             <option value="">Select E-value</option>
-                            <option value="1e-3">1e-3</option>
-                            <option value="1e-5">1e-5</option>
-                            <option value="1e-10">1e-10</option>
-                            <option value="1e-20">1e-20</option>
+                            <option value="10000">1e+4</option>
+                            <option value="100">1e+2</option>
+                            <option value="1">1e0</option>
+                            <option value="1e-2">1e-2</option>
+                            <option value="1e-4">1e-4</option>
+                            <option value="1e-8">1e-8</option>
+                            <option value="1e-16">1e-16</option>
+                            <option value="1e-32">1e-32</option>
                         </select>
                     </div>
     

@@ -176,10 +176,11 @@ module SequenceServer
           # obtain id and title ourselves (we use id and title
           # for display purposes).
           if n[1] =~ /^gnl\|BL_ORD_ID\|\d+/
-            n[3] = n[1]
+            n[3] = n[1]  # Store BL_ORD_ID as accession
             defline = n[2].split
-            n[1] = defline.shift
-            n[2] = defline.join(' ')
+            original_title = n[2]  # Keep the full original defline
+            n[1] = defline.shift || n[1]  # Use first word as ID for lookup, fallback to BL_ORD_ID
+            n[2] = defline.empty? ? original_title : defline.join(' ')  # Keep full title if single word
           end
 
           hit = Hit.new(query, n[0], n[1], n[3], n[2], n[4],

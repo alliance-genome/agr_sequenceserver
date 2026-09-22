@@ -90,6 +90,41 @@ module SequenceServer
       erb :search, layout: settings.layout
     end
 
+    # Directory names that must never be the target of a bare /blast/:mod/ link:
+    # they hold in-progress or test data that curators should not be sent to.
+    NON_PUBLIC_VERSION_DIR = /\A(dev|test|staging)\z|test\z/i
+
+    # Redirect /blast/:mod/ to the newest published version for that MOD, so that
+    # /blast/WB/ is a stable bookmark that survives a data release.
+    get '/blast/:mod/' do
+      mod = params[:mod]
+      # Reject anything that is not a bare MOD name before it reaches the
+      # filesystem or the Location header (traversal, CRLF, scheme injection).
+      halt 404, 'No databases found' unless mod =~ /\A[A-Za-z0-9_-]+\z/
+
+      db_base = File.join('/db', mod)
+      halt 404, 'No databases found' unless File.directory?(db_base)
+
+      versions = Dir.children(db_base).reject do |e|
+        e.start_with?('.') ||
+          !File.directory?(File.join(db_base, e)) ||
+          e.match?(NON_PUBLIC_VERSION_DIR)
+      end
+      halt 404, 'No databases found' if versions.empty?
+
+      # Sort on the numeric components so WS298 beats WS99, then on the name so
+      # that ties (e.g. two datasets sharing a release number) resolve the same
+      # way on every host rather than following directory order.
+      latest = versions.max_by { |v| [v.scan(/\d+/).map(&:to_i), v] }
+
+      redirect to("/blast/#{mod}/#{latest}/"), 302
+    end
+
+    # Returns features/roadmap page
+    get '/blast/features' do
+      erb :features, layout: :layout_simple
+    end
+
     get '/blast/sitemap.xml' do
         send_file("/db/sitemap.xml",
                 type: 'application/xml',
@@ -118,8 +153,15 @@ module SequenceServer
       fail NO_BLAST_DATABASE_FOUND, env_database_dir if !makeblastdb(env_database_dir).any_formatted?
       Database.collection = makeblastdb(env_database_dir).formatted_fastas
 
+      query_sequence = Database.retrieve(params[:query])
+
+      # Support ?name=YFL039C&type=dna to look up a gene by locus tag
+      if !query_sequence && params[:name]
+        query_sequence = lookup_sequence_by_name(params[:name], params[:type] || 'dna', env_database_dir)
+      end
+
       searchdata = {
-        query: Database.retrieve(params[:query]),
+        query: query_sequence,
         database: Database.all,
         #options: Database.config[:options] deleted when pulled upstream
         options: SequenceServer.config[:options],
@@ -127,6 +169,12 @@ module SequenceServer
       }
 
       searchdata.update(tree: Database.tree) if SequenceServer.config[:databases_widget] == 'tree'
+
+      # Load database ordering config if it exists
+      database_order_path = File.join(settings.root, 'public', 'configs', 'database_order.json')
+      if File.exist?(database_order_path)
+        searchdata[:databaseOrder] = JSON.parse(File.read(database_order_path))
+      end
 
       # If a job_id is specified, update searchdata from job meta data (i.e.,
       # query, pre-selected databases, advanced options used). Query is only
@@ -150,12 +198,18 @@ module SequenceServer
         @input_sequence = params[:input_sequence]
         erb :search, layout: settings.layout
       else
-        job = Job.create(params)
-        protocol = request.env['HTTP_X_FORWARDED_PROTO'] == 'https' ? 'https' : 'http'
-        host = request.host_with_port # Get the host with port
-        if host == "blast.alliancegenome.org" or host == "www.alliancegenome.org"
-            protocol = "https"
+        # Map blast_params from frontend to advanced parameter expected by backend
+        if params[:blast_params] && !params[:advanced]
+          params[:advanced] = params[:blast_params]
         end
+        job = Job.create(params)
+        # Use same protocol detection logic as templates to avoid mixed content issues
+        if request.env['HTTP_X_FORWARDED_PROTO'] == 'https' || request.port == 443 || ENV['HTTPS'] == 'on' || request.host.include?('alliancegenome.org')
+          protocol = 'https'
+        else
+          protocol = request.scheme
+        end
+        host = request.host_with_port
 
         redirect_url = "#{protocol}://#{host}/blast/#{params[:segment1]}/#{params[:segment2]}/#{job.id}"
         redirect to(redirect_url)
@@ -171,7 +225,14 @@ module SequenceServer
       halt 202 unless job.done?
 
       env_file_path = File.join('/sequenceserver', 'public', 'environments', params[:segment1], params[:segment2], 'environment.json')
-      env_config = JSON.parse(File.read(env_file_path))
+
+      # Load environment config if it exists, otherwise use empty config
+      env_config = if File.exist?(env_file_path)
+        JSON.parse(File.read(env_file_path))
+      else
+        puts "WARNING: Environment config not found at #{env_file_path}"
+        { "data" => [] }
+      end
 
       report = BLAST::Report.new(job, env_config["data"])
 
@@ -204,6 +265,13 @@ module SequenceServer
     # in identifiers) and retreival_databases (we don't allow whitespace in a
     # database's name, so it's safe).
     get '/blast/:segment1/:segment2/get_sequence/' do
+      content_type :json
+
+      # Initialize database collection for this request
+      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      makeblastdb(env_database_dir).scan
+      Database.collection = makeblastdb(env_database_dir).formatted_fastas
+
       sequence_ids = params[:sequence_ids].to_s.split(',').uniq
       database_ids = params[:database_ids].to_s.split(',')
       if sequence_ids.empty?
@@ -215,11 +283,21 @@ module SequenceServer
         status 422
         return { error: 'No database ids provided' }.to_json
       end
-      sequences = Sequence::Retriever.new(sequence_ids, database_ids)
-      sequences.to_json
+      begin
+        sequences = Sequence::Retriever.new(sequence_ids, database_ids)
+        sequences.to_json
+      rescue => e
+        status 500
+        { error: e.message, error_msgs: [[e.class.to_s, e.message]], sequences: [] }.to_json
+      end
     end
 
     post '/blast/:segment1/:segment2/get_sequence' do
+      # Initialize database collection for this request
+      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      makeblastdb(env_database_dir).scan
+      Database.collection = makeblastdb(env_database_dir).formatted_fastas
+
       sequence_ids = params['sequence_ids'].to_s.split(',').uniq
       database_ids = params['database_ids'].to_s.split(',')
 
@@ -233,7 +311,16 @@ module SequenceServer
         return 'No database ids provided'
       end
 
-      sequences = Sequence::Retriever.new(sequence_ids, database_ids, true)
+      begin
+        sequences = Sequence::Retriever.new(sequence_ids, database_ids, true)
+      rescue StandardError => e
+        # This route is reached by a form submission, so the browser navigates to
+        # the response. Return a readable message instead of a stack trace page.
+        status 500
+        content_type :text
+        return "Could not retrieve sequence: #{e.message}"
+      end
+
       send_file(sequences.file.path,
                 type: sequences.mime,
                 filename: sequences.filename)
@@ -462,6 +549,98 @@ module SequenceServer
 
     def makeblastdb(database_dir)
       @makeblastdb ||= MAKEBLASTDB.new(database_dir)
+    end
+
+    # Longest a ?name= lookup may spend scanning databases that have no name
+    # index. Scanning reads deflines out of a database until one matches; on the
+    # SGD fungal set that is ~100 coding databases and ~1.3M entries, so a miss
+    # has to read all of them. The cap keeps an unauthenticated request from
+    # running unbounded on databases built before agr_blastdb_manager started
+    # emitting indexes.
+    NAME_LOOKUP_BUDGET_SECONDS = 15
+
+    # Written next to each BLAST database by agr_blastdb_manager: a JSON object
+    # mapping a lower-cased identifier (accession, locus tag or gene symbol) to
+    # the accession to retrieve. An empty object means the database holds no
+    # names, which is different from having no index at all.
+    NAME_INDEX_SUFFIX = '.names.json'
+
+    # Resolve a gene name or locus tag (e.g. YFL039C) to a FASTA sequence, so
+    # that /blast/SGD/<version>/?name=YFL039C&type=dna can prefill the query box.
+    def lookup_sequence_by_name(name, type, _database_dir)
+      return nil unless name =~ /\A[a-zA-Z0-9_\-.]+\z/
+
+      want_protein = %w[protein prot aa].include?(type.to_s.downcase)
+      key = name.downcase
+      search_pattern = /\[locus_tag=#{Regexp.escape(name)}\]|\[gene=#{Regexp.escape(name)}\]/
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + NAME_LOOKUP_BUDGET_SECONDS
+
+      candidates = Database.select { |db| want_protein == (db.type == 'protein') }
+
+      # gene= and locus_tag= tags only occur on coding-sequence deflines, so try
+      # those databases first; a hit then usually costs one lookup instead of many.
+      candidates.sort_by! { |db| db.title.to_s.match?(/coding|cds/i) ? 0 : 1 }
+
+      candidates.each do |db|
+        index = name_index_for(db)
+
+        if index
+          # An index is authoritative for its database: a miss here needs no scan.
+          accession = index[key]
+        else
+          if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+            logger.warn "?name= lookup for #{name} gave up after #{NAME_LOOKUP_BUDGET_SECONDS}s"
+            break
+          end
+          accession = scan_database_for_name(db, search_pattern)
+        end
+
+        next unless accession
+        next unless accession =~ SequenceServer::BLAST::VALID_SEQUENCE_ID
+
+        sequence = db.retrieve(accession)
+        return sequence unless sequence.nil? || sequence.empty?
+      end
+
+      nil
+    end
+
+    # Read the name index sitting next to a BLAST database, or nil when the
+    # database was built before indexes were emitted (callers then fall back to
+    # scanning). Deliberately not cached: the indexes across a MOD are far larger
+    # than any one lookup needs, and parsing one is milliseconds.
+    def name_index_for(db)
+      path = "#{db.name}#{NAME_INDEX_SUFFIX}"
+      return nil unless File.exist?(path)
+
+      index = JSON.parse(File.read(path))
+      index.is_a?(Hash) ? index : nil
+    rescue JSON::ParserError, SystemCallError => e
+      logger.warn "Ignoring unreadable name index #{path}: #{e.message}"
+      nil
+    end
+
+    # Stream deflines out of a BLAST database looking for a gene name or locus
+    # tag, returning the accession of the first match.
+    #
+    # blastdbcmd is spawned without a shell: database paths and accessions are
+    # passed as argv entries so they can never be parsed as shell syntax.
+    def scan_database_for_name(db, search_pattern)
+      env = {}
+      bin = SequenceServer.config[:bin]
+      env['PATH'] = "#{bin}:#{ENV.fetch('PATH', '')}" if bin
+
+      argv = ['blastdbcmd', '-db', db.name, '-entry', 'all', '-outfmt', '%a %t']
+      IO.popen([env, *argv], err: File::NULL) do |io|
+        io.each_line do |line|
+          # Closing the pipe on a match stops blastdbcmd rather than reading the
+          # rest of the database.
+          return line.split(/\s/, 2).first if line.match?(search_pattern)
+        end
+      end
+      nil
+    rescue SystemCallError, IOError
+      nil
     end
 
     def display_large_result_warning?(xml_file_size)

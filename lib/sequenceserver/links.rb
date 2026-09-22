@@ -61,15 +61,225 @@ module SequenceServer
     #     query_coords = coordinates[0]
     #     hit_coords = coordinates[1]
 
-    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession)
+    # MOD-specific chromosome extraction methods
+    # =============================================
+
+    # C. elegans chromosome name normalization to JBrowse2 ref names
+    WORMBASE_CHROMOSOME_MAP = {
+      "1" => "I", "2" => "II", "3" => "III", "4" => "IV", "5" => "V",
+      "I" => "I", "II" => "II", "III" => "III", "IV" => "IV", "V" => "V",
+      "X" => "X", "MtDNA" => "MtDNA"
+    }.freeze
+
+    # Extract chromosome name for WormBase hits
+    def self.extract_wormbase_chromosome(hit_title, blast_accession, database_path = nil)
+      # Handle C. elegans length-only format: "length=14890789"
+      if hit_title && hit_title.match(/^length=\d+$/) && blast_accession.include?("BL_ORD_ID")
+        # Extract the ID number from gnl|BL_ORD_ID|X format
+        id_match = blast_accession.match(/BL_ORD_ID\|(\d+)/)
+        if id_match
+          id_num = id_match[1].to_i
+          # Map WormBase chromosome order: I=1, II=2, III=3, IV=4, V=5, X=6
+          case id_num
+          when 1 then return "I"
+          when 2 then return "II"
+          when 3 then return "III"
+          when 4 then return "IV"
+          when 5 then return "V"
+          when 6 then return "X"
+          when 7 then return "MtDNA"
+          end
+        end
+      end
+
+      # Handle C. elegans CB4856 strain (PRJEB28388)
+      if database_path&.include?("WS297") && blast_accession.include?("PRJEB28388")
+        seq_name = hit_title.split(/[\s,;]/)[0] if hit_title
+        case seq_name
+        when "I" then return "chrI_pilon"
+        when "II" then return "chrII_pilon"
+        when "III" then return "chrIII_pilon"
+        when "IV" then return "chrIV_pilon"
+        when "V" then return "chrV_pilon"
+        when "X" then return "chrX_pilon"
+        when "MtDNA" then return "chrM_pilon"
+        end
+      end
+
+      # Normalize chromosome names from title or accession
+      # WormBase JBrowse2 expects: I, II, III, IV, V, X, MtDNA
+      if hit_title && !hit_title.empty?
+        first_word = hit_title.split(/[\s,;]/)[0]
+        mapped = WORMBASE_CHROMOSOME_MAP[first_word]
+        return mapped if mapped
+      end
+
+      # Also check the accession (some DBs have Roman/Arabic accessions with empty titles)
+      if blast_accession
+        mapped = WORMBASE_CHROMOSOME_MAP[blast_accession]
+        return mapped if mapped
+      end
+
+      nil # Return nil if no WormBase-specific pattern matched
+    end
+
+    # Check if extracted name looks like a real chromosome (not a scaffold)
+    def self.is_valid_flybase_chromosome(name)
+      # Valid FlyBase chromosomes: X, Y, 2L, 2R, 3L, 3R, 4, rDNA, mitochondrion_genome
+      return false if name.nil? || name.empty?
+      # Reject long numeric IDs (scaffolds)
+      return false if name.match(/^\d{10,}$/)
+      # Accept short names typical of chromosomes
+      return true if name.match(/^[XY234]$/) || name.match(/^[234][LR]$/) || name.match(/^rDNA$/) || name.match(/^mitochondrion/)
+      # Accept other short names
+      return name.length <= 20
+    end
+
+    # Extract chromosome name for FlyBase hits
+    def self.extract_flybase_chromosome(hit_title, blast_accession)
+      return nil unless hit_title && !hit_title.empty?
+
+      # Try loc= field first (more reliable for chromosomes)
+      if hit_title.include?("loc=")
+        loc_match = hit_title.match(/loc=([^:]+):/)
+        if loc_match
+          seq_name = loc_match[1].strip
+          return seq_name if is_valid_flybase_chromosome(seq_name)
+        end
+      end
+
+      # Fall back to ID= field for golden_path types
+      if hit_title.include?("type=golden_path") && hit_title.include?("ID=")
+        id_match = hit_title.match(/ID=([^;]+)/)
+        if id_match
+          seq_name = id_match[1].strip
+          return seq_name if is_valid_flybase_chromosome(seq_name)
+        end
+      end
+
+      nil # Return nil if no valid chromosome found
+    end
+
+    # Extract chromosome name for RGD hits
+    # RGD hit titles look like: "Rattus norvegicus strain BN/NHsdMcwi chromosome 1, GRCr8, whole genome shotgun sequence"
+    # JBrowse2 primary names: Chr1, Chr2, ..., ChrX, ChrY, ChrMT
+    def self.extract_rgd_chromosome(hit_title, blast_accession)
+      return nil unless hit_title && !hit_title.empty?
+
+      # Match "chromosome N" where N is a number, X, or Y
+      chr_match = hit_title.match(/chromosome\s+(\d+|X|Y)/i)
+      if chr_match
+        return "Chr#{chr_match[1]}"
+      end
+
+      # Handle mitochondrial sequences
+      if hit_title.match(/mitochondri/i)
+        return "ChrMT"
+      end
+
+      nil # Return nil for scaffolds and unlocalized sequences
+    end
+
+    # Extract chromosome name for SGD hits.
+    #
+    # Two defline styles are in use across the SGD datasets:
+    #   NCBI style (R64-5-1f): "... S288C chromosome I, complete sequence"
+    #   SGD style  (R64-5-1m): "[org=...] [strain=S288C] [chromosome=XVI]"
+    # so the separator after "chromosome" may be whitespace or '='.
+    #
+    # JBrowse refseq names are chrI..chrXVI and chrmt. Anything else (the
+    # 2-micron plasmid, scaffolds, the ~200 other fungal species) returns nil so
+    # that no JBrowse link is generated for a reference JBrowse cannot resolve.
+    SGD_ROMAN_MAP = {
+      "I" => "chrI", "II" => "chrII", "III" => "chrIII", "IV" => "chrIV",
+      "V" => "chrV", "VI" => "chrVI", "VII" => "chrVII", "VIII" => "chrVIII",
+      "IX" => "chrIX", "X" => "chrX", "XI" => "chrXI", "XII" => "chrXII",
+      "XIII" => "chrXIII", "XIV" => "chrXIV", "XV" => "chrXV", "XVI" => "chrXVI"
+    }.freeze
+
+    def self.extract_sgd_chromosome(hit_title, blast_accession)
+      return nil unless hit_title && !hit_title.empty?
+
+      chr_match = hit_title.match(/chromosome[\s=]+([IVXL]+)\b/i)
+      if chr_match
+        roman = chr_match[1].upcase
+        return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
+      end
+
+      return "chrmt" if hit_title.match(/mitochondri/i)
+
+      nil
+    end
+
+    # Main extraction method that delegates to MOD-specific methods
+    def self.extract_ref_name(hit_title, blast_accession, database_path = nil, genome_browser_metadata = nil)
+      # Determine which MOD based on genome browser metadata or database path
+      if genome_browser_metadata
+        if genome_browser_metadata["url"]&.include?("flybase")
+          # Try FlyBase-specific extraction
+          ref_name = extract_flybase_chromosome(hit_title, blast_accession)
+          return ref_name if ref_name
+        elsif genome_browser_metadata["url"]&.include?("wormbase")
+          # Try WormBase-specific extraction
+          ref_name = extract_wormbase_chromosome(hit_title, blast_accession, database_path)
+          return ref_name if ref_name
+        elsif genome_browser_metadata["url"]&.include?("rgd")
+          # Try RGD-specific extraction
+          ref_name = extract_rgd_chromosome(hit_title, blast_accession)
+          return ref_name if ref_name
+        elsif genome_browser_metadata["url"]&.include?("yeastgenome")
+          # Try SGD-specific extraction
+          ref_name = extract_sgd_chromosome(hit_title, blast_accession)
+          return ref_name if ref_name
+        end
+      end
+
+      # Try to determine MOD from database path or accession format
+      if database_path&.include?("WB") || blast_accession&.include?("BL_ORD_ID")
+        # Try WormBase extraction
+        ref_name = extract_wormbase_chromosome(hit_title, blast_accession, database_path)
+        return ref_name if ref_name
+      end
+
+      if database_path&.include?("FB") || (hit_title && (hit_title.include?("type=golden_path") || hit_title.include?("type=intergenic")))
+        # Try FlyBase extraction
+        ref_name = extract_flybase_chromosome(hit_title, blast_accession)
+        return ref_name if ref_name
+      end
+
+      if database_path&.include?("RGD") || (hit_title && hit_title.include?("Rattus norvegicus"))
+        # Try RGD extraction
+        ref_name = extract_rgd_chromosome(hit_title, blast_accession)
+        return ref_name if ref_name
+      end
+
+      if database_path&.include?("SGD") || (hit_title && hit_title.include?("Saccharomyces cerevisiae"))
+        ref_name = extract_sgd_chromosome(hit_title, blast_accession)
+        return ref_name if ref_name
+      end
+
+      # Generic fallback: extract the first word from title
+      if hit_title && !hit_title.empty?
+        seq_name = hit_title.split(/[\s,;]/)[0]
+        return seq_name unless seq_name.empty? || seq_name.start_with?("length=")
+      end
+
+      # Final fallback: return the original accession
+      blast_accession
+    end
+
+    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession, hit_title = nil, database_path = nil)
         assembly = genome_browser_metadata["assembly"]
         if genome_browser_metadata["type"] == "jbrowse"
             subfeatures = []
 
             features_start = -1
             features_end = -1
-            for hsp in hsps
-              refname = hsp["hit"]["accession"]
+            # Limit to first 5 HSPs to keep URLs manageable
+            limited_hsps = hsps.first(5)
+            for hsp in limited_hsps
+              # Use hit title if available, otherwise fall back to accession
+              refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
               if hsp["sstart"] > hsp["send"]
                   sequence_start = hsp["send"]
                   sequence_end = hsp["sstart"]
@@ -85,7 +295,7 @@ module SequenceServer
               if features_end == -1 || features_end < sequence_end
                 features_end = sequence_end
               end
- 
+
               subfeature = {"seq_id": refname,
                             "start": sequence_start,
                             "end": sequence_end,
@@ -93,24 +303,60 @@ module SequenceServer
               subfeatures.push(subfeature)
             end
 
-            loc = ERB::Util.url_encode(accession + ":" + features_start.to_s + ".." + features_end.to_s)
+            ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
+
+            # Don't generate JBrowse link if we don't have a valid chromosome/reference name
+            return nil if ref_name.nil? || ref_name.empty? || ref_name.start_with?("type=") || ref_name.include?("gnl|BL_ORD_ID")
+
+            # Zoom to the first (best) HSP with padding
+            first_hsp = limited_hsps.first
+            if first_hsp["sstart"] > first_hsp["send"]
+              first_start = first_hsp["send"]
+              first_end = first_hsp["sstart"]
+            else
+              first_start = first_hsp["sstart"]
+              first_end = first_hsp["send"]
+            end
+            hsp_length = first_end - first_start
+            padding = [hsp_length * 2, 1000].max
+            loc_start = [first_start - padding, 1].max
+            loc_end = first_end + padding
+
+            loc = ERB::Util.url_encode(ref_name + ":" + loc_start.to_s + ".." + loc_end.to_s)
             features = ERB::Util.url_encode(JSON.generate([{
-                :seq_id => accession,
+                :seq_id => ref_name,
                 :start => features_start,
                 :end => features_end,
                 :type => "match",
                 :subfeatures => subfeatures
             }]))
-            tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",Hits")
+            # Use FlyBase default tracks if none specified or if FlyBase metadata tracks don't work
+            if genome_browser_metadata["url"] && genome_browser_metadata["url"].include?("flybase")
+              # Override with working FlyBase tracks
+              default_flybase_tracks = ["Gene_span", "RNA"]
+              tracks = ERB::Util.url_encode(default_flybase_tracks.join(",") + ",Hits")
+            else
+              tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",Hits")
+            end
             add_tracks = ERB::Util.url_encode('[{"label":"Hits","type":"JBrowse/View/Track/CanvasFeatures","store":"url","subParts":"match_part","glyph":"JBrowse/View/FeatureGlyph/Segments"}]')
 
-            url = "#{genome_browser_metadata['url']}" \
-                  "?data=data/#{assembly}" \
-                  "&loc=#{loc}" \
-                  "&addFeatures=#{features}" \
-                  "&addTracks=#{add_tracks}" \
-                  "&tracks=#{tracks}" \
-                  "&highlight="
+            base_url = genome_browser_metadata['url']
+            if assembly.nil? || assembly.empty? || base_url.include?("data=")
+              separator = base_url.include?('?') ? '&' : '?'
+              url = "#{base_url}#{separator}loc=#{loc}" \
+                    "&addFeatures=#{features}" \
+                    "&addTracks=#{add_tracks}" \
+                    "&tracks=#{tracks}" \
+                    "&highlight="
+            else
+              url = "#{base_url}" \
+                    "?data=data/#{assembly}" \
+                    "&loc=#{loc}" \
+                    "&addFeatures=#{features}" \
+                    "&addTracks=#{add_tracks}" \
+                    "&tracks=#{tracks}" \
+                    "&highlight="
+            end
         elsif genome_browser_metadata["type"] == "jbrowse2"
             unique_ids = []
             subfeatures = []
@@ -118,8 +364,10 @@ module SequenceServer
             features_start = -1
             features_end = -1
             count = 1
-            for hsp in hsps
-              refname = hsp["hit"]["accession"]
+            # Limit to first 5 HSPs to keep URLs manageable
+            limited_hsps = hsps.first(5)
+            for hsp in limited_hsps
+              refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
               if hsp["sstart"] > hsp["send"]
                   sequence_start = hsp["send"]
                   sequence_end = hsp["sstart"]
@@ -160,9 +408,31 @@ module SequenceServer
                                                       "name": "Hits",
                                                       "subfeatures": subfeatures}]}}].to_json)
             tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",blasthits")
-            loc = ERB::Util.url_encode(accession + ":" + features_start.to_s + ".." + features_end.to_s)
+            ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
 
-            url = "#{genome_browser_metadata['url']}?" \
+            # Don't generate JBrowse2 link if we don't have a valid chromosome/reference name
+            return nil if ref_name.nil? || ref_name.empty? || ref_name.start_with?("type=") || ref_name.include?("gnl|BL_ORD_ID")
+
+            # Zoom to the first (best) HSP with padding, so hits are visible
+            # even when multiple HSPs are far apart on the chromosome
+            first_hsp = limited_hsps.first
+            if first_hsp["sstart"] > first_hsp["send"]
+              first_start = first_hsp["send"]
+              first_end = first_hsp["sstart"]
+            else
+              first_start = first_hsp["sstart"]
+              first_end = first_hsp["send"]
+            end
+            hsp_length = first_end - first_start
+            padding = [hsp_length * 2, 1000].max
+            loc_start = [first_start - padding, 1].max
+            loc_end = first_end + padding
+
+            loc = ERB::Util.url_encode(ref_name + ":" + loc_start.to_s + ".." + loc_end.to_s)
+
+            base_url = genome_browser_metadata['url']
+            separator = base_url.include?('?') ? '&' : '?'
+            url = "#{base_url}#{separator}" \
                          "loc=#{loc}" \
                          "&tracks=#{tracks}"\
                          "&sessionTracks=#{session_tracks}" \
@@ -193,6 +463,53 @@ module SequenceServer
          url: "https://www.alliancegenome.org/gene/#{filepath_parts[2]}:#{url_data['id']}",
          icon: 'fa-external-link'
         }
+    end
+
+    # RefSeq accession prefixes, and whether each names a protein record.
+    # BLAST reports Hit_accession without the version suffix, so the version is
+    # optional here even though the FASTA deflines carry it.
+    REFSEQ_ACCESSION = /\A(N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?\z/
+    REFSEQ_PROTEIN_PREFIX = /\A[NXYAZ]P_/
+
+    def self.ncbi_link(accession, hit_title, dbtype)
+      return nil if accession.nil? || accession.empty?
+
+      ncbi_acc = nil
+      is_protein = nil
+
+      # Prefer an explicit protein_id from the defline, e.g. [protein_id=NP_009332.1]
+      if hit_title
+        protein_match = hit_title.match(/\[protein_id=([A-Za-z0-9_.]+)\]/)
+        if protein_match
+          ncbi_acc = protein_match[1]
+          is_protein = true
+        end
+      end
+
+      # Otherwise accept the hit accession only if it really looks like RefSeq.
+      # A looser pattern would link MOD-native identifiers (SGD's Q0010, WormBase
+      # gene names) to NCBI records that do not exist.
+      unless ncbi_acc
+        embedded = accession[/(?:N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?/]
+        candidate = accession.match?(REFSEQ_ACCESSION) ? accession : embedded
+        ncbi_acc = candidate if candidate
+      end
+
+      return nil unless ncbi_acc
+
+      is_protein = ncbi_acc.match?(REFSEQ_PROTEIN_PREFIX) if is_protein.nil?
+      # dbtype is a String ('protein'/'nucleotide'), never a Symbol.
+      is_protein ||= dbtype.to_s == 'protein'
+
+      db = is_protein ? 'protein' : 'nuccore'
+      encoded_acc = ERB::Util.url_encode(ncbi_acc)
+
+      {
+        order: 3,
+        title: "NCBI: #{ncbi_acc}",
+        url: "https://www.ncbi.nlm.nih.gov/#{db}/#{encoded_acc}",
+        icon: 'fa-external-link'
+      }
     end
   end
 end

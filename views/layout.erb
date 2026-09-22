@@ -11,7 +11,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Custom BLAST server provided by SequenceServer (https://sequenceserver.com)"/>
-  <% base_url_protocol = ENV['HTTPS'] == 'on' ? 'https' : (request.env['HTTP_X_FORWARDED_PROTO'] || request.scheme) %>
+  <% # Detect protocol properly to avoid mixed content issues %>
+  <% if request.env['HTTP_X_FORWARDED_PROTO'] == 'https' || request.port == 443 || ENV['HTTPS'] == 'on' || request.host.include?('alliancegenome.org') %>
+    <% base_url_protocol = 'https' %>
+  <% else %>
+    <% base_url_protocol = request.scheme %>
+  <% end %>
   <% base_url = "#{base_url_protocol}://#{request.host}" %>
   <% base_url << ":#{request.port}" unless [80, 443].include?(request.port) %>
   <!-- CSS -->
@@ -78,8 +83,8 @@ end %>
 
 <% data_version = request.path.split("/")[3] %>
 
-<% 
-member_key = member_map[segment]
+<%
+member_key = segment ? member_map[segment.upcase] : nil
 
 member_logo_url = nil
 
@@ -87,12 +92,11 @@ if member_key
   begin
     manifest_uri = URI("https://www.alliancegenome.org/asset-manifest.json")
     manifest_response = Net::HTTP.get(manifest_uri)
-    manifest = JSON.parse(manifest_response)['files']
-    filename_prefix = "static/media/alliance_logo_#{member_key}.png"
-    hashed_path = manifest[filename_prefix]
+    manifest = JSON.parse(manifest_response)
+    src_key = "src/assets/images/alliance_logo_#{member_key}.png"
 
-    if hashed_path
-      member_logo_url = "https://www.alliancegenome.org#{hashed_path}"
+    if manifest[src_key] && manifest[src_key]['file']
+      member_logo_url = "https://www.alliancegenome.org/#{manifest[src_key]['file']}"
     end
 
   rescue => e
@@ -111,8 +115,8 @@ end
         </div>
         <div class="py-8" style="padding-left:20px">
           <a href="https://www.alliancegenome.org/members/<%= member_path %>" target="_blank" class="flex items-end">
-            <img id="alliance-member-logo" src="<%= member_logo_url || '/blast/logos/default_logo.png' %>" alt="Alliance MOD logo" width="100" height="100">
-            <strong style="font-size: 1.5rem; padding-left: 10px; padding-bottom:40px">Alliance <%= member_name %> BLAST</strong>
+            <img id="alliance-member-logo" src="<%= member_logo_url || '/blast/logos/alliance_logo_agr.png' %>" alt="Alliance MOD logo" width="100" height="100">
+            <strong style="font-size: 1.5rem; padding-left: 10px; padding-bottom:40px">Alliance <%= member_name %><%= data_version && data_version.end_with?('f') ? ' Fungal' : '' %> BLAST</strong>
           </a>
         </div>
         <div class="pr-8 md:pr-0 py-4" style="padding-left:40px">
@@ -128,6 +132,13 @@ end
       </div>
     </div>
   </header>
+
+  <!-- BETA Corner Ribbon -->
+  <div style="position: fixed; top: 0; right: 0; width: 0; height: 0; border-style: solid; border-width: 0 80px 80px 0; border-color: transparent #ef4444 transparent transparent; z-index: 50;" class="print:hidden">
+    <div style="position: absolute; top: 20px; right: -65px; transform: rotate(45deg); color: white; font-size: 12px; font-weight: bold; letter-spacing: 2px;">
+      BETA
+    </div>
+  </div>
 
   <!-- <script type="text/javascript" src="<%= "#{base_url}" %>/blast/resource_logo.js"></script> -->
   <noscript>
@@ -147,6 +158,11 @@ end
   <div class="mx-auto px-4">
     <div class="container mx-auto max-w-screen-xl">
       <p class="text-center text-sm print:hidden">
+       <div style="background-color: #fff3cd; border: 1px solid #ffedb8; border-radius: 5px; padding: 10px; margin-bottom: 15px;">
+         <p style="margin: 0; color: #856404;">
+           <strong>⚠️ Note:</strong> JBrowse genome browser links are currently under development and may not work correctly for all organisms.
+         </p>
+       </div>
        <p>If you use this service, please cite:</p>
 
        <h3><strong>Data:</strong></h3>

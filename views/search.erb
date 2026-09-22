@@ -1,4 +1,9 @@
-<% base_url_protocol = ENV['HTTPS'] == 'on' ? 'https' : (request.env['HTTP_X_FORWARDED_PROTO'] || request.scheme) %>
+<% # Detect protocol properly to avoid mixed content issues %>
+<% if request.env['HTTP_X_FORWARDED_PROTO'] == 'https' || request.port == 443 || ENV['HTTPS'] == 'on' || request.host.include?('alliancegenome.org') %>
+  <% base_url_protocol = 'https' %>
+<% else %>
+  <% base_url_protocol = request.scheme %>
+<% end %>
 <% base_url = "#{base_url_protocol}://#{request.host}" %>
 <% base_url << ":#{request.port}" unless [80, 443].include?(request.port) %>
 
@@ -42,6 +47,10 @@
           Close
         </button>
       </div>
+    </div>
+    <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mt-4 mb-4" role="alert">
+      <strong class="font-bold">⚠️ Note:</strong>
+      <span class="block sm:inline">JBrowse genome browser links are currently under development and may not work correctly for all organisms.</span>
     </div>
     <p>
     If you use this service, please cite:

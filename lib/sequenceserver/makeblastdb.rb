@@ -337,9 +337,10 @@ module SequenceServer
     end
 
     def get_categories(path)
-      path
-        .split('/')
-        .reject(&:empty?)[4..-1] # the first entry might be '' if database_dir does not end with /
+      db_dir = @database_dir.end_with?('/') ? @database_dir : "#{@database_dir}/"
+      relative = path.sub(db_dir, '')
+      parts = relative.split('/').reject(&:empty?)
+      parts[0..-2]
     end
 
     # Returns true if first character of the file is '>'.

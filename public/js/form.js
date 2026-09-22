@@ -22,6 +22,7 @@ export class Form extends Component {
             currentlySelectedDbs: [],
             preDefinedOpts: {},
             tree: {},
+            databaseOrder: {},
             residuesInQuerySequence: 0,
             blastMethod: ''
         };
@@ -68,6 +69,7 @@ export class Form extends Component {
                 preSelectedDbs: data['preSelectedDbs'],
                 preDefinedOpts: data['options'],
                 blastTaskMap: data['blastTaskMap'],
+                databaseOrder: data['databaseOrder'] || {},
                 currentlySelectedDbs: data['preSelectedDbs'] || [],
             }, () => {
                 this.handleDatabaseSelectionChanged(this.state.currentlySelectedDbs);
@@ -255,11 +257,13 @@ export class Form extends Component {
                             <DatabasesTree
                                 databases={this.state.databases} tree={this.state.tree}
                                 preSelectedDbs={this.state.preSelectedDbs}
+                                databaseOrder={this.state.databaseOrder}
                                 onDatabaseTypeChanged={this.handleDatabaseTypeChanged}
                                 onDatabaseSelectionChanged={this.handleDatabaseSelectionChanged} />
                             :
                             <Databases databases={this.state.databases}
                                 preSelectedDbs={this.state.preSelectedDbs}
+                                databaseOrder={this.state.databaseOrder}
                                 onDatabaseTypeChanged={this.handleDatabaseTypeChanged}
                                 onDatabaseSelectionChanged={this.handleDatabaseSelectionChanged} />
                         }

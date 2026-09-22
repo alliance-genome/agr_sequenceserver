@@ -807,3 +807,17 @@ svg .RdYlBu .q28-32 { fill: var(--ac); }
 svg .RdYlBu .q29-32 { fill: var(--ad); }
 svg .RdYlBu .q30-32 { fill: var(--ae); }
 svg .RdYlBu .q31-32 { fill: var(--af); }
+
+/* Make JSTree expand/collapse arrows more visible */
+.jstree-default .jstree-node > .jstree-ocl {
+  width: 24px;
+  height: 24px;
+}
+.jstree-default .jstree-closed > .jstree-ocl {
+  opacity: 0.8;
+}
+.jstree-default .jstree-closed > .jstree-ocl:hover,
+.jstree-default .jstree-open > .jstree-ocl:hover {
+  opacity: 1;
+  cursor: pointer;
+}

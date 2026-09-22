@@ -1,6 +1,3 @@
-require 'pp'
-require 'open3'
-
 module SequenceServer
   # Define BLAST::Hit.
   module BLAST
@@ -40,20 +37,53 @@ module SequenceServer
       # in the client. These are derived by calling link generators, that is,
       # instance methods of the Links module.
       def links
-        return []
-        database_filepath = getdbpath
-        database_filename = File.basename(database_filepath)
-        database_filename.sub!(/db\z/, "")
-        fasta_file_basename = File.basename(database_filename,File.extname(database_filename))
         database_config = query.report.instance_variable_get(:@env_config)
 
+        # If no environment config, still try NCBI link
+        if database_config.nil? || database_config.empty?
+          ncbi = Links.ncbi_link(accession, title, dbtype)
+          return ncbi ? [ncbi] : []
+        end
+
+        hit_db = nil
+        report.querydb.each do |db|
+          begin
+            if db.include?(id)
+              hit_db = db
+              break
+            end
+          rescue => e
+            next
+          end
+        end
+
+        hit_db ||= report.querydb.first
+        return [] if hit_db.nil?
+
+        database_filename = File.basename(hit_db.name)
+        fasta_file_basename = File.basename(database_filename, File.extname(database_filename))
+        species_identifier = fasta_file_basename.sub(/db$/, '')
+
         links = []
+
+        ncbi = Links.ncbi_link(accession, title, dbtype)
+        links.push(ncbi) if ncbi
+
         for reference_sequence in database_config
-          if reference_sequence["uri"].include? fasta_file_basename
+          uri_matches = false
+          uri_project = reference_sequence["uri"].match(/PRJ[A-Z]+\d+/i)&.to_s
+
+          if species_identifier == "c_elegans" && database_filename == "c_elegansdb"
+            uri_matches = uri_project == "PRJNA13758"
+          elsif reference_sequence["uri"].include?(species_identifier)
+            uri_matches = true
+          end
+
+          if uri_matches
              if reference_sequence.key?("genome_browser")
                 genome_browser_metadata = reference_sequence["genome_browser"]
-                filepath_parts = database_filepath.split(File::SEPARATOR)
-                links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession))
+                filepath_parts = hit_db.name.split(File::SEPARATOR)
+                links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession, title, hit_db.name))
 
                 if genome_browser_metadata.has_key?("gene_track")
                     first_hit_start = hsps.map(&:sstart).at(0)
@@ -88,6 +118,7 @@ module SequenceServer
              break
           end
         end
+        return links
       end
 
       # Returns the database type (nucleotide or protein).
@@ -95,27 +126,16 @@ module SequenceServer
         report.dbtype
       end
 
-      # returns the first database that it finds based on the id
+      # Returns the path of the first database containing this hit.
+      #
+      # Currently unused: #links resolves the database itself so that it can
+      # keep the Database object rather than just its path.
       def getdbpath
-          report.querydb.each do |db|
-            stdout, stderr, status = Open3.capture3("blastdbcmd -db #{db.name} -entry #{seq_id}")
-
-            if !status.success?
-              puts "Error accessing #{db.name}: #{stderr.strip}"
-            elsif stdout.strip.empty?
-              puts "No match for #{seq_id} in #{db.title}"
-            else
-              puts "Found #{seq_id} in #{db.title}"
-              return db
-            end
-          end 
-          return ''
+          db = report.querydb.find { |db| db.include?(id) }
+          return db&.name
       end
 
-
       # Returns a list of databases that contain this hit.
-      #
-      # e.g., whichdb('SI_2.2.23') => [<Database: ...>, ...]
       def whichdb
         report.querydb.select { |db| db.include? id }
       end
