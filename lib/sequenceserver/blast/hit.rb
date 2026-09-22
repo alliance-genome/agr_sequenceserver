@@ -126,6 +126,10 @@ module SequenceServer
         report.dbtype
       end
 
+      # Returns the path of the first database containing this hit.
+      #
+      # Currently unused: #links resolves the database itself so that it can
+      # keep the Database object rather than just its path.
       def getdbpath
           db = report.querydb.find { |db| db.include?(id) }
           return db&.name

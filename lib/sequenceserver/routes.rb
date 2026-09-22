@@ -212,7 +212,6 @@ module SequenceServer
         host = request.host_with_port
 
         redirect_url = "#{protocol}://#{host}/blast/#{params[:segment1]}/#{params[:segment2]}/#{job.id}"
-        puts redirect_url
         redirect to(redirect_url)
       end
     end
@@ -226,7 +225,7 @@ module SequenceServer
       halt 202 unless job.done?
 
       env_file_path = File.join('/sequenceserver', 'public', 'environments', params[:segment1], params[:segment2], 'environment.json')
-      
+
       # Load environment config if it exists, otherwise use empty config
       env_config = if File.exist?(env_file_path)
         JSON.parse(File.read(env_file_path))
@@ -461,6 +460,7 @@ module SequenceServer
         send_file file_path, disposition: :inline
       else
         puts "file does not exist"
+        puts file
         # Handle case when file doesn't exist
         status 404
         'File not found'
