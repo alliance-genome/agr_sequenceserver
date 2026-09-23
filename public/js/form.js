@@ -33,6 +33,7 @@ export class Form extends Component {
         this.handleDatabaseTypeChanged = this.handleDatabaseTypeChanged.bind(this);
         this.handleDatabaseSelectionChanged = this.handleDatabaseSelectionChanged.bind(this);
         this.handleAlgoChanged = this.handleAlgoChanged.bind(this);
+        this.handleExampleSelected = this.handleExampleSelected.bind(this);
         this.handleFormSubmission = this.handleFormSubmission.bind(this);
         this.formRef = createRef();
         this.query = createRef();
@@ -223,6 +224,41 @@ export class Form extends Component {
             this.setState({ currentlySelectedDbs: selectedDbs });
     }
 
+    /**
+     * Loads an example: puts the sequence in the query box and selects the
+     * database it is meant to be searched against.
+     *
+     * The database is matched on title rather than id, since ids are an md5 of
+     * the path on disk and differ between deployments. Selection is driven
+     * through jstree so the tree and the hidden checkboxes it syncs into stay
+     * in agreement; the BLAST method then follows from the sequence and
+     * database types, as it does for a hand-typed query.
+     */
+    handleExampleSelected(example) {
+        this.query.current.value(example.sequence);
+
+        const database = (this.state.databases || []).find(db => db.title === example.database);
+        if (!database) {
+            console.warn(`Example database not found in this deployment: ${example.database}`);
+            return;
+        }
+
+        if (this.useTreeWidget()) {
+            const tree = $(`#${database.type}_database_tree`);
+            // The tree is initialised lazily on first click, so make sure it exists.
+            if (!tree.jstree(true)) tree.click();
+            tree.jstree('deselect_all');
+            tree.jstree('select_node', database.id);
+        } else {
+            const checkbox = this.formRef.current
+                .querySelector(`input.checkbox-database[value="${database.id}"]`);
+            if (checkbox && !checkbox.checked) checkbox.click();
+        }
+
+        this.handleDatabaseTypeChanged(database.type);
+        this.query.current.focus();
+    }
+
     handleAlgoChanged(algo) {
         if (algo in this.state.preDefinedOpts) {
             this.setState({ blastMethod: algo });
@@ -251,7 +287,7 @@ export class Form extends Component {
                 <form id="blast" ref={this.formRef} onSubmit={this.handleFormSubmission}>
                     <input type="hidden" name="_csrf" value={document.querySelector('meta[name="_csrf"]').content} />
                     <div className="px-4">
-                        <SearchQueryWidget ref={this.query} onSequenceTypeChanged={this.handleSequenceTypeChanged} onSequenceChanged={this.handleSequenceChanged}/>
+                        <SearchQueryWidget ref={this.query} onSequenceTypeChanged={this.handleSequenceTypeChanged} onSequenceChanged={this.handleSequenceChanged} onExampleSelected={this.handleExampleSelected}/>
 
                         {this.useTreeWidget() ?
                             <DatabasesTree
