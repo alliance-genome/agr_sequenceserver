@@ -426,6 +426,41 @@ module SequenceServer
       end
     end
 
+    # Named aliases for datasets that sit alongside each other under one MOD, so
+    # that a link can be published without a release number in it.
+    #
+    # SGD ships two in parallel, distinguished only by a trailing letter: the
+    # main S. cerevisiae set (R64-5-1m) and the wider fungal set (R64-5-1f).
+    # Neither is "newer", so /blast/SGD/ cannot choose between them on version
+    # alone and each needs a name of its own.
+    DATASET_ALIASES = {
+      'SGD' => { 'yeast' => /m\z/, 'fungal' => /f\z/ }
+    }.freeze
+
+    # Redirect /blast/:mod/:alias/ to the newest release of that dataset.
+    #
+    # Declared before the search-page route below so aliases win, and passes
+    # through for anything that is not an alias, which is how real version names
+    # like R64-5-1m reach their normal handler.
+    get '/blast/:mod/:dataset/?' do
+      mod = params[:mod]
+      pattern = DATASET_ALIASES.dig(mod, params[:dataset].to_s.downcase)
+      pass unless pattern
+
+      db_base = File.join('/db', mod)
+      pass unless mod =~ /\A[A-Za-z0-9_-]+\z/ && File.directory?(db_base)
+
+      versions = Dir.children(db_base).select do |e|
+        e.match?(pattern) &&
+          File.directory?(File.join(db_base, e)) &&
+          !e.match?(NON_PUBLIC_VERSION_DIR)
+      end
+      halt 404, 'No databases found' if versions.empty?
+
+      latest = versions.max_by { |v| [v.scan(/\d+/).map(&:to_i), v] }
+      redirect to("/blast/#{mod}/#{latest}/"), 302
+    end
+
     get '/blast/:segment1/:segment2/?' do
       env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
       makeblastdb(env_database_dir).scan
