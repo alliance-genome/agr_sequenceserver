@@ -6,6 +6,14 @@
  * because ids are an md5 of the database's path on disk and therefore differ
  * between deployments.
  *
+ * A MOD may publish several datasets under different versions whose database
+ * titles do not overlap — SGD's main set (R64-5-1m) and fungal set (R64-5-1f)
+ * share no titles at all. Every dataset's examples are listed together here and
+ * filtered against the databases actually loaded, so an example whose database
+ * is absent is never offered. Without that filter such an example fills the
+ * query box but selects nothing, leaving the user with a disabled search button
+ * and no explanation.
+ *
  * The BLAST method is not specified: it follows from the query's sequence type
  * and the selected database's type, which the form already works out.
  *
@@ -39,6 +47,16 @@ export const EXAMPLES = {
             "label": "Act1p protein",
             "database": "Protein_sequences",
             "sequence": ">YFL039C ACT1 SGDID:S000001855, Chr VI from 54377-53260,54696-54687, Genome Release 64-3-1, reverse complement, Verified ORF, \"Actin; structural protein involved in cell polarization, endocytosis, and other cytoskeletal functions; monomeric actin in the nucleus plays a role in INO80 chromatin remodeling\"\nMDSEVAALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVGDEAQS\nKRGILTLRYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEEHPVLLTEAPMNPKSNREKMT\nQIMFETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDL\nAGRDLTDYLMKILSERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQTAAQSSSIEKSY\nELPDGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCDVDVRKELYGNIVMS\nGGTTMFPGIAERMQKEITALAPSSMKVKIIAPPERKYSVWIGGSILASLTTFQQMWISKQ\nEYDESGPSIVHHKCF"
+        },
+        {
+            "label": "ACT1 coding sequence",
+            "database": "S_cerevisiae_Coding_Sequences",
+            "sequence": ">NC_001138.5_cds_NP_116614.1_1760:1-600 [gene=ACT1] [locus_tag=YFL039C] [db_xref=SGD:S000001855,GeneID:850504] [protein=actin] [protein_id=NP_116614.1] [location=complement(join(53260..54377,54687..54696))] [gbkey=CDS]\nATGGATTCTGAGGTTGCTGCTTTGGTTATTGATAACGGTTCTGGTATGTGTAAAGCCGGT\nTTTGCCGGTGACGACGCTCCTCGTGCTGTCTTCCCATCTATCGTCGGTAGACCAAGACAC\nCAAGGTATCATGGTCGGTATGGGTCAAAAAGACTCCTACGTTGGTGATGAAGCTCAATCC\nAAGAGAGGTATCTTGACTTTACGTTACCCAATTGAACACGGTATTGTCACCAACTGGGAC\nGATATGGAAAAGATCTGGCATCATACCTTCTACAACGAATTGAGAGTTGCCCCAGAAGAA\nCACCCTGTTCTTTTGACTGAAGCTCCAATGAACCCTAAATCAAACAGAGAAAAGATGACT\nCAAATTATGTTTGAAACTTTCAACGTTCCAGCCTTCTACGTTTCCATCCAAGCCGTTTTG\nTCCTTGTACTCTTCCGGTAGAACTACTGGTATTGTTTTGGATTCCGGTGATGGTGTTACT\nCACGTCGTTCCAATTTACGCTGGTTTCTCTCTACCTCACGCCATTTTGAGAATCGATTTG\nGCCGGTAGAGATTTGACTGACTACTTGATGAAGATCTTGAGTGAACGTGGTTACTCTTTC"
+        },
+        {
+            "label": "Actin-related protein",
+            "database": "S_cerevisiae_Protein_Sequences",
+            "sequence": ">NP_010255.1 actin-related protein 2 [Saccharomyces cerevisiae S288C]\nMDPHNPIVLDQGTGFVKIGRAGENFPDYTFPSIVGRPILRAEERASVATPLKDIMIGDEA\nSEVRSYLQISYPMENGIIKNWTDMELLWDYAFFEQMKLPSTSNGKILLTEPPMNPLKNRE\nKMCEVMFEKYDFGGVYVAIQAVLALYAQGLSSGVVVDSGDGVTHIVPVYESVVLSHLTRR\nLDVAGRDVTRHLIDLLSRRGYAFNRTADFETVRQIKEKLCYVSYDLDLDTKLARETTALV\nESYELPDGRTIKVGQERFEAPECLFQPGLVDVEQPGVGELLFNTVQSADVDIRSSLYKAI\nVLSGGSSMYPGLPSRLEKELKQLWFSRVLHNDPSRLDKFKVRIEDPPRRKHMVFIGGAVL\nASIMADKDHMWLSKQ"
         }
     ],
     "RGD": [
@@ -65,12 +83,18 @@ export const EXAMPLES = {
 };
 
 /**
- * Returns the examples for the MOD in the current URL (/blast/<MOD>/<version>/),
- * or an empty list where none are defined.
+ * Examples for the MOD in the current URL (/blast/<MOD>/<version>/) whose target
+ * database is present in `databases`, the list the form loaded for this
+ * deployment. Returns an empty list where the MOD has none defined.
  */
-export function examplesForCurrentMod() {
+export function examplesForCurrentMod(databases) {
     const segment = window.location.pathname.split('/')[2];
     if (!segment) return [];
-    return EXAMPLES[segment.toUpperCase()] || [];
+
+    const offered = EXAMPLES[segment.toUpperCase()] || [];
+    if (!databases || !databases.length) return [];
+
+    const titles = new Set(databases.map(db => db.title));
+    return offered.filter(example => titles.has(example.database));
 }
 

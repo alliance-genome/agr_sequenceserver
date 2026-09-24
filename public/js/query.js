@@ -374,7 +374,9 @@ export class SearchQueryWidget extends Component {
                         <span className="sr-only">Clear query sequence(s).</span>
                     </button>
                 </div>
-                <ExampleSequences onSelect={this.props.onExampleSelected} />
+                <ExampleSequences
+                    databases={this.props.databases}
+                    onSelect={this.props.onExampleSelected} />
             </div>
         );
     }
@@ -388,7 +390,9 @@ export class SearchQueryWidget extends Component {
  */
 export class ExampleSequences extends Component {
     render() {
-        const examples = examplesForCurrentMod();
+        // Filtered against the databases this deployment actually loaded, so an
+        // example whose target database is absent is never offered.
+        const examples = examplesForCurrentMod(this.props.databases);
         if (!examples.length) return null;
 
         return (
