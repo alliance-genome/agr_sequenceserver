@@ -5,6 +5,7 @@ import HitsOverview from './hits_overview';
 import LengthDistribution from './length_distribution'; // length distribution of hits
 import Utils from './utils';
 import { fastqToFasta } from './fastq_to_fasta';
+import { examplesForCurrentMod } from './examples';
 import CollapsePreferences from './collapse_preferences';
 import './jquery_world';
 
@@ -373,6 +374,36 @@ export class SearchQueryWidget extends Component {
                         <span className="sr-only">Clear query sequence(s).</span>
                     </button>
                 </div>
+                <ExampleSequences onSelect={this.props.onExampleSelected} />
+            </div>
+        );
+    }
+}
+
+/**
+ * Offers the example sequences defined for this MOD beneath the query box.
+ *
+ * Renders nothing where no examples are defined, so a MOD without them is
+ * unaffected.
+ */
+export class ExampleSequences extends Component {
+    render() {
+        const examples = examplesForCurrentMod();
+        if (!examples.length) return null;
+
+        return (
+            <div className="mt-2 text-sm text-gray-600" id="example-sequences">
+                <span className="mr-1">Try an example:</span>
+                {examples.map((example, index) => (
+                    <button
+                        key={index}
+                        type="button"
+                        className="text-seqblue hover:text-seqorange underline mr-3 cursor-pointer"
+                        title={`Load ${example.label} and select ${example.database}`}
+                        onClick={() => this.props.onSelect(example)}>
+                        {example.label}
+                    </button>
+                ))}
             </div>
         );
     }
