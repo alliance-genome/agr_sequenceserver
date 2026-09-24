@@ -287,7 +287,7 @@ export class Form extends Component {
                 <form id="blast" ref={this.formRef} onSubmit={this.handleFormSubmission}>
                     <input type="hidden" name="_csrf" value={document.querySelector('meta[name="_csrf"]').content} />
                     <div className="px-4">
-                        <SearchQueryWidget ref={this.query} onSequenceTypeChanged={this.handleSequenceTypeChanged} onSequenceChanged={this.handleSequenceChanged} onExampleSelected={this.handleExampleSelected}/>
+                        <SearchQueryWidget ref={this.query} databases={this.state.databases} onSequenceTypeChanged={this.handleSequenceTypeChanged} onSequenceChanged={this.handleSequenceChanged} onExampleSelected={this.handleExampleSelected}/>
 
                         {this.useTreeWidget() ?
                             <DatabasesTree
