@@ -28,22 +28,32 @@ export class Options extends Component {
         if (prevProps.predefinedOptions !== this.props.predefinedOptions ||
             prevProps.blastMethod !== this.props.blastMethod) {
             let selectedOptions = this.props.predefinedOptions.default || {attributes: []};
-
-            let initialTextValue = selectedOptions.attributes.join(' ').trim();
-            let parsedOptions = this.parsedOptions(initialTextValue);
-
-            // If no task is specified in options, default to the blast method name
-            if (!parsedOptions.task && this.props.blastMethod) {
-                parsedOptions.task = this.props.blastMethod.toLowerCase();
-                // Add task to the text value
-                initialTextValue = `-task ${parsedOptions.task} ${initialTextValue}`.trim();
-            }
+            let initialTextValue = this.presetTextValue(selectedOptions);
 
             this.setState({
                 textValue: initialTextValue,
-                objectValue: parsedOptions
+                objectValue: this.parsedOptions(initialTextValue)
             });
         }
+    }
+
+    /**
+     * The parameter string a preset resolves to.
+     *
+     * Most presets in the config do not spell out a -task, so the BLAST method's
+     * own name is supplied. Both the initial selection and the radio buttons go
+     * through this: computing it separately is what left the radio comparing an
+     * un-prefixed string against a prefixed one, so the default preset rendered
+     * unselected for every method whose config omits -task.
+     */
+    presetTextValue(config) {
+        const attributes = ((config && config.attributes) || []).join(' ').trim();
+        const parsed = this.parsedOptions(attributes);
+
+        if (!parsed.task && this.props.blastMethod) {
+            return `-task ${this.props.blastMethod.toLowerCase()} ${attributes}`.trim();
+        }
+        return attributes;
     }
 
     onTextValueChanged(textValue) {
@@ -99,8 +109,8 @@ export class Options extends Component {
                 {
                     Object.entries(this.props.predefinedOptions).map(
                         ([key, config], index) => {
-                            let textValue = config.attributes.join(' ').trim();
-                            let description = config.description || textValue;
+                            let textValue = this.presetTextValue(config);
+                            let description = config.description || config.attributes.join(' ').trim();
 
                             return (
                                 <label key={index} className={`block w-full px-2 py-1 text-seqblue hover:bg-gray-200 hover:text-seqorange cursor-pointer`}>
