@@ -41,12 +41,20 @@ const MODS = [
     }
 ];
 
-/** State of the per-category "[Select all]" buttons, in DOM order. */
+/**
+ * State of the per-category "[Select all]" buttons, in DOM order.
+ *
+ * `visible` matters: the class names below describe how the one-sequence-type-
+ * at-a-time constraint is signalled, and that signal means nothing if the
+ * button is not on screen. It used to be `display:none` in every state, because
+ * databases_tree.js baked `hidden` into the base class.
+ */
 function selectAllButtons(page) {
     return page.evaluate(() => Array.from(document.querySelectorAll('button'))
         .filter((b) => /\[(Select|Deselect) all\]/.test(b.textContent))
         .map((b) => ({
             text: b.textContent.trim(),
+            visible: b.offsetParent !== null,
             disabled: b.disabled,
             greyed: b.className.includes('text-gray-400'),
             blue: b.className.includes('text-seqblue')
@@ -202,8 +210,8 @@ for (const mod of MODS) {
 
             // Baseline: neither category is constrained.
             expect(await selectAllButtons(page)).toEqual([
-                { text: '[Select all]', disabled: false, greyed: false, blue: true },
-                { text: '[Select all]', disabled: false, greyed: false, blue: true }
+                { text: '[Select all]', visible: true, disabled: false, greyed: false, blue: true },
+                { text: '[Select all]', visible: true, disabled: false, greyed: false, blue: true }
             ]);
 
             await expandTree(page, S.nucleotideTree);
@@ -216,8 +224,8 @@ for (const mod of MODS) {
 
             // The PROTEIN category is now greyed out and its control disabled.
             expect(await selectAllButtons(page)).toEqual([
-                { text: '[Select all]', disabled: false, greyed: false, blue: true },
-                { text: '[Select all]', disabled: true, greyed: true, blue: false }
+                { text: '[Select all]', visible: true, disabled: false, greyed: false, blue: true },
+                { text: '[Select all]', visible: true, disabled: true, greyed: true, blue: false }
             ]);
 
             // --- now pick a protein database ---
@@ -243,8 +251,8 @@ for (const mod of MODS) {
 
             // The greying has flipped to the nucleotide category.
             expect(await selectAllButtons(page)).toEqual([
-                { text: '[Select all]', disabled: true, greyed: true, blue: false },
-                { text: '[Select all]', disabled: false, greyed: false, blue: true }
+                { text: '[Select all]', visible: true, disabled: true, greyed: true, blue: false },
+                { text: '[Select all]', visible: true, disabled: false, greyed: false, blue: true }
             ]);
         });
     });

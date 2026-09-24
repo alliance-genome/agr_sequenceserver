@@ -277,6 +277,31 @@ export default class extends Databases {
         this.setState({ currentlySelectedDatabases: databases });
     }
 
+    /**
+     * Select or clear every database in a category.
+     *
+     * The inherited implementation only sets React state. That updates the
+     * hidden checkboxes the form submits, but leaves jstree showing nothing
+     * selected — and because the tree's own select handler rebuilds state from
+     * jstree, the next click on any node silently undoes it. So drive the tree
+     * as well, and set state directly rather than relying on the events jstree
+     * fires for a bulk change.
+     */
+    handleToggle(toggleState, category) {
+        const selectAll = toggleState === '[Select all]';
+        const tree = $(`#${category}_database_tree`);
+
+        if (tree.jstree(true)) {
+            if (selectAll) {
+                tree.jstree('select_all');
+            } else {
+                tree.jstree('deselect_all');
+            }
+        }
+
+        this.selectDatabases(selectAll ? this.databases(category) : []);
+    }
+
     handleTreeSearch(category, tree_id, search_id) {
         var search_for = $('#' + search_id).val();
         $('#' + tree_id).jstree(true).search(search_for);
@@ -290,7 +315,7 @@ export default class extends Databases {
 
         // Toggle button.
         var toggleState = '[Select all]';
-        var toggleClass = 'px-2 text-base md:text-lg hidden';
+        var toggleClass = 'px-2 text-base md:text-lg';
         var toggleShown = this.databases(category).length > 1;
         var toggleDisabled = this.state.type && this.state.type !== category;
         if (toggleShown && toggleDisabled) {
