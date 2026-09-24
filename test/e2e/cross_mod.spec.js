@@ -96,10 +96,10 @@ const MODS = [
         trees: ['nucleotide_database_tree', 'protein_database_tree'],
         databaseFloor: 250,
         hasProtein: true,
-        // NOTE: these are the titles examples.js offers on ANY /blast/SGD/ path.
-        // They do not exist in this deployment -- see the "example sequences"
-        // describe block below, which is what proves it.
-        exampleDatabases: ['ORF_coding', 'Protein_sequences']
+        // The fungal set shares no database titles with the main set, so it has
+        // examples of its own. examples.js lists both and filters to the ones
+        // this deployment actually loaded.
+        exampleDatabases: ['S_cerevisiae_Coding_Sequences', 'S_cerevisiae_Protein_Sequences']
     },
     {
         label: 'RGD',
