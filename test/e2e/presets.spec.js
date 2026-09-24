@@ -216,41 +216,31 @@ test.describe('Option presets', () => {
     }
 
     // ---------------------------------------------------------------------
-    // KNOWN BUG, not a flaky test. See public/js/options.js:
+    // Regression: the default preset must render SELECTED for every method,
+    // not only for blastn.
     //
-    //   presetListJSX(): checked={textValue === this.state.textValue}
-    //       textValue         = config.attributes.join(' ')
-    //   componentDidUpdate(): if the preset carries no "-task" flag it PREPENDS
-    //       one, so state.textValue = "-task blastp -evalue 1e-5 -max_target_seqs 100"
-    //       while the radio's own value stays "-evalue 1e-5 -max_target_seqs 100".
+    // presetListJSX() compares the radio's value against state.textValue. Those
+    // were built in two places: componentDidUpdate() prepended "-task <method>"
+    // when a preset carried no -task flag, while the radio's own value did not.
+    // The strings never matched, so for blastp, blastx, tblastn and tblastx the
+    // Settings block showed a radio group with NOTHING selected even though
+    // those exact parameters were in force. Only blastn escaped it, because
+    // blastn's preset is the one that spells out "-task blastn" in
+    // sequenceserver.conf.
     //
-    // The strings therefore never match and the radio renders unchecked. Only
-    // blastn escapes this, because blastn's preset is the one that spells out
-    // "-task blastn" in sequenceserver.conf. Net effect: for blastp, blastx,
-    // tblastn and tblastx the Settings block shows a radio group with NOTHING
-    // selected, even though those exact parameters are in force (blast_params
-    // is correct -- searches run with the right flags, it is the UI that lies).
-    //
-    // Marked test.fail() so the suite stays honest without going permanently
-    // red: Playwright will FAIL this loudly the moment the bug is fixed, which
-    // is the signal to delete the annotation.
+    // Both sides now go through Options#presetTextValue.
     // ---------------------------------------------------------------------
-    test('BUG: single-preset methods show no preset selected (options.js checked= comparison)', async ({ page }) => {
-        test.fail(true, 'options.js prepends -task to state.textValue but not to the radio value');
-
+    test('the default preset renders selected for a single-preset method', async ({ page }) => {
         await gotoSearch(page, SGD_MAIN);
         await arm(page, PROTEIN_QUERY);
 
         await expect(page.locator(S.hiddenInput('task'))).toHaveValue('blastp');
         await expect(page.locator(S.presetRadio)).toHaveCount(1);
 
-        // What SHOULD hold: the sole preset, whose parameters are demonstrably
-        // in effect, is the one shown as selected.
+        // The sole preset, whose parameters are demonstrably in effect, is the
+        // one shown as selected.
         await expect(page.locator(S.hiddenInput('blast_params')))
             .toHaveValue('-task blastp -evalue 1e-5 -max_target_seqs 100');
-        // Short timeout on purpose: this assertion is known to fail, and the
-        // default 30s retry window would add half a minute to every run for a
-        // state that is settled the moment the presets render.
-        await expect(page.locator(S.presetRadioChecked)).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator(S.presetRadioChecked)).toHaveCount(1);
     });
 });
