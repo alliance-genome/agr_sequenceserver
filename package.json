@@ -12,6 +12,8 @@
     "watch": "webpack --watch",
     "watch-cloud": "webpack --watch --env=pluginsPath='../sequence_server_js_extensions' --env=targetEnv='cloud'",
     "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "minify:css": "npx tailwindcss build -i ./public/css/app.css -o ./public/css/app.min.css --minify",
     "build": "webpack --mode production && npm run minify:css",
     "build-cloud": "webpack --mode production --env=pluginsPath='../sequence_server_js_extensions' --env=targetEnv='cloud' && npm run minify:css"
@@ -42,6 +44,7 @@
     "@babel/plugin-syntax-dynamic-import": "^7.8.3",
     "@babel/preset-env": "^7.24.6",
     "@babel/preset-react": "^7.24.6",
+    "@playwright/test": "^1.54.2",
     "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/react": "^13.1.1",
     "@testing-library/user-event": "^14.1.1",

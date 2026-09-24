@@ -67,3 +67,8 @@ public/vendor/npm
 spec/dotdir/*
 spec/downloads/*
 spec/tmp
+
+# Playwright (browser e2e) output
+test/e2e/.artifacts
+playwright-report
+.playwright

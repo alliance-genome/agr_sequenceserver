@@ -1,0 +1,362 @@
+// Cross-MOD regression suite.
+//
+// Every MOD/version pair the fork deploys is served by the SAME Sinatra app and
+// the SAME two webpack bundles, but each gets its own database set, its own
+// branding, its own environment.json and its own example sequences. So the
+// interesting failures are not "does /blast/XX/ return 200" -- test/manual/smoke-test.sh
+// already answers that in 35 HTTP checks, and this file deliberately does not
+// repeat it -- but "does the page a browser actually renders for THIS MOD work".
+// That is what is covered here:
+//
+//   * React boots (the query textarea exists and the jstree widgets rendered).
+//     A page that served fine but whose CSS/JS never loaded fails here, which is
+//     the single most valuable thing a browser test adds over curl.
+//   * The database list is populated AND correctly typed. A MOD whose databases
+//     fail to load renders an empty tree while still returning HTTP 200.
+//   * Nothing throws and nothing 4xx/5xxs while the page comes up.
+//   * The MOD's own branding rendered -- each deployment must show its own name,
+//     its own data version and its own logo, not another MOD's.
+//   * WormBase hits carry NO "NCBI:" linkout. WormBase accessions (F11C3.3,
+//     CE09349, WBGene...) are not NCBI accessions; a loosened regex in
+//     Links.ncbi_link would put a dead link on every WormBase hit.
+//
+// Shapes below were read off the live dev deployment on 2026-09-24.
+
+const {
+    gotoSearch, clickExample, databaseTitles, runBlast, S
+} = require('./helpers/app');
+const { test, expect } = require('@playwright/test');
+
+// A PLAIN, string-only view of the selectors used inside page.evaluate.
+// S itself carries helper FUNCTIONS (hitById, databaseCheckboxOfType) and
+// Playwright refuses to serialise those into the page ("Attempting to serialize
+// unexpected value"), so never hand S to evaluate wholesale.
+const E = {
+    header: S.header,
+    memberLogo: S.memberLogo,
+    anyTree: S.anyTree,
+    treeAnchor: S.treeAnchor,
+    treeHintText: S.treeHintText,
+    databaseCheckbox: S.databaseCheckbox,
+    databaseLabel: S.databaseLabel
+};
+
+// Third-party hosts whose failures say nothing about this app. Google Analytics
+// fires on every page load and is regularly blocked/aborted at the network edge.
+const THIRD_PARTY = /(google-analytics|googletagmanager|doubleclick)\./;
+
+/**
+ * Every deployment under test, with what its page is required to show.
+ *
+ * databaseFloor is a deliberately loose lower bound on the number of databases:
+ * the exact counts observed on 2026-09-24 were WB 63, FB 199, SGD main 183,
+ * SGD fungal 312, RGD 9, ZFIN 9, ALLIANCE 1. Floors sit well under those so that
+ * a routine data release does not turn the suite red, but far enough above zero
+ * that a MOD whose databases failed to load is caught.
+ */
+const MODS = [
+    {
+        label: 'WormBase',
+        path: '/blast/WB/WS298/',
+        heading: 'Alliance WormBase BLAST',
+        dataVersion: 'WS298',
+        trees: ['nucleotide_database_tree', 'protein_database_tree'],
+        databaseFloor: 50,
+        hasProtein: true,
+        // Database titles the MOD's own "Try an example" entries target. The
+        // examples feature matches databases BY TITLE, so a title that stops
+        // existing here silently breaks the example button.
+        exampleDatabases: ['C_elegans_Protein_Sequences']
+    },
+    {
+        label: 'FlyBase',
+        path: '/blast/FB/FB2026_03/',
+        heading: 'Alliance FlyBase BLAST',
+        dataVersion: 'FB2026_03',
+        trees: ['nucleotide_database_tree', 'protein_database_tree'],
+        databaseFloor: 150,
+        hasProtein: true,
+        exampleDatabases: ['D_melanogaster_Proteins_6_69']
+    },
+    {
+        label: 'SGD (main)',
+        path: '/blast/SGD/R64-5-1m/',
+        heading: 'Alliance SGD BLAST',
+        dataVersion: 'R64-5-1m',
+        trees: ['nucleotide_database_tree', 'protein_database_tree'],
+        databaseFloor: 150,
+        hasProtein: true,
+        exampleDatabases: ['ORF_coding', 'Protein_sequences']
+    },
+    {
+        label: 'SGD (fungal)',
+        path: '/blast/SGD/R64-5-1f/',
+        heading: 'Alliance SGD Fungal BLAST',
+        dataVersion: 'R64-5-1f',
+        trees: ['nucleotide_database_tree', 'protein_database_tree'],
+        databaseFloor: 250,
+        hasProtein: true,
+        // NOTE: these are the titles examples.js offers on ANY /blast/SGD/ path.
+        // They do not exist in this deployment -- see the "example sequences"
+        // describe block below, which is what proves it.
+        exampleDatabases: ['ORF_coding', 'Protein_sequences']
+    },
+    {
+        label: 'RGD',
+        path: '/blast/RGD/8.3.0/',
+        heading: 'Alliance RGD BLAST',
+        dataVersion: '8.3.0',
+        // RGD, ZFIN and ALLIANCE ship nucleotide databases only, so the protein
+        // tree is not rendered at all. Asserting the exact tree list keeps a
+        // regression that drops (or spuriously adds) a tree visible.
+        trees: ['nucleotide_database_tree'],
+        databaseFloor: 5,
+        hasProtein: false,
+        exampleDatabases: ['GRCr8']
+    },
+    {
+        label: 'ZFIN',
+        path: '/blast/ZFIN/zfintest/',
+        heading: 'Alliance ZFIN BLAST',
+        dataVersion: 'zfintest',
+        trees: ['nucleotide_database_tree'],
+        databaseFloor: 5,
+        hasProtein: false,
+        exampleDatabases: ['Ensembl_Transcripts']
+    },
+    {
+        label: 'ALLIANCE',
+        path: '/blast/ALLIANCE/prod/',
+        // The Alliance-wide deployment has no member name to interpolate, so the
+        // heading collapses to "Alliance BLAST".
+        heading: 'Alliance BLAST',
+        dataVersion: 'prod',
+        trees: ['nucleotide_database_tree'],
+        databaseFloor: 1,
+        hasProtein: false,
+        exampleDatabases: ['ZFIN_GRCz11']
+    }
+];
+
+/**
+ * Attach listeners that record everything that went wrong while a page loaded.
+ * Call BEFORE navigating. Returns the collectors so a test can assert on them.
+ */
+function watchForFailures(page, baseURL) {
+    const origin = new URL(baseURL).origin;
+    const state = { pageErrors: [], badResponses: [], failedRequests: [], okResponses: [] };
+
+    page.on('pageerror', (err) => state.pageErrors.push(String(err)));
+
+    page.on('response', (res) => {
+        const url = res.url();
+        if (res.status() >= 400 && !THIRD_PARTY.test(url)) {
+            state.badResponses.push(`${res.status()} ${url}`);
+        }
+        if (res.status() < 400) state.okResponses.push(url);
+    });
+
+    // A request that never got a response at all (TLS failure, DNS, blocked by
+    // CSP) produces no `response` event, so the status check above misses it.
+    // Only same-origin failures matter -- analytics is aborted routinely.
+    page.on('requestfailed', (req) => {
+        if (req.url().startsWith(origin)) {
+            const failure = req.failure();
+            state.failedRequests.push(`${failure ? failure.errorText : 'failed'} ${req.url()}`);
+        }
+    });
+
+    return state;
+}
+
+/** Read the per-MOD facts that matter off the rendered page in one round trip. */
+function readPageFacts(page, selectors) {
+    return page.evaluate((sel) => {
+        const text = (el) => (el ? el.innerText.replace(/\s+/g, ' ').trim() : '');
+        const boxes = Array.from(document.querySelectorAll(sel.databaseCheckbox));
+        const logo = document.querySelector(sel.memberLogo);
+
+        return {
+            headerText: text(document.querySelector(sel.header)),
+            // naturalWidth is 0 for an <img> whose src failed to load, so this
+            // distinguishes "logo tag present" from "logo actually rendered".
+            logo: logo ? { src: logo.src, naturalWidth: logo.naturalWidth } : null,
+            treeIds: Array.from(document.querySelectorAll(sel.anyTree)).map((t) => t.id),
+            treeAnchorCount: document.querySelectorAll(`${sel.anyTree} ${sel.treeAnchor}`).length,
+            emptyTreeAnchors: Array.from(document.querySelectorAll(`${sel.anyTree} ${sel.treeAnchor}`))
+                .filter((a) => a.innerText.trim() === '').length,
+            hintCount: Array.from(document.querySelectorAll('p'))
+                .filter((p) => p.textContent.trim() === sel.treeHintText).length,
+            databaseCount: boxes.length,
+            nucleotideCount: boxes.filter((b) => b.dataset.type === 'nucleotide').length,
+            proteinCount: boxes.filter((b) => b.dataset.type === 'protein').length,
+            // The examples feature resolves databases by title, so an untitled
+            // checkbox is a broken database entry even if the count looks fine.
+            untitled: boxes.filter((b) => {
+                const label = b.closest(sel.databaseLabel);
+                return !label || label.textContent.trim() === '';
+            }).length,
+            databaseTitles: boxes.map((b) => {
+                const label = b.closest(sel.databaseLabel);
+                return label ? label.textContent.trim() : null;
+            })
+        };
+    }, selectors);
+}
+
+test.describe('cross-MOD: every deployment boots and renders its own databases', () => {
+    for (const mod of MODS) {
+        test(`${mod.label} at ${mod.path}`, async ({ page, baseURL }) => {
+            const failures = watchForFailures(page, baseURL);
+
+            // gotoSearch only returns once #sequence AND a jstree anchor exist,
+            // i.e. once React has genuinely booted -- not merely once HTML arrived.
+            await gotoSearch(page, mod.path);
+
+            // --- the search bundle really was fetched and executed -------------
+            // If the page referenced unreachable asset URLs (the classic
+            // localhost/HTTPS-mismatch failure) there would be no 200 here.
+            const searchBundle = failures.okResponses
+                .filter((u) => /sequenceserver-search\.min\.js/.test(u));
+            expect(searchBundle.length,
+                'the search bundle did not load with a 2xx/3xx status').toBeGreaterThan(0);
+
+            await expect(page.locator(S.sequence)).toBeEditable();
+            // Nothing is queryable yet, so the submit button must still be off.
+            // This proves React's own state logic ran, not just that markup exists.
+            await expect(page.locator(S.submit)).toBeDisabled();
+
+            const facts = await readPageFacts(page, E);
+
+            // --- branding is this MOD's, not a neighbour's ---------------------
+            expect(facts.headerText).toContain(mod.heading);
+            expect(facts.headerText).toContain(`Data Version: ${mod.dataVersion}`);
+            // "Powered by <semver>" is part of the shipped header chrome.
+            expect(facts.headerText).toMatch(/Powered by\s+\d+\.\d+\.\d+/);
+            // No other MOD's name may appear in this MOD's header.
+            for (const other of MODS) {
+                if (other.heading === mod.heading) continue;
+                // "Alliance BLAST" is a prefix of nothing, but "Alliance SGD BLAST"
+                // is a distinct string from "Alliance SGD Fungal BLAST" -- compare
+                // against the heading only when it is not a substring relationship.
+                if (mod.heading.includes(other.heading) || other.heading.includes(mod.heading)) continue;
+                expect(facts.headerText,
+                    `${mod.label} header shows ${other.label}'s branding`).not.toContain(other.heading);
+            }
+
+            // --- the MOD logo resolved -----------------------------------------
+            expect(facts.logo, 'no img#alliance-member-logo rendered').not.toBeNull();
+            expect(facts.logo.src).not.toBe('');
+            expect(facts.logo.naturalWidth,
+                `logo did not load: ${facts.logo.src}`).toBeGreaterThan(0);
+
+            // --- exactly the right trees, each actually rendered by jstree ------
+            expect(facts.treeIds).toEqual(mod.trees);
+            expect(facts.treeAnchorCount,
+                'jstree rendered no anchors: the tree is empty').toBeGreaterThan(0);
+            expect(facts.emptyTreeAnchors, 'jstree rendered unlabelled nodes').toBe(0);
+            // The hint ships once per tree, so its count is a second, independent
+            // witness that the expected number of trees was rendered.
+            expect(facts.hintCount).toBe(mod.trees.length);
+
+            // --- the database list is populated and correctly typed -------------
+            expect(facts.databaseCount,
+                `${mod.label} rendered ${facts.databaseCount} databases`)
+                .toBeGreaterThanOrEqual(mod.databaseFloor);
+            // Every checkbox must declare a type; the form picks the BLAST method
+            // from data-type, so an untyped database silently breaks the search.
+            expect(facts.nucleotideCount + facts.proteinCount).toBe(facts.databaseCount);
+            expect(facts.nucleotideCount).toBeGreaterThan(0);
+            if (mod.hasProtein) {
+                expect(facts.proteinCount).toBeGreaterThan(0);
+            } else {
+                expect(facts.proteinCount,
+                    `${mod.label} is nucleotide-only but rendered protein databases`).toBe(0);
+            }
+            expect(facts.untitled, 'databases rendered without a title').toBe(0);
+
+            // --- nothing broke on the way up ------------------------------------
+            expect(failures.pageErrors,
+                `uncaught page errors:\n${failures.pageErrors.join('\n')}`).toEqual([]);
+            expect(failures.badResponses,
+                `requests failed:\n${failures.badResponses.join('\n')}`).toEqual([]);
+            expect(failures.failedRequests,
+                `same-origin requests never completed:\n${failures.failedRequests.join('\n')}`).toEqual([]);
+        });
+    }
+});
+
+test.describe('cross-MOD: example sequences target databases that exist in that deployment', () => {
+    // examples.js keys its table on the MOD segment of the URL alone
+    // (pathname.split('/')[2]) and matches the database BY TITLE. Two versions of
+    // the same MOD therefore share one set of examples even when they carry
+    // completely different databases. If the named title is absent the button
+    // fills the textarea and selects nothing, leaving the user on a dead end with
+    // the submit button greyed out and no error shown.
+    for (const mod of MODS) {
+        test(`${mod.label}: every offered example names a database this deployment has`, async ({ page }) => {
+            await gotoSearch(page, mod.path);
+
+            const titles = await databaseTitles(page);
+
+            // The row must actually offer the examples we think it does.
+            const offered = await page.locator(S.exampleButtons).allInnerTexts();
+            expect(offered.length,
+                `${mod.label} offers no example sequences`).toBe(mod.exampleDatabases.length);
+
+            const missing = mod.exampleDatabases.filter((db) => !titles.includes(db));
+            expect(missing,
+                `${mod.label} offers ${offered.length} example(s) but the database(s) `
+                + `${missing.join(', ')} do not exist in this deployment, so clicking `
+                + 'the example selects nothing and the search cannot be run')
+                .toEqual([]);
+        });
+    }
+});
+
+test.describe('WormBase hit linkouts', () => {
+    test('a WormBase protein hit carries no "NCBI:" link', async ({ page }) => {
+        // One real BLAST run: 10-20s on dev, plus batched hit rendering.
+        test.setTimeout(240 * 1000);
+
+        await gotoSearch(page, '/blast/WB/WS298/');
+        // The shipped WB example is unc-54 protein against C_elegans_Protein_Sequences.
+        await clickExample(page, /unc-54/);
+        await runBlast(page);
+
+        const found = await page.evaluate(() => {
+            // CAUTION: ".hit" also matches <polygon class="hit"> inside the
+            // graphical-overview SVG, which has no innerText. Restrict to div.hit.
+            const hits = Array.from(document.querySelectorAll('div.hit'));
+            return {
+                hitCount: hits.length,
+                firstHitText: hits.length ? hits[0].innerText.replace(/\s+/g, ' ').trim().slice(0, 300) : '',
+                ncbiHrefs: Array.from(document.querySelectorAll('div.hit a[href*="ncbi.nlm.nih.gov"]'))
+                    .map((a) => `${a.textContent.trim()} -> ${a.href}`),
+                // Belt and braces: catch a linkout whose label is right but whose
+                // host changed, anywhere in the results region.
+                ncbiLabelled: Array.from(document.querySelectorAll('div#results a'))
+                    .filter((a) => /^NCBI:/.test(a.textContent.trim()))
+                    .map((a) => `${a.textContent.trim()} -> ${a.href}`)
+            };
+        });
+
+        // Guard against a vacuous pass: there must BE hits, and they must really
+        // be WormBase protein hits, before "no NCBI link" means anything.
+        expect(found.hitCount, 'the WormBase search returned no hits').toBeGreaterThan(0);
+        await expect(page.locator(S.hitById(1, 1))).toBeVisible();
+        expect(found.firstHitText).toMatch(/wormpep=CE\d+/);
+        expect(found.firstHitText).toMatch(/gene=WBGene\d+/);
+        // The accession is a WormBase sequence name (e.g. F11C3.3), which is
+        // exactly the shape a loosened NCBI regex would wrongly match.
+        expect(found.firstHitText).toMatch(/locus=unc-54/);
+
+        expect(found.ncbiHrefs,
+            `WormBase hits must not link to NCBI -- these accessions are not NCBI `
+            + `accessions, so every one of these links would be dead:\n${found.ncbiHrefs.join('\n')}`)
+            .toEqual([]);
+        expect(found.ncbiLabelled,
+            `an "NCBI:" linkout was rendered on a WormBase hit:\n${found.ncbiLabelled.join('\n')}`)
+            .toEqual([]);
+    });
+});
