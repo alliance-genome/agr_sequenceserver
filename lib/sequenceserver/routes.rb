@@ -147,7 +147,7 @@ module SequenceServer
     # Returns data that is used to render the search form client side. These
     # include available databases and user-defined search options.
     get '/blast/:segment1/:segment2/searchdata.json' do
-      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      env_database_dir = database_dir_for(params[:segment1], params[:segment2])
       makeblastdb(env_database_dir).scan
 
       fail NO_BLAST_DATABASE_FOUND, env_database_dir if !makeblastdb(env_database_dir).any_formatted?
@@ -268,7 +268,7 @@ module SequenceServer
       content_type :json
 
       # Initialize database collection for this request
-      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      env_database_dir = database_dir_for(params[:segment1], params[:segment2])
       makeblastdb(env_database_dir).scan
       Database.collection = makeblastdb(env_database_dir).formatted_fastas
 
@@ -294,7 +294,7 @@ module SequenceServer
 
     post '/blast/:segment1/:segment2/get_sequence' do
       # Initialize database collection for this request
-      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      env_database_dir = database_dir_for(params[:segment1], params[:segment2])
       makeblastdb(env_database_dir).scan
       Database.collection = makeblastdb(env_database_dir).formatted_fastas
 
@@ -462,7 +462,7 @@ module SequenceServer
     end
 
     get '/blast/:segment1/:segment2/?' do
-      env_database_dir = "/db/" + params[:segment1] + "/" + params[:segment2] + "/databases/"
+      env_database_dir = database_dir_for(params[:segment1], params[:segment2])
       makeblastdb(env_database_dir).scan
 
       fail NO_BLAST_DATABASE_FOUND, env_database_dir if !makeblastdb(env_database_dir).any_formatted?
@@ -580,6 +580,31 @@ module SequenceServer
         searchdata[:options] = searchdata[:options].deep_copy
         searchdata[:options][method]['last search'] = { attributes: [job.advanced] }
       end
+    end
+
+    # Resolve the database directory for a /blast/:mod/:version/ request.
+    #
+    # A retired or mistyped version used to reach makeblastdb, which raised
+    # Errno::ENOENT on the missing directory and surfaced as a 500 — so a stale
+    # bookmark looked like a server fault rather than a missing page, and the
+    # error body carried a backtrace with internal paths in it.
+    #
+    # The segments are also pattern-checked before being joined into a path.
+    # Rack already rejects encoded traversal with a 400, so this is defence in
+    # depth rather than the only guard.
+    def database_dir_for(segment1, segment2)
+      not_found unless segment1 =~ /\A[A-Za-z0-9_-]+\z/ &&
+                       segment2 =~ /\A[A-Za-z0-9_.-]+\z/
+
+      dir = File.join('/db', segment1, segment2, 'databases')
+      not_found unless File.directory?(dir)
+      dir
+    end
+
+    # 404 with a body suited to the route, and without echoing back what was
+    # asked for.
+    def not_found
+      halt 404, request.path_info.end_with?('.json') ? { error: 'Not found' }.to_json : 'Not found'
     end
 
     def makeblastdb(database_dir)

@@ -192,6 +192,16 @@ feat=$(curl -sI "$BASE_URL/blast/features" | tr -d '\r' | awk 'BEGIN{IGNORECASE=
 if [ -z "$feat" ]; then ok "/blast/features is not captured by the :mod redirect"
 else bad "/blast/features is being redirected by /blast/:mod/" "$feat"; fi
 
+# --- 5b. a missing or retired data version is 404, not 500 -----------------
+section "5b. missing data version"
+
+# Retired releases (moved aside on disk) and typos used to raise Errno::ENOENT
+# from makeblastdb and surface as a 500 with a backtrace in the body.
+status "a nonexistent data version is 404" "blast/WB/WS000/" "404"
+status "its searchdata.json is 404 too" "blast/WB/WS000/searchdata.json" "404"
+body_lacks "the 404 body carries no backtrace" "blast/WB/WS000/searchdata.json" "find.rb"
+body_lacks "the 404 body does not echo the version back" "blast/WB/WS000/searchdata.json" "WS000"
+
 # --- 6. traversal / injection on :mod --------------------------------------
 section "6. /blast/:mod/ input validation"
 
