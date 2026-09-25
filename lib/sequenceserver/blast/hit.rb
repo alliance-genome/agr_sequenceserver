@@ -64,6 +64,19 @@ module SequenceServer
         fasta_file_basename = File.basename(database_filename, File.extname(database_filename))
         species_identifier = fasta_file_basename.sub(/db$/, '')
 
+        # A hit in a protein database is addressed by amino acid offset into
+        # that protein; it has no position on a chromosome, so a genome browser
+        # has nothing to point at.
+        #
+        # The matching below cannot tell the two apart on its own. WormBase's
+        # protein and genomic databases are both built as "c_elegansdb" and both
+        # carry project PRJNA13758, so the protein database matched the genomic
+        # entry and inherited its genome_browser block -- yielding JBrowse links
+        # at protein coordinates, and feeding those same coordinates to the
+        # gene_track lookup, which then reports whichever gene happens to sit at
+        # that base pair.
+        protein_hit = hit_db.type.to_s == 'protein'
+
         links = []
 
         ncbi = Links.ncbi_link(accession, title, dbtype)
@@ -80,7 +93,7 @@ module SequenceServer
           end
 
           if uri_matches
-             if reference_sequence.key?("genome_browser")
+             if reference_sequence.key?("genome_browser") && !protein_hit
                 genome_browser_metadata = reference_sequence["genome_browser"]
                 filepath_parts = hit_db.name.split(File::SEPARATOR)
                 links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession, title, hit_db.name))

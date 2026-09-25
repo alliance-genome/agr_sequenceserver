@@ -146,10 +146,39 @@ function checkedDatabases(page) {
  */
 async function runBlast(page) {
     await expect(page.locator(S.submit)).toBeEnabled();
-    await page.locator(S.submit).click();
-    // S.hit is "div.hit": a bare ".hit" would also match <polygon class="hit">
-    // in the graphical-overview SVG, which appears before the hit list.
-    await page.waitForSelector(S.hit, { timeout: BLAST_TIMEOUT });
+
+    // Watch the submission itself. A rejected POST leaves the browser sitting
+    // on the search form with nothing shown, so without this the failure
+    // surfaces only as "waiting for div.hit" timing out three minutes later and
+    // reads like a slow search rather than a refused one.
+    let rejected = null;
+    const watch = (response) => {
+        const request = response.request();
+        if (request.method() === 'POST' && /\/blast\/[^/]+\/[^/]+\/?$/.test(new URL(response.url()).pathname)
+            && response.status() >= 400) {
+            rejected = `${response.status()} ${response.statusText()}`;
+        }
+    };
+    page.on('response', watch);
+
+    try {
+        await page.locator(S.submit).click();
+        // S.hit is "div.hit": a bare ".hit" would also match <polygon class="hit">
+        // in the graphical-overview SVG, which appears before the hit list.
+        await page.waitForSelector(S.hit, { timeout: BLAST_TIMEOUT });
+    } catch (error) {
+        if (rejected) {
+            throw new Error(
+                `the server refused the search: HTTP ${rejected}. The page stays on the `
+                + 'search form and shows nothing, so this is not a slow BLAST. Known '
+                + 'intermittent failure: the session the page was rendered with is not '
+                + 'accepted back at submit time and the request fails the CSRF check.');
+        }
+        throw error;
+    } finally {
+        page.off('response', watch);
+    }
+
     await waitForHitsToSettle(page);
     await expect(page).toHaveURL(/\/blast\/[^/]+\/[^/]+\/[0-9a-f-]{36}$/);
 }

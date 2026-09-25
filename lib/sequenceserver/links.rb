@@ -64,6 +64,17 @@ module SequenceServer
     # MOD-specific chromosome extraction methods
     # =============================================
 
+    # A defline opening with an attribute pair carries no sequence name in that
+    # position. WormBase protein deflines start "wormpep=CE09349", FlyBase's
+    # "type=polypeptide", and C. elegans genomic ones "length=14890789".
+    # Returning the pair verbatim as a reference name is what produced JBrowse
+    # links addressed to "wormpep=CE09349" instead of a chromosome.
+    #
+    # Deliberately anchored on a bare identifier: SGD's fungal deflines open
+    # with a bracketed "[gene=PAU8]", which is not an attribute in this sense
+    # and is left alone.
+    DEFLINE_ATTRIBUTE = /\A[A-Za-z_][A-Za-z0-9_]*=/.freeze
+
     # C. elegans chromosome name normalization to JBrowse2 ref names
     WORMBASE_CHROMOSOME_MAP = {
       "1" => "I", "2" => "II", "3" => "III", "4" => "IV", "5" => "V",
@@ -261,7 +272,7 @@ module SequenceServer
       # Generic fallback: extract the first word from title
       if hit_title && !hit_title.empty?
         seq_name = hit_title.split(/[\s,;]/)[0]
-        return seq_name unless seq_name.empty? || seq_name.start_with?("length=")
+        return seq_name unless seq_name.empty? || DEFLINE_ATTRIBUTE.match?(seq_name)
       end
 
       # Final fallback: return the original accession
