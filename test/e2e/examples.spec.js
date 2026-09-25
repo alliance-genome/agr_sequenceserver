@@ -263,7 +263,17 @@ test.describe('Try an example', () => {
         await expect(page.locator(S.submit)).toHaveAttribute('value', 'blastp');
     });
 
-    test('a page with no MOD in its path renders no example row at all', async ({ page }) => {
+    test('the example row appears on a MOD page and is absent without a MOD', async ({ page }) => {
+        // Both halves matter, and they have to be the same build. Asserting
+        // only that /blast/ has no row passes just as well when the examples
+        // feature has been deleted outright, which is what an earlier version
+        // of this test did.
+        await gotoSearch(page, '/blast/WB/WS298/');
+        await expect(page.locator(S.exampleRow)).toHaveCount(1);
+        const onMod = await page.locator(S.exampleButtons).count();
+        expect(onMod).toBeGreaterThan(0);
+        await expect(page.locator('body')).toContainText('Try an example');
+
         // /blast/ serves the search page with no MOD segment, so
         // examplesForCurrentMod() finds no entry and ExampleSequences must
         // render null rather than an empty "Try an example:" row.

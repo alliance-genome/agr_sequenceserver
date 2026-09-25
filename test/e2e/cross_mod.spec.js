@@ -23,7 +23,8 @@
 // Shapes below were read off the live dev deployment on 2026-09-24.
 
 const {
-    gotoSearch, clickExample, databaseTitles, runBlast, S
+    gotoSearch, clickExample, databaseTitles, runBlast, selectDatabaseByTitle,
+    checkedDatabaseTitles, S
 } = require('./helpers/app');
 const { test, expect } = require('@playwright/test');
 
@@ -299,17 +300,37 @@ test.describe('cross-MOD: example sequences target databases that exist in that 
 
             const titles = await databaseTitles(page);
 
-            // The row must actually offer the examples we think it does.
-            const offered = await page.locator(S.exampleButtons).allInnerTexts();
+            const buttons = page.locator(S.exampleButtons);
+            const offered = await buttons.allInnerTexts();
             expect(offered.length,
-                `${mod.label} offers no example sequences`).toBe(mod.exampleDatabases.length);
+                `${mod.label} offers no example sequences`).toBeGreaterThan(0);
 
-            const missing = mod.exampleDatabases.filter((db) => !titles.includes(db));
-            expect(missing,
-                `${mod.label} offers ${offered.length} example(s) but the database(s) `
-                + `${missing.join(', ')} do not exist in this deployment, so clicking `
-                + 'the example selects nothing and the search cannot be run')
-                .toEqual([]);
+            // Each button's tooltip names the database it will select
+            // ("Load <label> and select <database>"), so the deployment states
+            // its own targets and the test does not have to restate them.
+            // Comparing counts instead -- buttons against a list of database
+            // names -- only matched because every example currently happens to
+            // target a different database.
+            const targeted = [];
+            for (let i = 0; i < offered.length; i += 1) {
+                const tip = await buttons.nth(i).getAttribute('title');
+                const target = (tip || '').match(/ and select (.+)$/);
+                expect(target, `example "${offered[i]}" names no target database`).not.toBeNull();
+                targeted.push(target[1]);
+            }
+
+            const dangling = targeted.filter((db) => !titles.includes(db));
+            expect(dangling,
+                `${mod.label} offers example(s) targeting ${dangling.join(', ')}, which `
+                + 'this deployment does not load, so clicking the example selects nothing '
+                + 'and the search cannot be run').toEqual([]);
+
+            // And the examples we expect to be there have not quietly dropped
+            // out -- the filter in examples.js removes an example whose database
+            // is missing, which would leave the check above trivially satisfied.
+            const absent = mod.exampleDatabases.filter((db) => !targeted.includes(db));
+            expect(absent,
+                `${mod.label} no longer offers an example for ${absent.join(', ')}`).toEqual([]);
         });
     }
 });
@@ -358,5 +379,81 @@ test.describe('WormBase hit linkouts', () => {
         expect(found.ncbiLabelled,
             `an "NCBI:" linkout was rendered on a WormBase hit:\n${found.ncbiLabelled.join('\n')}`)
             .toEqual([]);
+    });
+
+    // The two tests below are a matched pair and only mean something together:
+    // the first says a WormBase protein hit offers no genome browser link, the
+    // second says a WormBase GENOMIC hit still does. Run alone, the first is
+    // satisfied by deleting JBrowse links from the app entirely.
+    test('a WormBase protein hit carries no genome browser link', async ({ page }) => {
+        test.setTimeout(240 * 1000);
+
+        // WormBase's protein and genomic databases are both built as
+        // "c_elegansdb" under project PRJNA13758, so the protein database used
+        // to match the genomic environment.json entry and inherit its
+        // genome_browser block. Every hit then got a JBrowse link addressed to
+        // the first word of the protein defline -- loc=wormpep=CE09349:1..1678,
+        // a sequence name WormBase has never heard of, at amino acid offsets.
+        await gotoSearch(page, '/blast/WB/WS298/');
+        await clickExample(page, /unc-54/);
+
+        // Prove this really is a protein search before "no link" means anything.
+        expect(await checkedDatabaseTitles(page)).toEqual(['C_elegans_Protein_Sequences']);
+        await expect(page.locator(S.databaseCheckedOfType('protein'))).toHaveCount(1);
+        await expect(page.locator(S.databaseCheckedOfType('nucleotide'))).toHaveCount(0);
+
+        await runBlast(page);
+
+        await expect(page.locator(S.hitById(1, 1))).toBeVisible();
+        const hitCount = await page.locator('div.hit').count();
+        expect(hitCount, 'the WormBase protein search returned no hits').toBeGreaterThan(0);
+
+        const jbrowseHrefs = await page.locator(S.jbrowseLink).evaluateAll(
+            (as) => as.map((a) => a.getAttribute('href')));
+        expect(jbrowseHrefs,
+            `${hitCount} protein hit(s) carry a genome browser link. A protein hit is `
+            + 'addressed by amino acid offset and has no position on a chromosome, so '
+            + `these links cannot resolve:\n${jbrowseHrefs.slice(0, 5).join('\n')}`)
+            .toEqual([]);
+
+        // Specifically: no link may be addressed by a defline attribute pair.
+        for (const href of jbrowseHrefs) {
+            expect(decodeURIComponent(href)).not.toMatch(/loc=[A-Za-z_][A-Za-z0-9_]*=/);
+        }
+    });
+
+    test('a WormBase genomic hit still carries a JBrowse link on a real chromosome', async ({ page }) => {
+        test.setTimeout(240 * 1000);
+
+        await gotoSearch(page, '/blast/WB/WS298/');
+        await selectDatabaseByTitle(page, 'C_elegans_Genome_Assembly');
+        expect(await checkedDatabaseTitles(page)).toEqual(['C_elegans_Genome_Assembly']);
+
+        // 300 bp read off C. elegans chromosome III at 5,000,001 in this very
+        // deployment (blastdbcmd -entry III -range 5000001-5000300), so the top
+        // hit is chromosome III by construction and the expectation below is
+        // exact rather than "some chromosome".
+        await page.locator(S.sequence).fill([
+            '>III:5000001-5000300',
+            'TTGTCAGACGGAAGCAGATTCAATGTAGTTTTCGAGCAAACCAGGCTTCTAAAAAGCAAATTTTTGACGAAAAGATTTCA',
+            'AGAAATGGCTTTTGATGGTGAACAAAACGTTGAGACTTTGATTTAGAATTATATTTCAGATGACATTTGCTGTGGTCACA',
+            'ATGCAGAAAACATGAACGAAGCTGAAGATATTATTTGCTCATTCCGAGTTCCATCAATTCCATTGAGTCCTGTGGAAACT',
+            'CTCACTCCATGTGTAAGATTTTAAAACCTTTGTTGCCTATAAAAATTAAATTATACAGGC'
+        ].join('\n'));
+
+        await runBlast(page);
+
+        await expect(page.locator(S.hitById(1, 1))).toBeVisible();
+
+        const jbrowseHrefs = await page.locator(S.jbrowseLink).evaluateAll(
+            (as) => as.map((a) => a.getAttribute('href')));
+        expect(jbrowseHrefs.length,
+            'a WormBase genomic hit must still offer a JBrowse link -- if this is '
+            + 'empty, genome browser links have been lost outright rather than '
+            + 'confined to the databases that have coordinates').toBeGreaterThan(0);
+
+        const loc = new URL(jbrowseHrefs[0]).searchParams.get('loc');
+        expect(loc, `JBrowse link carries no loc=: ${jbrowseHrefs[0]}`).toBeTruthy();
+        expect(loc).toMatch(/^III:\d+\.\.\d+$/);
     });
 });
