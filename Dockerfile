@@ -66,7 +66,7 @@ COPY . .
 # Generate config file with default configs and database directory set to /db.
 # Setting database directory in config file means users can pass command line
 # arguments to SequenceServer without having to specify -d option again.
-RUN mkdir -p /db && echo 'n' | script -qfec "bundle exec bin/sequenceserver -s config_file=/sequenceserver/public/configs/sequenceserver.conf -d /db" /dev/null 
+RUN mkdir -p /db && echo 'n' | script -qfec "bundle exec bin/sequenceserver -s config_file=/sequenceserver/public/configs/sequenceserver.conf -d /db" /dev/null
 
 # Prevent SequenceServer from prompting user to join announcements list.
 RUN mkdir -p ~/.sequenceserver && touch ~/.sequenceserver/asked_to_join
@@ -77,7 +77,15 @@ RUN mkdir -p ~/.sequenceserver && touch ~/.sequenceserver/asked_to_join
 # bash in the container.
 ENV PATH=/sequenceserver/bin:${PATH}
 ENTRYPOINT ["bundle", "exec"]
-CMD ["sequenceserver"]
+
+# Name the config explicitly. Started without -c, SequenceServer falls back to
+# ~/.sequenceserver.conf (written by the -s step above) and then to its own
+# defaults, and serves a Settings panel with one undescribed preset per method
+# and no -max_target_seqs -- none of what public/configs/sequenceserver.conf
+# says. It starts and answers every request, so the only symptom is a quietly
+# wrong options list. Anyone running `docker run <image>` gets the right config
+# now, rather than having to know to repeat this flag.
+CMD ["sequenceserver", "-c", "/sequenceserver/public/configs/sequenceserver.conf"]
 
 ## Stage 4 (optional) minify CSS & JS.
 FROM node:20-alpine AS node

@@ -11,7 +11,7 @@
 # Not using `set -e`: every check should run so the summary is complete.
 set -uo pipefail
 
-BASE_URL="${1:-http://localhost:4569}"
+BASE_URL="${1:-${BASE_URL:-http://localhost:4569}}"
 SGD_FUNGAL="SGD/R64-5-1f"
 
 if [ -t 1 ]; then
