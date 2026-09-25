@@ -426,9 +426,11 @@ test.describe('WormBase hit linkouts', () => {
         test.setTimeout(240 * 1000);
 
         await gotoSearch(page, '/blast/WB/WS298/');
-        await selectDatabaseByTitle(page, 'C_elegans_Genome_Assembly');
-        expect(await checkedDatabaseTitles(page)).toEqual(['C_elegans_Genome_Assembly']);
 
+        // Sequence first, then the database. Selecting first does not survive:
+        // the form re-derives the database list once it knows the query is
+        // nucleotide, and the checkbox is cleared on the way.
+        //
         // 300 bp read off C. elegans chromosome III at 5,000,001 in this very
         // deployment (blastdbcmd -entry III -range 5000001-5000300), so the top
         // hit is chromosome III by construction and the expectation below is
@@ -440,6 +442,8 @@ test.describe('WormBase hit linkouts', () => {
             'ATGCAGAAAACATGAACGAAGCTGAAGATATTATTTGCTCATTCCGAGTTCCATCAATTCCATTGAGTCCTGTGGAAACT',
             'CTCACTCCATGTGTAAGATTTTAAAACCTTTGTTGCCTATAAAAATTAAATTATACAGGC'
         ].join('\n'));
+        await selectDatabaseByTitle(page, 'C_elegans_Genome_Assembly');
+        expect(await checkedDatabaseTitles(page)).toEqual(['C_elegans_Genome_Assembly']);
 
         await runBlast(page);
 
