@@ -84,11 +84,34 @@ function jbrowseLocus(href) {
     return { seqName: loc.split(':')[0], loc };
 }
 
-/** The seq_id values inside the URL-encoded addFeatures JSON blob. */
-function jbrowseFeatureSeqIds(href) {
-    const raw = new URL(href).searchParams.get('addFeatures');
-    if (!raw) return [];
-    return JSON.parse(raw).map((f) => f.seq_id);
+/**
+ * Every reference name the link asks the browser to highlight.
+ *
+ * The two JBrowse generations spell this differently, and a MOD can be moved
+ * between them by editing environment.json alone -- SGD was switched from
+ * JBrowse 1 at jbrowse.yeastgenome.org to AGR's JBrowse 2 that way. Reading
+ * only one shape would leave this returning [] after such a switch, which is
+ * indistinguishable from "nothing highlighted".
+ *
+ *   JBrowse 1: addFeatures=[{seq_id, ...}]
+ *   JBrowse 2: sessionTracks=[{adapter: {features: [{refName, subfeatures}]}}]
+ */
+function jbrowseHighlightRefNames(href) {
+    const params = new URL(href).searchParams;
+
+    const addFeatures = params.get('addFeatures');
+    if (addFeatures) return JSON.parse(addFeatures).map((f) => f.seq_id);
+
+    const sessionTracks = params.get('sessionTracks');
+    if (!sessionTracks) return [];
+    const names = [];
+    for (const track of JSON.parse(sessionTracks)) {
+        for (const feature of track.adapter?.features || []) {
+            names.push(feature.refName);
+            for (const sub of feature.subfeatures || []) names.push(sub.refName);
+        }
+    }
+    return names.filter(Boolean);
 }
 
 /** Assert the whole results page is free of the JSON-parse regression. */
@@ -150,26 +173,42 @@ test.describe.serial('Results linkouts on SGD chromosome hits', () => {
             `top hit should offer an NCBI linkout, got ${JSON.stringify(texts)}`).toBe(true);
     });
 
-    test('the JBrowse link targets yeastgenome with a Roman-numeral chromosome, not a RefSeq accession', async () => {
+    test("the JBrowse link targets AGR's JBrowse 2 with a Roman-numeral chromosome, not a RefSeq accession", async () => {
         const links = await hitLinks(page, S.hitById(1, 1));
         const jbrowse = links.find((l) => l.text === 'JBrowse');
         expect(jbrowse, 'no JBrowse link on the top hit').toBeTruthy();
 
-        expect(new URL(jbrowse.href).hostname).toBe('jbrowse.yeastgenome.org');
+        // SGD was moved off jbrowse.yeastgenome.org (JBrowse 1) onto AGR's
+        // JBrowse 2. Both the host and the generation matter: a JBrowse 1 URL
+        // served to JBrowse 2 loads an empty browser rather than erroring.
+        const url = new URL(jbrowse.href);
+        expect(url.hostname).toBe('www.alliancegenome.org');
+        expect(url.pathname).toBe('/jbrowse2/');
+        expect(url.searchParams.get('assembly')).toBe('Saccharomyces_cerevisiae');
+        // JBrowse 2 addresses the hit overlay through sessionTracks; the
+        // JBrowse 1 parameters must not linger alongside it.
+        expect(url.searchParams.get('sessionTracks'), 'no sessionTracks').toBeTruthy();
+        expect(url.searchParams.get('addFeatures'), 'JBrowse 1 addFeatures left in a JBrowse 2 URL').toBeNull();
+
+        // The configured track has to survive into the URL, or the browser
+        // opens showing only the BLAST hits against a bare sequence.
+        expect(url.searchParams.get('tracks').split(',')).toContain('Saccharomyces_cerevisiae_all_genes');
 
         const { seqName, loc } = jbrowseLocus(jbrowse.href);
         // ACT1 is on chromosome VI, so this is exact, not just "some chromosome".
         expect(seqName, `loc= was "${loc}"`).toBe('chrVI');
         // The regression this guards: an unmapped RefSeq id leaking into loc=.
+        // AGR's yeast assembly is built on the RefSeq FASTA and resolves chrVI
+        // only through its refName alias file, so this stays load-bearing.
         expect(seqName).not.toMatch(REFSEQ_ACCESSION);
         // loc is the padded view window, e.g. chrVI:52608..55558 -- assert the
         // shape (two coordinates), not the exact padding.
         expect(loc).toMatch(/^chrVI:\d+\.\.\d+$/);
 
         // The highlighted feature must sit on the same sequence as the view.
-        const seqIds = jbrowseFeatureSeqIds(jbrowse.href);
-        expect(seqIds.length).toBeGreaterThan(0);
-        for (const id of seqIds) expect(id).toBe('chrVI');
+        const refNames = jbrowseHighlightRefNames(jbrowse.href);
+        expect(refNames.length, 'the link highlights nothing').toBeGreaterThan(0);
+        for (const name of refNames) expect(name).toBe('chrVI');
     });
 
     test('every JBrowse link on the page names a real S. cerevisiae chromosome', async () => {
@@ -183,8 +222,8 @@ test.describe.serial('Results linkouts on SGD chromosome hits', () => {
             const { seqName, loc } = jbrowseLocus(href);
             expect(seqName, `bad JBrowse loc= "${loc}"`).not.toMatch(REFSEQ_ACCESSION);
             expect(SGD_CHROMOSOMES, `bad JBrowse loc= "${loc}"`).toContain(seqName);
-            for (const id of jbrowseFeatureSeqIds(href)) {
-                expect(SGD_CHROMOSOMES, `bad addFeatures seq_id in ${loc}`).toContain(id);
+            for (const name of jbrowseHighlightRefNames(href)) {
+                expect(SGD_CHROMOSOMES, `bad highlight refName in ${loc}`).toContain(name);
             }
         }
     });
