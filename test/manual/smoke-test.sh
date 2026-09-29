@@ -302,6 +302,35 @@ section "8. cross-MOD regression"
 status "WB WS298 search page still loads"  "blast/WB/WS298/"        "200"
 status "WB WS298 searchdata.json still OK" "blast/WB/WS298/searchdata.json" "200"
 
+# --- 9. asset cache busting ------------------------------------------------
+section "9. frontend assets are cache-busted"
+# The bundles are served with no Cache-Control and no ETag, so a browser falls
+# back to heuristic freshness and can hold a stale copy for hours -- a CSS
+# change deployed to dev was invisible for exactly that reason. Keying each URL
+# on a digest of its contents is what makes a deploy reach people.
+page=$(curl -s "$BASE_URL/blast/SGD/R64-5-1m/")
+
+for asset in "app.min.css" "sequenceserver-search.min.js"; do
+  ref=$(printf '%s' "$page" | grep -oE "[^\"']*${asset}\?v=[0-9a-f]+" | head -1)
+  if [ -n "$ref" ]; then
+    ok "$asset URL carries a content digest"
+  else
+    bare=$(printf '%s' "$page" | grep -oE "[^\"']*${asset}[^\"']*" | head -1)
+    bad "$asset URL carries a content digest" "referenced as: ${bare:-<not referenced at all>}"
+    continue
+  fi
+
+  # The digest has to be stable, or every page load would bust the cache and
+  # the assets would never be cached at all -- the opposite failure.
+  ref2=$(curl -s "$BASE_URL/blast/SGD/R64-5-1m/" | grep -oE "[^\"']*${asset}\?v=[0-9a-f]+" | head -1)
+  [ "$ref" = "$ref2" ] && ok "$asset digest is stable across requests" \
+                       || bad "$asset digest is stable across requests" "$ref then $ref2"
+
+  # And the fingerprinted URL must actually serve the file.
+  path=$(printf '%s' "$ref" | sed "s#^.*/blast/#blast/#")
+  status "$asset still serves at its fingerprinted URL" "$path" "200"
+done
+
 # --- summary ---------------------------------------------------------------
 printf '\n%s%d passed%s, %s%d failed%s' "$GRN" "$PASS" "$RST" "$RED" "$FAIL" "$RST"
 [ "$XFAIL" -gt 0 ] && printf ', %s%d known-failing%s' "$YEL" "$XFAIL" "$RST"
