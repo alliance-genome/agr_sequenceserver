@@ -476,6 +476,122 @@ module SequenceServer
         }
     end
 
+    # Gene identifiers the Alliance can resolve, recognised by the shape of the
+    # identifier itself rather than by the MOD segment of the URL. The two do
+    # not always agree -- XenBase is served under /blast/XB/ but mints Xenbase:
+    # CURIEs, and MGD under /blast/MGD/ mints MGI: -- and a wrong prefix gives a
+    # link that 400s rather than one that visibly fails here.
+    #
+    # Each pattern was read off the deployed deflines:
+    #
+    #   WB    wormpep=CE32785 gene=WBGene00007064 locus=rga-9 status=Confirmed
+    #   FB    ID=FBpp0070000; name=Nep3-PA; parent=FBgn0031081,FBtr0070000;
+    #   SGD   PAU8 SGDID:S000002142, Chr I from 2169-1807, ...
+    #   ZFIN  tpe|OTTDART00000003965|OTTDARG00000003778|ZDB-GENE-030616-226 itsn1|...
+    #
+    # FlyBase is deliberately anchored on parent=. A bare /FBgn\d+/ also matches
+    # the intergenic-region sets, whose deflines are NAMED after a flanking gene
+    # ("_intergenic_FBgn0259837") without being that gene.
+    AGR_GENE_PATTERNS = [
+      ['WB',   /\bgene=(WBGene\d+)/],
+      ['FB',   /\bparent=[^;]*?\b(FBgn\d+)/],
+      ['SGD',  /\bSGDID:(S\d+)/],
+      ['ZFIN', /\b(ZDB-GENE-[\d-]+\d)/]
+    ].freeze
+
+    # The gene symbol a defline offers for display, where it carries one that is
+    # unambiguously the symbol. Falls back to the identifier, which is always
+    # meaningful even if less readable.
+    AGR_GENE_SYMBOL = {
+      # locus=rga-9. Many WormBase genes are unnamed and carry no locus at all.
+      'WB' => /\blocus=([^\s;]+)/,
+      # name=Nep3-PA is the isoform; the gene symbol is the part before it.
+      'FB' => /\bname=([^\s;]+?)-[A-Z]{2}\b/,
+      # SGD leads with the symbol (PAU8) or, for unnamed ORFs, the systematic
+      # name (YAL069W). Either is the right thing to show.
+      'SGD' => /\A([A-Za-z0-9-]+)\s+SGDID:/,
+      # ZFIN's title opens with the symbol: "itsn1|OTTDARP00000003616 ...",
+      # also "si:ch211-106g8.33|" and "zgc:..." forms. Anchored on a lowercase
+      # first letter so that the clone names that appear in the same position in
+      # other sets ("CH211-107M8.1-002|", "DKEY-193P22.2|") are left to fall
+      # back to the identifier rather than be shown as a gene symbol.
+      'ZFIN' => /\A([a-z][^|\s]*)\|/
+    }.freeze
+
+    # A link to the Alliance gene page for a hit, derived from its defline.
+    #
+    # This is separate from agr_gene above, which needs a gene_track configured
+    # and a jbrowse-nclist-cli lookup against genomic coordinates to succeed. It
+    # therefore produces nothing for the protein and transcript databases, which
+    # are exactly the ones whose deflines name the gene outright.
+    # Every field is searched because BLAST splits a defline at its first space,
+    # and which half the gene id lands in depends on how the MOD orders its
+    # defline. WormBase, FlyBase and SGD name the gene in the title. ZFIN leads
+    # with a pipe-delimited field, so its id ends up in Hit_id instead -- and
+    # because ZFIN's databases are built without -parse_seqids, its Hit_accession
+    # is a useless gnl|BL_ORD_ID|N:
+    #
+    #   id         tpe|OTTDART00000003966|OTTDARG00000003778|ZDB-GENE-030616-226
+    #   accession  gnl|BL_ORD_ID|1
+    #   title      itsn1|OTTDARP00000003617 BUSM1-173A8.1-002 ...
+    #
+    # Pass the title first: it is where a readable gene symbol lives when there
+    # is one.
+    def self.agr_gene_from_defline(*fields)
+      fields = fields.compact.reject(&:empty?)
+      return nil if fields.empty?
+
+      prefix, id = nil, nil
+      AGR_GENE_PATTERNS.each do |mod, pattern|
+        match = fields.filter_map { |field| field.match(pattern) }.first
+        next unless match
+
+        prefix, id = mod, match[1]
+        break
+      end
+      return nil unless id
+
+      # The symbol is looked for in the title ONLY, never in the other fields.
+      # Searching all of them let ZFIN's own id prefix win: "tpe|OTTDART..."
+      # satisfies the ZFIN symbol pattern, so a hit whose title held no symbol
+      # was labelled "Alliance: tpe".
+      symbol_pattern = AGR_GENE_SYMBOL[prefix]
+      symbol = symbol_pattern && fields.first[symbol_pattern, 1]
+      label = symbol && !symbol.empty? ? symbol : id
+
+      {
+        order: 2,
+        title: "Alliance: #{label}",
+        url: "https://www.alliancegenome.org/gene/#{prefix}:#{ERB::Util.url_encode(id)}",
+        icon: 'fa-external-link'
+      }
+    end
+
+    # An NCBI Gene identifier named outright in the defline. Two spellings are
+    # deployed, both from NCBI-derived FASTA:
+    #
+    #   [db_xref=GeneID:66069077]                     SGD's fungal coding sets
+    #   ... aminopeptidase N (LOC100144773), mRNA     FlyBase's non-Drosophila sets
+    #
+    # A LOC number IS the Gene id, so both resolve at /gene/<id>.
+    NCBI_GENE_ID = /\bdb_xref=GeneID:(\d+)|\(LOC(\d+)\)/
+
+    def self.ncbi_gene(*fields)
+      fields = fields.compact.reject(&:empty?)
+      return nil if fields.empty?
+
+      match = fields.filter_map { |field| field.match(NCBI_GENE_ID) }.first
+      return nil unless match
+
+      id = match[1] || match[2]
+      {
+        order: 3,
+        title: "NCBI Gene: #{id}",
+        url: "https://www.ncbi.nlm.nih.gov/gene/#{id}",
+        icon: 'fa-external-link'
+      }
+    end
+
     # RefSeq accession prefixes, and whether each names a protein record.
     # BLAST reports Hit_accession without the version suffix, so the version is
     # optional here even though the FASTA deflines carry it.
@@ -504,6 +620,19 @@ module SequenceServer
         embedded = accession[/(?:N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?/]
         candidate = accession.match?(REFSEQ_ACCESSION) ? accession : embedded
         ncbi_acc = candidate if candidate
+      end
+
+      # FlyBase names the RefSeq record in its cross-reference list rather than
+      # in the accession, which is FlyBase's own FBpp/FBtr id:
+      #
+      #   ID=FBpp0070000; ... dbxref=FlyBase:FBpp0070000,...,REFSEQ:NP_523417,...
+      #
+      # Without this a FlyBase hit carries no NCBI link at all, even though the
+      # defline says exactly which record it is.
+      if !ncbi_acc && hit_title
+        dbxref = hit_title[/\bdbxref=([^;]+)/, 1]
+        refseq = dbxref && dbxref[/\bREFSEQ:((?:N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?)/, 1]
+        ncbi_acc = refseq if refseq
       end
 
       return nil unless ncbi_acc
