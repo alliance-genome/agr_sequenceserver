@@ -258,14 +258,32 @@ for (const mod of MODS) {
     });
 }
 
-// The expand/collapse arrow hit area was enlarged to 24px when the hint was
-// added (public/css/app.css: `.jstree-default .jstree-node > .jstree-ocl`).
-// The worry was that this would knock the jstree sprite icons out of
-// alignment. The vendored jstree 3.3.8 default theme already sizes every
-// .jstree-icon at 24x24 with a 24px line-height, so the override should be a
-// no-op. This test pins that down against the rendered page.
-test('the 24px arrow hit area has not misaligned the jstree sprite icons', async ({ page }) => {
+// The expand/collapse control is drawn rather than loaded from jstree's sprite
+// sheet (public/css/app.css). Widening .jstree-ocl on its own, which is what
+// this test used to pin, did not help: the sprite glyph is a fixed size, so the
+// extra width was empty padding around an arrow that stayed small and faint.
+//
+// What matters now is that the chevron is actually rendered and has size, and
+// that giving .jstree-ocl a cell larger than the theme's 24px has not pushed
+// the row out of alignment.
+test('the drawn expand/collapse chevron is visible and has not misaligned the row', async ({ page }) => {
+    test.setTimeout(120 * 1000);
     await gotoSearch(page, '/blast/SGD/R64-5-1f/');
+
+    // jstree renders children lazily and the tree is several levels deep, so no
+    // leaf exists anywhere in the DOM until it is opened out -- and one of the
+    // assertions below is that a leaf does NOT get a chevron. Expanding
+    // everything also leaves no closed node to measure, so close one again.
+    await expandTree(page, S.nucleotideTree);
+    await expect(page.locator(`${S.nucleotideTree} li.jstree-leaf`).first()).toBeAttached();
+
+    // Collapse one again, the same way expandTree opens them: an in-page click
+    // on the toggle. jQuery is bundled rather than global here, so jstree's own
+    // API is not reachable from the page.
+    await page.evaluate((treeSel) => {
+        document.querySelector(`${treeSel} > ul > li.jstree-open > i.jstree-ocl`).click();
+    }, S.nucleotideTree);
+    await expect(page.locator(`${S.nucleotideTree} li.jstree-closed`).first()).toBeAttached();
 
     const geom = await page.evaluate((treeSel) => {
         const node = document.querySelector(`${treeSel} li.jstree-closed`);
@@ -283,36 +301,73 @@ test('the 24px arrow hit area has not misaligned the jstree sprite icons', async
                 hasSprite: cs.backgroundImage.includes('32px.png')
             };
         };
+        // The chevron itself lives in ::after, which has no element to measure,
+        // so read the computed style of the pseudo-element directly.
+        const chevron = getComputedStyle(ocl, '::after');
         return {
             ocl: box(ocl),
             anchor: box(anchor),
             icon: box(icon),
+            chevron: {
+                content: chevron.content,
+                width: chevron.width,
+                height: chevron.height,
+                borderRightWidth: chevron.borderRightWidth,
+                borderBottomWidth: chevron.borderBottomWidth,
+                borderRightColor: chevron.borderRightColor,
+                transform: chevron.transform
+            },
+            // A leaf has a .jstree-ocl too, but nothing to expand.
+            leafChevronContent: (() => {
+                const leaf = document.querySelector(`${treeSel} li.jstree-leaf > i.jstree-ocl`);
+                return leaf ? getComputedStyle(leaf, '::after').content : 'NO LEAF';
+            })(),
             rowHeight: node.getBoundingClientRect().height ? Math.round(
                 node.querySelector(':scope > a.jstree-anchor').getBoundingClientRect().height) : null
         };
     }, S.nucleotideTree);
 
-    // The enlarged hit area is exactly the theme's own cell size.
-    expect(geom.ocl.width).toBe(24);
-    expect(geom.ocl.height).toBe(24);
-    expect(geom.ocl.lineHeight).toBe('24px');
+    // The hit area is at least the theme's 24px cell, and no smaller than what
+    // it replaced.
+    expect(geom.ocl.width).toBeGreaterThanOrEqual(24);
+    expect(geom.ocl.height).toBeGreaterThanOrEqual(24);
 
-    // The folder icon inside the anchor is still the same size and on the same
-    // baseline as the arrow -- no vertical drift.
+    // The sprite arrow is gone. This is the point of the change: the glyph in
+    // that sheet is a fixed size, so it could not be made bigger.
+    expect(geom.ocl.hasSprite,
+        'the sprite arrow is back; widening .jstree-ocl alone does not enlarge it').toBe(false);
+
+    // A drawn chevron with real dimensions. Asserting the borders matters --
+    // ::after with no border renders nothing at all, and a content:"" box with
+    // zero borders would still satisfy a naive "is it there" check.
+    expect(geom.chevron.content).toBe('""');
+    expect(parseFloat(geom.chevron.width)).toBeGreaterThan(4);
+    expect(parseFloat(geom.chevron.height)).toBeGreaterThan(4);
+    expect(parseFloat(geom.chevron.borderRightWidth)).toBeGreaterThan(1);
+    expect(parseFloat(geom.chevron.borderBottomWidth)).toBeGreaterThan(1);
+    // Rotated, or it would be a corner rather than a chevron.
+    expect(geom.chevron.transform).toMatch(/^matrix\(/);
+    // Themed, not the browser default black.
+    expect(geom.chevron.borderRightColor).toBe('rgb(27, 85, 122)');
+
+    // A leaf must not get one: it has a .jstree-ocl but nothing to expand.
+    expect(geom.leafChevronContent).toBe('none');
+
+    // The folder icon inside the anchor is still the same size and on exactly
+    // the same baseline. This is what a taller cell broke: at 28px the control
+    // dropped 2px below the row and took the chevron down with it, so the cell
+    // keeps the theme's 24px height and only the glyph inside it grew.
     expect(geom.icon.width).toBe(24);
     expect(geom.icon.height).toBe(24);
     expect(geom.icon.top).toBe(geom.ocl.top);
     expect(geom.anchor.top).toBe(geom.ocl.top);
+    expect(geom.ocl.height).toBe(24);
     expect(geom.rowHeight).toBe(24);
 
-    // The arrow sits flush against the anchor: no gap, no overlap. A hit area
-    // larger than the theme's cell would push these apart.
+    // The control sits flush against the anchor: no gap, no overlap.
     expect(geom.anchor.left).toBe(geom.ocl.right);
 
-    // Both are drawn from the 32px sprite at the theme's standard offsets;
-    // a changed cell size would have required different background-positions.
-    expect(geom.ocl.hasSprite).toBe(true);
+    // The folder icon still comes from the sprite; only the arrow changed.
     expect(geom.icon.hasSprite).toBe(true);
-    expect(geom.ocl.backgroundPosition).toBe('-100px -4px');
     expect(geom.icon.backgroundPosition).toBe('-164px -4px');
 });

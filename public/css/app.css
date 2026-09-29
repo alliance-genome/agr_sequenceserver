@@ -808,16 +808,69 @@ svg .RdYlBu .q29-32 { fill: var(--ad); }
 svg .RdYlBu .q30-32 { fill: var(--ae); }
 svg .RdYlBu .q31-32 { fill: var(--af); }
 
-/* Make JSTree expand/collapse arrows more visible */
-.jstree-default .jstree-node > .jstree-ocl {
-  width: 24px;
+/* Database tree: the expand/collapse control.
+ *
+ * jstree draws this from a sprite sheet at a fixed size, so an earlier attempt
+ * at making it easier to hit -- widening .jstree-ocl to 24px -- only padded a
+ * small glyph with empty space. The control still read as a faint "+" on a
+ * dotted line, weaker than the checkbox and folder icon beside it, which is
+ * what SGD reported.
+ *
+ * Draw the chevron instead of loading it, so it scales and takes the theme
+ * colour. Scoped to the two database trees: jstree is not used anywhere else
+ * here, but the default theme is global and shared.
+ */
+#nucleotide_database_tree .jstree-node > .jstree-ocl,
+#protein_database_tree .jstree-node > .jstree-ocl {
+  /* Height stays at the theme's 24px row. Making the cell taller than the row
+   * pushes it off the baseline -- the folder icon beside it then sits 2px
+   * higher, and the chevron, centred inside the cell, sits low in the row.
+   * Only the drawn glyph needed to grow, not the box around it. */
+  width: 28px;
   height: 24px;
-}
-.jstree-default .jstree-closed > .jstree-ocl {
-  opacity: 0.8;
-}
-.jstree-default .jstree-closed > .jstree-ocl:hover,
-.jstree-default .jstree-open > .jstree-ocl:hover {
-  opacity: 1;
+  line-height: 24px;
+  position: relative;
+  /* Drops both the sprite arrow and, on leaves, the sprite dash. */
+  background-image: none;
   cursor: pointer;
+}
+
+/* Leaves carry .jstree-ocl too but have nothing to expand, so the chevron is
+ * hung off the open/closed classes rather than off .jstree-ocl itself. */
+#nucleotide_database_tree .jstree-closed > .jstree-ocl::after,
+#nucleotide_database_tree .jstree-open > .jstree-ocl::after,
+#protein_database_tree .jstree-closed > .jstree-ocl::after,
+#protein_database_tree .jstree-open > .jstree-ocl::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-right: 2.5px solid #1B557A;
+  border-bottom: 2.5px solid #1B557A;
+  transition: transform 0.12s ease-out, border-color 0.12s ease-out;
+}
+
+/* Closed points right, open points down. The translate offsets differ because
+ * a rotated square pivots about its centre, not its visual tip. */
+#nucleotide_database_tree .jstree-closed > .jstree-ocl::after,
+#protein_database_tree .jstree-closed > .jstree-ocl::after {
+  transform: translate(-65%, -50%) rotate(-45deg);
+}
+#nucleotide_database_tree .jstree-open > .jstree-ocl::after,
+#protein_database_tree .jstree-open > .jstree-ocl::after {
+  transform: translate(-50%, -70%) rotate(45deg);
+}
+
+#nucleotide_database_tree .jstree-ocl:hover::after,
+#protein_database_tree .jstree-ocl:hover::after {
+  border-color: #C74F13;
+}
+
+/* The dotted connector lines are more sprite noise, and read as clutter next
+ * to a solid chevron. Indentation already carries the hierarchy. */
+#nucleotide_database_tree .jstree-node,
+#protein_database_tree .jstree-node {
+  background-image: none;
 }
