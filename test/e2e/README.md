@@ -241,8 +241,8 @@ These each cost someone a run. Read before writing a spec.
   right shape and the right links — not that BLAST's alignments are
   biologically right. That belongs to BLAST+ and the Ruby specs.
 * **The prod deployment and port 4568.** Never touched.
-* **JBrowse itself.** We assert the generated URL is correct (host, chromosome
-  name, coordinate shape). We do not load jbrowse.yeastgenome.org.
+* **JBrowse itself.** We assert the generated URL is correct (host, assembly,
+  track, chromosome name, coordinate shape). We do not load the browser.
 * **File downloads.** The FASTA/alignment/SVG/PNG export buttons are only
   checked for presence and class, not driven through a download.
 * **Mobile/narrow viewports.** The suite runs at a fixed 1440×900. The sidebar

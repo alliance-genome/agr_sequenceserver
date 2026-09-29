@@ -156,10 +156,13 @@ catch-all regex did this, producing links to records that do not exist.
 - [ ] **T3a** Search the **nucleotide** sequence against
       **S_cerevisiae_Genome_Assembly**.
 - [ ] **T3b** The hit row has a **JBrowse** link.
-- [ ] **T3c** Hover it: the URL is on `jbrowse.yeastgenome.org` and the `loc=`
-      parameter names **`chrVI`** (ACT1 is on chromosome VI), *not* `NC_001138.5`.
-- [ ] **T3d** Click it. SGD's JBrowse opens on chromosome VI with a **BLAST
-      Hits** feature visible near position 53,260–54,700.
+- [ ] **T3c** Hover it: the URL is on `www.alliancegenome.org/jbrowse2/`, with
+      `assembly=Saccharomyces_cerevisiae`, a `tracks=` list including
+      `Saccharomyces_cerevisiae_all_genes`, and a `loc=` parameter naming
+      **`chrVI`** (ACT1 is on chromosome VI), *not* `NC_001138.5`.
+- [ ] **T3d** Click it. AGR's JBrowse 2 opens on chromosome VI with the **All
+      Genes** track and a **BLAST Hits** track visible near position
+      53,260–54,700.
 
 **Fails if:** `loc=` contains a RefSeq accession (`NC_001138.5`) — JBrowse
 refseq names are `chrI`…`chrXVI`/`chrmt` and will not resolve — or the URL has
