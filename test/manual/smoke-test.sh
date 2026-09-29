@@ -309,6 +309,38 @@ puts bad.empty? ? "OK" : "MISMATCH: #{bad.length} case(s)"
   [ "$gene_out" = "OK" ] && ok "Gene linkouts: Alliance CURIEs per MOD + NCBI Gene ids" \
                          || bad "gene link generation" "$gene_out"
 
+  # An SGD feature hit is addressed by offset into the gene, not by position on
+  # the chromosome, so the defline's own location has to be translated through.
+  coord_out=$(docker exec "$TEST_CONTAINER" ruby -e '
+require "/sequenceserver/lib/sequenceserver/links"
+L = SequenceServer::Links
+def hsp(s, e) = {"sstart" => s, "send" => e}
+FWD  = "YAL069W SGDID:S000002143, Chr I from 335-649, Genome Release 64-3-1"
+REV  = "PAU8 SGDID:S000002142, Chr I from 2169-1807, reverse complement"
+ACT1 = "ACT1 SGDID:S000001855, Chr VI from 54377-53260,54696-54687, Genome Release 64-3-1"
+ASM  = "[org=Saccharomyces cerevisiae] [strain=S288C] [chromosome=VI]"
+cases = [
+  # A genome assembly is already in chromosome coordinates: pass through.
+  [ASM,  [hsp(53088, 55378)], [[53088, 55378]], "chrVI"],
+  [ASM,  [hsp(55378, 53088)], [[53088, 55378]], "chrVI"],
+  # Forward-strand feature: offset 1 is the low coordinate.
+  [FWD,  [hsp(1, 315)],       [[335, 649]],     "chrI"],
+  [FWD,  [hsp(11, 20)],       [[345, 354]],     "chrI"],
+  # Reverse strand: offset 1 is the HIGH coordinate and the ends swap.
+  [REV,  [hsp(1, 120)],       [[2050, 2169]],   "chrI"],
+  [REV,  [hsp(120, 1)],       [[2050, 2169]],   "chrI"],
+  # Spliced: offsets do not map linearly, so use the whole feature.
+  [ACT1, [hsp(1, 300)],       [[53260, 54696]], "chrVI"],
+]
+bad = cases.reject do |title, hsps, want_spans, want_ref|
+  L.genomic_hsp_spans(title, hsps) == want_spans &&
+    L.extract_sgd_chromosome(title, "x") == want_ref
+end
+puts bad.empty? ? "OK" : "MISMATCH: #{bad.length} case(s)"
+' 2>&1 | tail -1)
+  [ "$coord_out" = "OK" ] && ok "SGD feature hits map onto chromosome coordinates" \
+                          || bad "genomic coordinate translation" "$coord_out"
+
   # Both defline styles must resolve: the NCBI-style titles in the fungal set
   # (R64-5-1f) and the [chromosome=XVI] tags in the main set (R64-5-1m).
   sgd_out=$(docker exec "$TEST_CONTAINER" ruby -e '
