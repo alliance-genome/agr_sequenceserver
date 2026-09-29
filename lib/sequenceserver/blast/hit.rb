@@ -39,10 +39,17 @@ module SequenceServer
       def links
         database_config = query.report.instance_variable_get(:@env_config)
 
-        # If no environment config, still try NCBI link
+        # The links that come from the defline alone need no environment config
+        # and no database match, so they are available even on the paths below
+        # that give up early.
+        defline_links = [
+          Links.ncbi_link(accession, title, dbtype),
+          Links.agr_gene_from_defline(title, id, accession),
+          Links.ncbi_gene(title, id, accession)
+        ].compact
+
         if database_config.nil? || database_config.empty?
-          ncbi = Links.ncbi_link(accession, title, dbtype)
-          return ncbi ? [ncbi] : []
+          return defline_links.sort_by { |link| [link[:order], link[:title]] }
         end
 
         hit_db = nil
@@ -58,29 +65,34 @@ module SequenceServer
         end
 
         hit_db ||= report.querydb.first
-        return [] if hit_db.nil?
+        return defline_links.sort_by { |link| [link[:order], link[:title]] } if hit_db.nil?
 
         database_filename = File.basename(hit_db.name)
         fasta_file_basename = File.basename(database_filename, File.extname(database_filename))
         species_identifier = fasta_file_basename.sub(/db$/, '')
 
         # A hit in a protein database is addressed by amino acid offset into
-        # that protein; it has no position on a chromosome, so a genome browser
-        # has nothing to point at.
+        # that protein, so its own coordinates can never be used as positions on
+        # a chromosome.
         #
-        # The matching below cannot tell the two apart on its own. WormBase's
-        # protein and genomic databases are both built as "c_elegansdb" and both
-        # carry project PRJNA13758, so the protein database matched the genomic
-        # entry and inherited its genome_browser block -- yielding JBrowse links
-        # at protein coordinates, and feeding those same coordinates to the
-        # gene_track lookup, which then reports whichever gene happens to sit at
-        # that base pair.
+        # That does not mean a protein hit has no place in the genome browser.
+        # Where the defline names the gene's location outright, the browser can
+        # be pointed at the gene -- and SGD's protein deflines do exactly that,
+        # in the same form as its ORF ones:
+        #
+        #   YAL069W SGDID:S000002143, Chr I from 335-649, ...
+        #
+        # So the test is not "is this protein" but "can this hit be placed at
+        # all". WormBase's protein deflines name no location
+        # (wormpep=CE09349 gene=... locus=...), so they stay unlinked, which is
+        # the case this gate was added for: WormBase builds its protein and
+        # genomic databases both as "c_elegansdb" under project PRJNA13758, so
+        # the protein database matched the genomic entry and inherited its
+        # genome_browser block, yielding links at protein coordinates.
         protein_hit = hit_db.type.to_s == 'protein'
+        locatable = !protein_hit || !Links.defline_feature_ranges(title).nil?
 
-        links = []
-
-        ncbi = Links.ncbi_link(accession, title, dbtype)
-        links.push(ncbi) if ncbi
+        links = defline_links.dup
 
         for reference_sequence in database_config
           uri_matches = false
@@ -93,12 +105,16 @@ module SequenceServer
           end
 
           if uri_matches
-             if reference_sequence.key?("genome_browser") && !protein_hit
+             if reference_sequence.key?("genome_browser") && locatable
                 genome_browser_metadata = reference_sequence["genome_browser"]
                 filepath_parts = hit_db.name.split(File::SEPARATOR)
-                links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession, title, hit_db.name))
+                links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession, title, hit_db.name, protein_hit))
 
-                if genome_browser_metadata.has_key?("gene_track")
+                # The gene_track lookup is driven by the hit's own coordinates,
+                # which for a protein hit are amino acid offsets. Feeding those
+                # to a genomic track reports whichever gene happens to sit at
+                # that base pair, so it stays off for protein.
+                if genome_browser_metadata.has_key?("gene_track") && !protein_hit
                     first_hit_start = hsps.map(&:sstart).at(0)
                     first_hit_end = hsps.map(&:send).at(0)
                     organism = accession.partition('-').first
@@ -124,14 +140,26 @@ module SequenceServer
                     end
                 end
                 links.compact!
-                return links.sort_by { |link| [link[:order], link[:title]] }
+                return dedupe_links(links)
              else
-               return links
+               return dedupe_links(links)
              end
              break
           end
         end
-        return links
+        return dedupe_links(links)
+      end
+
+      # One link per destination, in display order.
+      #
+      # The Alliance gene page can be reached two ways: read off the defline, or
+      # looked up from the hit's coordinates against a gene_track. Where a
+      # database supports both they name the same gene, and the hit would
+      # otherwise carry the link twice. Keeping the first occurrence keeps the
+      # coordinate-derived label, which carries the gene's display name.
+      def dedupe_links(links)
+        links.compact.uniq { |link| link[:url] }
+             .sort_by { |link| [link[:order], link[:title]] }
       end
 
       # Returns the database type (nucleotide or protein).

@@ -217,9 +217,101 @@ module SequenceServer
         return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
       end
 
+      # The feature sets (ORF and RNA) abbreviate it instead: "Chr I from
+      # 335-649". Without this they fell through to the generic fallback in
+      # extract_ref_name, which returned the first word of the defline -- the
+      # gene name, "YAL069W", which is not a sequence JBrowse can find.
+      feature_match = hit_title.match(SGD_FEATURE_LOCATION)
+      if feature_match
+        chromosome = feature_match[1]
+        return "chrmt" if chromosome.match?(/\AMito/i)
+
+        roman = chromosome.upcase
+        return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
+      end
+
       return "chrmt" if hit_title.match(/mitochondri/i)
 
       nil
+    end
+
+    # Where SGD says a feature lives, as given in its own deflines:
+    #
+    #   YAL069W SGDID:S000002143, Chr I from 335-649, ...
+    #   PAU8 SGDID:S000002142, Chr I from 2169-1807, ..., reverse complement, ...
+    #   TRN1 SGDID:S000006680, Chr I from 139152-139187,139219-139254, ...
+    #   Chr I from 802-1806, ..., between TEL01L and YAL068C        (intergenic)
+    #   Q0010 SGDID:S000007257, Chr Mito from 3952-4338, ...
+    #
+    # The chromosome token set is closed: Chr I..Chr XVI and Chr Mito. A
+    # descending range means the feature is on the reverse strand.
+    SGD_FEATURE_LOCATION = /\bChr\s+([IVXL]+|Mito)\s+from\s+((?:\d+-\d+)(?:,\d+-\d+)*)/i
+
+    # The ranges a defline names, as [[from, to], ...], or nil where it names
+    # none. Coordinates are kept in the order given: a descending pair carries
+    # the strand, which the caller needs in order to map offsets.
+    def self.defline_feature_ranges(hit_title)
+      return nil if hit_title.nil? || hit_title.empty?
+
+      match = hit_title.match(SGD_FEATURE_LOCATION)
+      return nil unless match
+
+      ranges = match[2].split(',').map { |range| range.split('-').map(&:to_i) }
+      return nil if ranges.empty?
+      return nil unless ranges.all? { |r| r.length == 2 && r.none?(&:zero?) }
+
+      ranges
+    end
+
+    # A hit's subject coordinates expressed on the chromosome, as [[start, end],
+    # ...] with start <= end.
+    #
+    # For a genome assembly the two are already the same thing: the subject IS
+    # the chromosome. For a feature database -- SGD's ORF, RNA and protein sets
+    # -- the subject is one gene, and an HSP's sstart/send are offsets into that
+    # gene. Passing them through unchanged is what sent the browser to the start
+    # of the chromosome: an ACT1 hit covering 1..456 of the CDS opened
+    # chrVI:1..456 instead of the ACT1 locus at 53260..54696.
+    #
+    # Pass protein = true for a hit in a protein database.
+    def self.genomic_hsp_spans(hit_title, hsps, protein = false)
+      spans = hsps.map do |hsp|
+        hsp['sstart'] > hsp['send'] ? [hsp['send'], hsp['sstart']] : [hsp['sstart'], hsp['send']]
+      end
+
+      ranges = defline_feature_ranges(hit_title)
+      return spans unless ranges
+
+      # Exact placement is possible only for a nucleotide subject occupying one
+      # contiguous range. Two things rule it out:
+      #
+      # Protein. The offsets are amino acids, which are not the feature's units
+      # -- offset n is nucleotide 3n-2 of the CDS -- and the reading frame does
+      # not survive an intron at all.
+      #
+      # Spliced. The subject is the joined product, so an offset into it does
+      # not map linearly onto the genome. Not a rare path: ACT1, which the
+      # shipped SGD example searches, is "Chr VI from 54377-53260,54696-54687",
+      # and those ranges are not in transcription order -- it is on the reverse
+      # strand, so its first exon is the one at the HIGHER coordinates, listed
+      # second. Walking them to place an offset would have to know that, and
+      # getting it wrong puts the highlight in the neighbouring gene.
+      #
+      # Either way the whole feature is used, which is also the honest thing to
+      # show: the hit is somewhere in this gene.
+      if protein || ranges.length > 1
+        coordinates = ranges.flatten
+        return [[coordinates.min, coordinates.max]]
+      end
+
+      from, to = ranges.first
+      if from <= to
+        spans.map { |start, finish| [from + start - 1, from + finish - 1] }
+      else
+        # Reverse strand: offset 1 of the subject is the HIGHER coordinate, so
+        # the offsets run back down the chromosome and the ends swap over.
+        spans.map { |start, finish| [from - finish + 1, from - start + 1] }
+      end
     end
 
     # Main extraction method that delegates to MOD-specific methods
@@ -238,7 +330,12 @@ module SequenceServer
           # Try RGD-specific extraction
           ref_name = extract_rgd_chromosome(hit_title, blast_accession)
           return ref_name if ref_name
-        elsif genome_browser_metadata["url"]&.include?("yeastgenome")
+        # "yeastgenome" alone stopped identifying SGD when it moved to AGR's
+        # JBrowse 2: the url became www.alliancegenome.org, and only the
+        # database_path fallback further down was still getting these right.
+        # The assembly name is what distinguishes SGD there.
+        elsif genome_browser_metadata["url"]&.include?("yeastgenome") ||
+              genome_browser_metadata["assembly"]&.include?("Saccharomyces")
           # Try SGD-specific extraction
           ref_name = extract_sgd_chromosome(hit_title, blast_accession)
           return ref_name if ref_name
@@ -279,7 +376,7 @@ module SequenceServer
       blast_accession
     end
 
-    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession, hit_title = nil, database_path = nil)
+    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession, hit_title = nil, database_path = nil, protein = false)
         assembly = genome_browser_metadata["assembly"]
         if genome_browser_metadata["type"] == "jbrowse"
             subfeatures = []
@@ -287,17 +384,11 @@ module SequenceServer
             features_start = -1
             features_end = -1
             # Limit to first 5 HSPs to keep URLs manageable
-            limited_hsps = hsps.first(5)
-            for hsp in limited_hsps
+            limited_spans = Links.genomic_hsp_spans(hit_title, hsps, protein).first(5)
+            for span in limited_spans
               # Use hit title if available, otherwise fall back to accession
               refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
-              if hsp["sstart"] > hsp["send"]
-                  sequence_start = hsp["send"]
-                  sequence_end = hsp["sstart"]
-              else
-                  sequence_start = hsp["sstart"]
-                  sequence_end = hsp["send"]
-              end
+              sequence_start, sequence_end = span
 
               if features_start == -1 || features_start > sequence_start
                 features_start = sequence_start
@@ -320,14 +411,7 @@ module SequenceServer
             return nil if ref_name.nil? || ref_name.empty? || ref_name.start_with?("type=") || ref_name.include?("gnl|BL_ORD_ID")
 
             # Zoom to the first (best) HSP with padding
-            first_hsp = limited_hsps.first
-            if first_hsp["sstart"] > first_hsp["send"]
-              first_start = first_hsp["send"]
-              first_end = first_hsp["sstart"]
-            else
-              first_start = first_hsp["sstart"]
-              first_end = first_hsp["send"]
-            end
+            first_start, first_end = limited_spans.first
             hsp_length = first_end - first_start
             padding = [hsp_length * 2, 1000].max
             loc_start = [first_start - padding, 1].max
@@ -376,16 +460,10 @@ module SequenceServer
             features_end = -1
             count = 1
             # Limit to first 5 HSPs to keep URLs manageable
-            limited_hsps = hsps.first(5)
-            for hsp in limited_hsps
+            limited_spans = Links.genomic_hsp_spans(hit_title, hsps, protein).first(5)
+            for span in limited_spans
               refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
-              if hsp["sstart"] > hsp["send"]
-                  sequence_start = hsp["send"]
-                  sequence_end = hsp["sstart"]
-              else
-                  sequence_start = hsp["sstart"]
-                  sequence_end = hsp["send"]
-              end
+              sequence_start, sequence_end = span
 
               if features_start == -1 || features_start > sequence_start
                 features_start = sequence_start
@@ -426,14 +504,7 @@ module SequenceServer
 
             # Zoom to the first (best) HSP with padding, so hits are visible
             # even when multiple HSPs are far apart on the chromosome
-            first_hsp = limited_hsps.first
-            if first_hsp["sstart"] > first_hsp["send"]
-              first_start = first_hsp["send"]
-              first_end = first_hsp["sstart"]
-            else
-              first_start = first_hsp["sstart"]
-              first_end = first_hsp["send"]
-            end
+            first_start, first_end = limited_spans.first
             hsp_length = first_end - first_start
             padding = [hsp_length * 2, 1000].max
             loc_start = [first_start - padding, 1].max
@@ -476,6 +547,122 @@ module SequenceServer
         }
     end
 
+    # Gene identifiers the Alliance can resolve, recognised by the shape of the
+    # identifier itself rather than by the MOD segment of the URL. The two do
+    # not always agree -- XenBase is served under /blast/XB/ but mints Xenbase:
+    # CURIEs, and MGD under /blast/MGD/ mints MGI: -- and a wrong prefix gives a
+    # link that 400s rather than one that visibly fails here.
+    #
+    # Each pattern was read off the deployed deflines:
+    #
+    #   WB    wormpep=CE32785 gene=WBGene00007064 locus=rga-9 status=Confirmed
+    #   FB    ID=FBpp0070000; name=Nep3-PA; parent=FBgn0031081,FBtr0070000;
+    #   SGD   PAU8 SGDID:S000002142, Chr I from 2169-1807, ...
+    #   ZFIN  tpe|OTTDART00000003965|OTTDARG00000003778|ZDB-GENE-030616-226 itsn1|...
+    #
+    # FlyBase is deliberately anchored on parent=. A bare /FBgn\d+/ also matches
+    # the intergenic-region sets, whose deflines are NAMED after a flanking gene
+    # ("_intergenic_FBgn0259837") without being that gene.
+    AGR_GENE_PATTERNS = [
+      ['WB',   /\bgene=(WBGene\d+)/],
+      ['FB',   /\bparent=[^;]*?\b(FBgn\d+)/],
+      ['SGD',  /\bSGDID:(S\d+)/],
+      ['ZFIN', /\b(ZDB-GENE-[\d-]+\d)/]
+    ].freeze
+
+    # The gene symbol a defline offers for display, where it carries one that is
+    # unambiguously the symbol. Falls back to the identifier, which is always
+    # meaningful even if less readable.
+    AGR_GENE_SYMBOL = {
+      # locus=rga-9. Many WormBase genes are unnamed and carry no locus at all.
+      'WB' => /\blocus=([^\s;]+)/,
+      # name=Nep3-PA is the isoform; the gene symbol is the part before it.
+      'FB' => /\bname=([^\s;]+?)-[A-Z]{2}\b/,
+      # SGD leads with the symbol (PAU8) or, for unnamed ORFs, the systematic
+      # name (YAL069W). Either is the right thing to show.
+      'SGD' => /\A([A-Za-z0-9-]+)\s+SGDID:/,
+      # ZFIN's title opens with the symbol: "itsn1|OTTDARP00000003616 ...",
+      # also "si:ch211-106g8.33|" and "zgc:..." forms. Anchored on a lowercase
+      # first letter so that the clone names that appear in the same position in
+      # other sets ("CH211-107M8.1-002|", "DKEY-193P22.2|") are left to fall
+      # back to the identifier rather than be shown as a gene symbol.
+      'ZFIN' => /\A([a-z][^|\s]*)\|/
+    }.freeze
+
+    # A link to the Alliance gene page for a hit, derived from its defline.
+    #
+    # This is separate from agr_gene above, which needs a gene_track configured
+    # and a jbrowse-nclist-cli lookup against genomic coordinates to succeed. It
+    # therefore produces nothing for the protein and transcript databases, which
+    # are exactly the ones whose deflines name the gene outright.
+    # Every field is searched because BLAST splits a defline at its first space,
+    # and which half the gene id lands in depends on how the MOD orders its
+    # defline. WormBase, FlyBase and SGD name the gene in the title. ZFIN leads
+    # with a pipe-delimited field, so its id ends up in Hit_id instead -- and
+    # because ZFIN's databases are built without -parse_seqids, its Hit_accession
+    # is a useless gnl|BL_ORD_ID|N:
+    #
+    #   id         tpe|OTTDART00000003966|OTTDARG00000003778|ZDB-GENE-030616-226
+    #   accession  gnl|BL_ORD_ID|1
+    #   title      itsn1|OTTDARP00000003617 BUSM1-173A8.1-002 ...
+    #
+    # Pass the title first: it is where a readable gene symbol lives when there
+    # is one.
+    def self.agr_gene_from_defline(*fields)
+      fields = fields.compact.reject(&:empty?)
+      return nil if fields.empty?
+
+      prefix, id = nil, nil
+      AGR_GENE_PATTERNS.each do |mod, pattern|
+        match = fields.filter_map { |field| field.match(pattern) }.first
+        next unless match
+
+        prefix, id = mod, match[1]
+        break
+      end
+      return nil unless id
+
+      # The symbol is looked for in the title ONLY, never in the other fields.
+      # Searching all of them let ZFIN's own id prefix win: "tpe|OTTDART..."
+      # satisfies the ZFIN symbol pattern, so a hit whose title held no symbol
+      # was labelled "Alliance: tpe".
+      symbol_pattern = AGR_GENE_SYMBOL[prefix]
+      symbol = symbol_pattern && fields.first[symbol_pattern, 1]
+      label = symbol && !symbol.empty? ? symbol : id
+
+      {
+        order: 2,
+        title: "Alliance: #{label}",
+        url: "https://www.alliancegenome.org/gene/#{prefix}:#{ERB::Util.url_encode(id)}",
+        icon: 'fa-external-link'
+      }
+    end
+
+    # An NCBI Gene identifier named outright in the defline. Two spellings are
+    # deployed, both from NCBI-derived FASTA:
+    #
+    #   [db_xref=GeneID:66069077]                     SGD's fungal coding sets
+    #   ... aminopeptidase N (LOC100144773), mRNA     FlyBase's non-Drosophila sets
+    #
+    # A LOC number IS the Gene id, so both resolve at /gene/<id>.
+    NCBI_GENE_ID = /\bdb_xref=GeneID:(\d+)|\(LOC(\d+)\)/
+
+    def self.ncbi_gene(*fields)
+      fields = fields.compact.reject(&:empty?)
+      return nil if fields.empty?
+
+      match = fields.filter_map { |field| field.match(NCBI_GENE_ID) }.first
+      return nil unless match
+
+      id = match[1] || match[2]
+      {
+        order: 3,
+        title: "NCBI Gene: #{id}",
+        url: "https://www.ncbi.nlm.nih.gov/gene/#{id}",
+        icon: 'fa-external-link'
+      }
+    end
+
     # RefSeq accession prefixes, and whether each names a protein record.
     # BLAST reports Hit_accession without the version suffix, so the version is
     # optional here even though the FASTA deflines carry it.
@@ -504,6 +691,19 @@ module SequenceServer
         embedded = accession[/(?:N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?/]
         candidate = accession.match?(REFSEQ_ACCESSION) ? accession : embedded
         ncbi_acc = candidate if candidate
+      end
+
+      # FlyBase names the RefSeq record in its cross-reference list rather than
+      # in the accession, which is FlyBase's own FBpp/FBtr id:
+      #
+      #   ID=FBpp0070000; ... dbxref=FlyBase:FBpp0070000,...,REFSEQ:NP_523417,...
+      #
+      # Without this a FlyBase hit carries no NCBI link at all, even though the
+      # defline says exactly which record it is.
+      if !ncbi_acc && hit_title
+        dbxref = hit_title[/\bdbxref=([^;]+)/, 1]
+        refseq = dbxref && dbxref[/\bREFSEQ:((?:N[CGTWZ]|N[MR]|[NXYAZ]P|XM|XR)_\d+(?:\.\d+)?)/, 1]
+        ncbi_acc = refseq if refseq
       end
 
       return nil unless ncbi_acc
