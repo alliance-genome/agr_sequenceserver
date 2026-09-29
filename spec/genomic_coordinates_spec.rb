@@ -107,6 +107,52 @@ module SequenceServer
         end
       end
 
+      # SGD's protein deflines name the gene's location in exactly the same
+      # form as its ORF ones, so a protein hit CAN be placed -- at its gene.
+      # What it can never do is map its own offsets through: those are amino
+      # acids, and offset n is nucleotide 3n-2 of the CDS even before an intron
+      # breaks the correspondence entirely.
+      context 'a protein subject' do
+        it 'is placed at the whole gene, not mapped through' do
+          expect(Links.genomic_hsp_spans(FORWARD, [hsp(1, 105)], true)).to eq [[335, 649]]
+        end
+
+        it 'ignores where in the protein the HSP fell' do
+          expect(Links.genomic_hsp_spans(FORWARD, [hsp(11, 20)], true)).to eq [[335, 649]]
+        end
+
+        it 'covers the whole gene on the reverse strand too' do
+          expect(Links.genomic_hsp_spans(REVERSE, [hsp(1, 40)], true)).to eq [[1807, 2169]]
+        end
+
+        it 'covers the whole gene for a spliced protein' do
+          expect(Links.genomic_hsp_spans(ACT1, [hsp(1, 50)], true)).to eq [[53_260, 54_696]]
+        end
+
+        # The nucleotide path must not have moved: a protein flag of false has
+        # to still give exact placement, or this change would have silently
+        # coarsened every ORF link.
+        it 'leaves the nucleotide path exact' do
+          expect(Links.genomic_hsp_spans(FORWARD, [hsp(11, 20)], false)).to eq [[345, 354]]
+        end
+      end
+
+      # A defline that names no location stays unplaceable whatever the
+      # database type. This is the WormBase case the protein gate was added
+      # for: its protein deflines carry no coordinates, so nothing can be
+      # derived and no link should be offered.
+      context 'a defline naming no location' do
+        let(:wormbase) { 'wormpep=CE09349 gene=WBGene00006789 locus=unc-54 status=Confirmed' }
+
+        it 'yields no ranges' do
+          expect(Links.defline_feature_ranges(wormbase)).to be_nil
+        end
+
+        it 'leaves the HSP coordinates untouched' do
+          expect(Links.genomic_hsp_spans(wormbase, [hsp(1, 1678)], true)).to eq [[1, 1678]]
+        end
+      end
+
       it 'maps every HSP, not only the first' do
         expect(Links.genomic_hsp_spans(FORWARD, [hsp(1, 10), hsp(101, 110)]))
           .to eq [[335, 344], [435, 444]]

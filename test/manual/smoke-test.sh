@@ -332,10 +332,24 @@ cases = [
   # Spliced: offsets do not map linearly, so use the whole feature.
   [ACT1, [hsp(1, 300)],       [[53260, 54696]], "chrVI"],
 ]
+# A protein subject is placed at its whole gene and never mapped through, since
+# the offsets are amino acids. SGD protein deflines carry the same location as
+# the ORF ones, so these hits CAN be placed -- just not precisely.
+protein_cases = [
+  [FWD,  [hsp(1, 105)], [[335, 649]]],
+  [FWD,  [hsp(11, 20)], [[335, 649]]],
+  [REV,  [hsp(1, 40)],  [[1807, 2169]]],
+  [ACT1, [hsp(1, 50)],  [[53260, 54696]]],
+]
 bad = cases.reject do |title, hsps, want_spans, want_ref|
-  L.genomic_hsp_spans(title, hsps) == want_spans &&
+  L.genomic_hsp_spans(title, hsps, false) == want_spans &&
     L.extract_sgd_chromosome(title, "x") == want_ref
 end
+bad += protein_cases.reject { |title, hsps, want| L.genomic_hsp_spans(title, hsps, true) == want }
+# A defline naming no location stays unplaceable -- the WormBase case.
+wb = "wormpep=CE09349 gene=WBGene00006789 locus=unc-54"
+bad << wb unless L.defline_feature_ranges(wb).nil? &&
+                 L.genomic_hsp_spans(wb, [hsp(1, 1678)], true) == [[1, 1678]]
 puts bad.empty? ? "OK" : "MISMATCH: #{bad.length} case(s)"
 ' 2>&1 | tail -1)
   [ "$coord_out" = "OK" ] && ok "SGD feature hits map onto chromosome coordinates" \

@@ -267,12 +267,14 @@ module SequenceServer
     # ...] with start <= end.
     #
     # For a genome assembly the two are already the same thing: the subject IS
-    # the chromosome. For a feature database -- SGD's ORF and RNA sets -- the
-    # subject is one gene, and an HSP's sstart/send are offsets into that gene.
-    # Passing those through unchanged is what sent the browser to the start of
-    # the chromosome: an ACT1 hit covering 1..456 of the CDS opened chrVI:1..456
-    # instead of the ACT1 locus at 53260..54696.
-    def self.genomic_hsp_spans(hit_title, hsps)
+    # the chromosome. For a feature database -- SGD's ORF, RNA and protein sets
+    # -- the subject is one gene, and an HSP's sstart/send are offsets into that
+    # gene. Passing them through unchanged is what sent the browser to the start
+    # of the chromosome: an ACT1 hit covering 1..456 of the CDS opened
+    # chrVI:1..456 instead of the ACT1 locus at 53260..54696.
+    #
+    # Pass protein = true for a hit in a protein database.
+    def self.genomic_hsp_spans(hit_title, hsps, protein = false)
       spans = hsps.map do |hsp|
         hsp['sstart'] > hsp['send'] ? [hsp['send'], hsp['sstart']] : [hsp['sstart'], hsp['send']]
       end
@@ -280,32 +282,35 @@ module SequenceServer
       ranges = defline_feature_ranges(hit_title)
       return spans unless ranges
 
-      if ranges.length == 1
-        from, to = ranges.first
-        if from <= to
-          spans.map { |start, finish| [from + start - 1, from + finish - 1] }
-        else
-          # Reverse strand: offset 1 of the subject is the HIGHER coordinate, so
-          # the offsets run back down the chromosome and the ends swap over.
-          spans.map { |start, finish| [from - finish + 1, from - start + 1] }
-        end
-      else
-        # Spliced: the subject is the joined product, so an offset into it does
-        # not map linearly onto the genome. Point at the whole feature rather
-        # than compute a position that would be confidently wrong.
-        #
-        # Not a rare path -- ACT1, which the shipped SGD example searches, is
-        # "Chr VI from 54377-53260,54696-54687". Note that those ranges are not
-        # in transcription order: ACT1 is on the reverse strand, so its first
-        # exon is the one at the HIGHER coordinates, listed second. Walking them
-        # to place an offset would have to know that, and getting it wrong puts
-        # the highlight in the neighbouring gene, so it is not attempted.
-        #
-        # The unspliced majority still gets exact placement through the branch
-        # above, as do the "with introns" and "1000 bp upstream/downstream" sets,
-        # which are contiguous genomic slices by construction.
+      # Exact placement is possible only for a nucleotide subject occupying one
+      # contiguous range. Two things rule it out:
+      #
+      # Protein. The offsets are amino acids, which are not the feature's units
+      # -- offset n is nucleotide 3n-2 of the CDS -- and the reading frame does
+      # not survive an intron at all.
+      #
+      # Spliced. The subject is the joined product, so an offset into it does
+      # not map linearly onto the genome. Not a rare path: ACT1, which the
+      # shipped SGD example searches, is "Chr VI from 54377-53260,54696-54687",
+      # and those ranges are not in transcription order -- it is on the reverse
+      # strand, so its first exon is the one at the HIGHER coordinates, listed
+      # second. Walking them to place an offset would have to know that, and
+      # getting it wrong puts the highlight in the neighbouring gene.
+      #
+      # Either way the whole feature is used, which is also the honest thing to
+      # show: the hit is somewhere in this gene.
+      if protein || ranges.length > 1
         coordinates = ranges.flatten
-        [[coordinates.min, coordinates.max]]
+        return [[coordinates.min, coordinates.max]]
+      end
+
+      from, to = ranges.first
+      if from <= to
+        spans.map { |start, finish| [from + start - 1, from + finish - 1] }
+      else
+        # Reverse strand: offset 1 of the subject is the HIGHER coordinate, so
+        # the offsets run back down the chromosome and the ends swap over.
+        spans.map { |start, finish| [from - finish + 1, from - start + 1] }
       end
     end
 
@@ -371,7 +376,7 @@ module SequenceServer
       blast_accession
     end
 
-    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession, hit_title = nil, database_path = nil)
+    def self.jbrowse(genome_browser_metadata, filepath_parts, hsps, accession, hit_title = nil, database_path = nil, protein = false)
         assembly = genome_browser_metadata["assembly"]
         if genome_browser_metadata["type"] == "jbrowse"
             subfeatures = []
@@ -379,7 +384,7 @@ module SequenceServer
             features_start = -1
             features_end = -1
             # Limit to first 5 HSPs to keep URLs manageable
-            limited_spans = Links.genomic_hsp_spans(hit_title, hsps).first(5)
+            limited_spans = Links.genomic_hsp_spans(hit_title, hsps, protein).first(5)
             for span in limited_spans
               # Use hit title if available, otherwise fall back to accession
               refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
@@ -455,7 +460,7 @@ module SequenceServer
             features_end = -1
             count = 1
             # Limit to first 5 HSPs to keep URLs manageable
-            limited_spans = Links.genomic_hsp_spans(hit_title, hsps).first(5)
+            limited_spans = Links.genomic_hsp_spans(hit_title, hsps, protein).first(5)
             for span in limited_spans
               refname = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
               sequence_start, sequence_end = span
