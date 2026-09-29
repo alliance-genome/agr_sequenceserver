@@ -317,6 +317,39 @@ test.describe.serial('Sequence viewer', () => {
             .toBe(false);
     });
 
+    // The whole chain, on the search a curator actually runs. Before this,
+    // ORF_coding hits had no genome browser link at all; adding one naively
+    // would have pointed it at chrVI:1..300, because an HSP against a CDS is
+    // measured in offsets into that CDS, not positions on the chromosome.
+    test('the JBrowse link lands on the ACT1 locus, not the start of the chromosome', async () => {
+        const links = await hitLinks(page, S.hitById(1, 1));
+        const jbrowse = links.find((l) => l.text === 'JBrowse');
+        expect(jbrowse,
+            `no JBrowse link on an ORF_coding hit, links were ${JSON.stringify(links.map((l) => l.text))}`)
+            .toBeTruthy();
+
+        const { seqName, loc } = jbrowseLocus(jbrowse.href);
+        expect(seqName, `loc= was "${loc}"`).toBe('chrVI');
+
+        // ACT1 is chrVI:53260..54696. The view is padded, so assert the window
+        // contains the locus rather than equals it -- but it must be a window
+        // around the gene, not one anchored at the start of the chromosome.
+        const [start, end] = loc.split(':')[1].split('..').map(Number);
+        expect(start, `view starts at ${start}; an untranslated CDS offset would be near 1`)
+            .toBeGreaterThan(40000);
+        expect(end).toBeLessThan(70000);
+
+        // The highlight is the feature itself, so it can be exact.
+        const refNames = jbrowseHighlightRefNames(jbrowse.href);
+        expect(refNames.length).toBeGreaterThan(0);
+        for (const name of refNames) expect(name).toBe('chrVI');
+
+        const sessionTracks = JSON.parse(new URL(jbrowse.href).searchParams.get('sessionTracks'));
+        const feature = sessionTracks[0].adapter.features[0];
+        expect(feature.start, `highlight starts at ${feature.start}`).toBeGreaterThanOrEqual(53260);
+        expect(feature.end, `highlight ends at ${feature.end}`).toBeLessThanOrEqual(54696);
+    });
+
     test('every Alliance gene link on the page is a well-formed SGD CURIE', async () => {
         const hrefs = await page.locator('div.hit a[href*="alliancegenome.org/gene/"]')
             .evaluateAll((as) => as.map((a) => a.getAttribute('href')));
