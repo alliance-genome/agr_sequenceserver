@@ -1,3 +1,4 @@
+require 'digest'
 require 'json'
 require 'tilt/erb'
 require 'sinatra/base'
@@ -724,9 +725,51 @@ module SequenceServer
       }
     end
 
+    # Content digests for the asset URLs, keyed on path. Assets do not change
+    # under a running container, so this is computed once; the stat guard below
+    # keeps it correct when they do, as in development.
+    ASSET_VERSIONS = {}
+    ASSET_VERSIONS_MUTEX = Mutex.new
+
     helpers do
       def root_path_prefix
         settings.root_path_prefix.to_s
+      end
+
+      # A short digest of an asset's contents, to key its URL on.
+      #
+      # The bundles are served from fixed paths with no Cache-Control and no
+      # ETag, so a browser has nothing to go on but heuristic freshness and can
+      # hold a stale copy for hours. The server answers If-Modified-Since
+      # correctly; the browser simply does not ask. A CSS change deployed to dev
+      # was invisible for exactly this reason.
+      #
+      # Keying the URL on the content means a changed file is a changed URL,
+      # which no cache can serve stale, while an unchanged one keeps its URL and
+      # stays cached.
+      #
+      # This replaces SequenceServer::VERSION, which was doing the job on some
+      # of these URLs but cannot: it is the upstream release number, and does
+      # not move when the fork rebuilds its bundles. It had sat at 3.1.4 across
+      # every deployment the fork has made.
+      def asset_version(relative_path)
+        path = File.join(settings.root, 'public', relative_path)
+        stat = File.stat(path)
+        signature = [stat.mtime.to_i, stat.size]
+
+        ASSET_VERSIONS_MUTEX.synchronize do
+          cached = ASSET_VERSIONS[path]
+          return cached[:digest] if cached && cached[:signature] == signature
+
+          digest = Digest::SHA256.file(path).hexdigest[0, 12]
+          ASSET_VERSIONS[path] = { signature: signature, digest: digest }
+          digest
+        end
+      rescue SystemCallError, IOError => e
+        # A missing or unreadable asset must not take the whole page down. Fall
+        # back to the release number, which is what these URLs carried before.
+        logger.warn "Could not digest asset #{relative_path}: #{e.message}"
+        SequenceServer::VERSION
       end
     end
 
