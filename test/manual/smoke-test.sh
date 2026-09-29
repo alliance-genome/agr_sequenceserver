@@ -261,6 +261,54 @@ puts bad.empty? ? "OK" : "MISMATCH: #{bad.map(&:first).join(", ")}"
   [ "$ncbi_out" = "OK" ] && ok "NCBI links: protein/nuccore routing + no links on MOD-native ids" \
                          || bad "NCBI link generation" "$ncbi_out"
 
+  # Gene linkouts. Each case is (title, id) as BLAST hands it over -- split at
+  # the first space -- because which half carries the gene identifier differs by
+  # MOD, and passing the whole defline would hide that.
+  gene_out=$(docker exec "$TEST_CONTAINER" ruby -e '
+require "/sequenceserver/lib/sequenceserver/links"
+L = SequenceServer::Links
+cases = [
+  # WormBase names the gene in the title, with an optional locus symbol.
+  ["wormpep=CE32785 gene=WBGene00007064 locus=rga-9", "F11C3.3", "WB:WBGene00007064", "Alliance: rga-9"],
+  ["wormpep=CE32090 gene=WBGene00007063 status=Confirmed", "F11C3.2", "WB:WBGene00007063", "Alliance: WBGene00007063"],
+  # Non-elegans gene names are not WBGene ids and have no Alliance page.
+  ["transcript=CSP29.g1.t1 gene=CSP29.g1", "CSP29.g1.t1", "NIL", "NIL"],
+  # FlyBase: the parent gene, with the isoform suffix stripped off the symbol.
+  ["type=polypeptide; ID=FBpp0070000; name=Nep3-PA; parent=FBgn0031081,FBtr0070000", "FBpp0070000", "FB:FBgn0031081", "Alliance: Nep3"],
+  # An intergenic region is named after a flanking gene without being it.
+  ["_intergenic_FBgn0259837 type=intergenic_region", "2111", "NIL", "NIL"],
+  # SGD leads with the symbol, or the systematic name when unnamed.
+  ["PAU8 SGDID:S000002142, Chr I from 2169-1807", "PAU8_mRNA", "SGD:S000002142", "Alliance: PAU8"],
+  # ZFIN puts the gene id in Hit_id, and the symbol in the title.
+  ["itsn1|OTTDARP00000003616 BUSM1-173A8.1-001", "tpe|OTTDART00000003965|OTTDARG00000003778|ZDB-GENE-030616-226", "ZFIN:ZDB-GENE-030616-226", "Alliance: itsn1"],
+  # A clone name in the symbol position must not be shown as a symbol.
+  ["CH211-107M8.1-002|OTTDARP00000028185", "tpe|OTTDART00000042346|OTTDARG00000030557|ZDB-GENE-090313-221", "ZFIN:ZDB-GENE-090313-221", "Alliance: ZDB-GENE-090313-221"],
+  # A transcript id is not a gene id.
+  ["CH211-107M8.2-001|OTTDARP00000028180", "tpe|OTTDART00000035016|OTTDARG00000026398|ZDB-TSCRIPT-090929-15699", "NIL", "NIL"],
+  # Nothing gene-like at all.
+  ["Rattus norvegicus strain BN/NHsdMcwi chromosome 1, GRCr8", "NC_086019.1", "NIL", "NIL"],
+]
+bad = cases.reject do |title, id, want_curie, want_label|
+  r = L.agr_gene_from_defline(title, id, nil)
+  curie = r ? r[:url].sub("https://www.alliancegenome.org/gene/", "") : "NIL"
+  label = r ? r[:title] : "NIL"
+  curie == want_curie && label == want_label
+end
+gene_cases = [
+  ["[locus_tag=E1B28_000001] [db_xref=GeneID:66069077]", "gene/66069077"],
+  ["Acyrthosiphon pisum aminopeptidase N (LOC100144773), mRNA", "gene/100144773"],
+  ["wormpep=CE32785 gene=WBGene00007064 locus=rga-9", "NIL"],
+]
+bad += gene_cases.reject do |title, want|
+  r = L.ncbi_gene(title)
+  got = r ? r[:url].sub("https://www.ncbi.nlm.nih.gov/", "") : "NIL"
+  got == want
+end
+puts bad.empty? ? "OK" : "MISMATCH: #{bad.length} case(s)"
+' 2>&1 | tail -1)
+  [ "$gene_out" = "OK" ] && ok "Gene linkouts: Alliance CURIEs per MOD + NCBI Gene ids" \
+                         || bad "gene link generation" "$gene_out"
+
   # Both defline styles must resolve: the NCBI-style titles in the fungal set
   # (R64-5-1f) and the [chromosome=XVI] tags in the main set (R64-5-1m).
   sgd_out=$(docker exec "$TEST_CONTAINER" ruby -e '

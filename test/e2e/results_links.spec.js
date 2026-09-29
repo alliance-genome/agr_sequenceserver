@@ -17,8 +17,9 @@
 //       -> "Sequence" is DISABLED ("Sequence too long"): a yeast chromosome is
 //          270kb, so the viewer refuses it. Not a bug; see the assertion below.
 //   SGD R64-5-1m / ORF_coding (nucleotide, what the ACT1 example selects)
-//       -> NO linkouts at all: SGD-native deflines (YFL039C ...) carry no
-//          RefSeq accession, so links.rb correctly declines to invent one.
+//       -> NO NCBI link: SGD-native deflines (YFL039C ...) carry no RefSeq
+//          accession, so links.rb correctly declines to invent one.
+//       -> DOES carry an Alliance gene link, read off the SGDID: in the defline.
 //       -> short sequences, so "Sequence" is enabled. This is where the
 //          sequence-viewer spec belongs.
 //   SGD R64-5-1f / S_cerevisiae_Protein_Sequences (protein)
@@ -288,6 +289,44 @@ test.describe.serial('Sequence viewer', () => {
 
     test.afterAll(async () => {
         if (page) await page.close();
+    });
+
+    // Piggybacks on the search above rather than running another BLAST.
+    //
+    // ORF_coding is the case the gene linkout was added for: its hits have no
+    // RefSeq accession and no genome_browser entry, so before this they arrived
+    // with no linkouts whatsoever, even though every defline names the gene.
+    test('SGD hits carry an Alliance gene link built from their SGDID', async () => {
+        const links = await hitLinks(page, S.hitById(1, 1));
+        const alliance = links.find((l) => l.text.startsWith('Alliance:'));
+        expect(alliance,
+            `no Alliance link on the top hit, links were ${JSON.stringify(links.map((l) => l.text))}`)
+            .toBeTruthy();
+
+        // The CURIE must be SGD's, and an S-number -- not the systematic name,
+        // which is what the label shows for an unnamed ORF and would resolve to
+        // nothing as a CURIE.
+        const url = new URL(alliance.href);
+        expect(url.hostname).toBe('www.alliancegenome.org');
+        expect(url.pathname).toMatch(/^\/gene\/SGD:S\d+$/);
+
+        // Still no NCBI link here: these deflines carry no RefSeq accession, and
+        // inventing one is the regression this guards.
+        expect(links.some((l) => l.text.startsWith('NCBI')),
+            `SGD-native deflines must not produce an NCBI link, got ${JSON.stringify(links.map((l) => l.text))}`)
+            .toBe(false);
+    });
+
+    test('every Alliance gene link on the page is a well-formed SGD CURIE', async () => {
+        const hrefs = await page.locator('div.hit a[href*="alliancegenome.org/gene/"]')
+            .evaluateAll((as) => as.map((a) => a.getAttribute('href')));
+        // Require real coverage: an empty list would make the loop below a no-op.
+        expect(hrefs.length, 'expected Alliance gene links on the ORF hits').toBeGreaterThan(1);
+
+        for (const href of hrefs) {
+            expect(new URL(href).pathname, `bad Alliance gene URL: ${href}`)
+                .toMatch(/^\/gene\/SGD:S\d+$/);
+        }
     });
 
     test('clicking "Sequence" opens the modal and renders the real sequence', async () => {

@@ -39,10 +39,17 @@ module SequenceServer
       def links
         database_config = query.report.instance_variable_get(:@env_config)
 
-        # If no environment config, still try NCBI link
+        # The links that come from the defline alone need no environment config
+        # and no database match, so they are available even on the paths below
+        # that give up early.
+        defline_links = [
+          Links.ncbi_link(accession, title, dbtype),
+          Links.agr_gene_from_defline(title, id, accession),
+          Links.ncbi_gene(title, id, accession)
+        ].compact
+
         if database_config.nil? || database_config.empty?
-          ncbi = Links.ncbi_link(accession, title, dbtype)
-          return ncbi ? [ncbi] : []
+          return defline_links.sort_by { |link| [link[:order], link[:title]] }
         end
 
         hit_db = nil
@@ -58,7 +65,7 @@ module SequenceServer
         end
 
         hit_db ||= report.querydb.first
-        return [] if hit_db.nil?
+        return defline_links.sort_by { |link| [link[:order], link[:title]] } if hit_db.nil?
 
         database_filename = File.basename(hit_db.name)
         fasta_file_basename = File.basename(database_filename, File.extname(database_filename))
@@ -77,10 +84,7 @@ module SequenceServer
         # that base pair.
         protein_hit = hit_db.type.to_s == 'protein'
 
-        links = []
-
-        ncbi = Links.ncbi_link(accession, title, dbtype)
-        links.push(ncbi) if ncbi
+        links = defline_links.dup
 
         for reference_sequence in database_config
           uri_matches = false
@@ -124,14 +128,26 @@ module SequenceServer
                     end
                 end
                 links.compact!
-                return links.sort_by { |link| [link[:order], link[:title]] }
+                return dedupe_links(links)
              else
-               return links
+               return dedupe_links(links)
              end
              break
           end
         end
-        return links
+        return dedupe_links(links)
+      end
+
+      # One link per destination, in display order.
+      #
+      # The Alliance gene page can be reached two ways: read off the defline, or
+      # looked up from the hit's coordinates against a gene_track. Where a
+      # database supports both they name the same gene, and the hit would
+      # otherwise carry the link twice. Keeping the first occurrence keeps the
+      # coordinate-derived label, which carries the gene's display name.
+      def dedupe_links(links)
+        links.compact.uniq { |link| link[:url] }
+             .sort_by { |link| [link[:order], link[:title]] }
       end
 
       # Returns the database type (nucleotide or protein).
