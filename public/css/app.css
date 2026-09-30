@@ -939,3 +939,77 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
 @media print {
   #alliance-nav { display: none; }
 }
+
+/* Attribution and data version, at the right of the header.
+ *
+ * Previously two <strong>s, the second at 1.5em and floated right, which made
+ * the credit and the release number the loudest type on the page -- heavier
+ * than the name of the service. The float also meant the block's height did
+ * not depend on its content, so it drifted against the logos.
+ *
+ * Now a flex column: the credit recedes into the neutral ramp, and the data
+ * version stays legible because it is the one thing here a curator acts on. */
+
+#header .agr-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 40px;
+}
+
+#header .agr-poweredby {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6C757D;
+  font-size: 0.8125rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+#header .agr-poweredby a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: inherit;
+  text-decoration: none;
+}
+
+#header .agr-poweredby a:hover { text-decoration: underline; }
+
+#header .agr-poweredby img {
+  height: 1.25rem;
+  width: auto;
+}
+
+#header .agr-dataversion {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+#header .agr-dv-label {
+  color: #6C757D;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#header .agr-dv-value {
+  color: #212529;
+  font-size: 1rem;
+  font-weight: 600;
+  /* Release strings line up when several are compared side by side. */
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  #header .agr-meta {
+    align-items: flex-start;
+    margin-left: 0;
+    padding-left: 0;
+  }
+}

@@ -179,6 +179,18 @@ function readPageFacts(page, selectors) {
 
         return {
             headerText: text(document.querySelector(sel.header)),
+            // Read from the attribute, not from the header's prose: the label
+            // is styled (uppercased, colon dropped) and a restyle should not be
+            // able to fail a branding assertion. The prose form is kept as a
+            // fallback so this spec passes against a build serving the older
+            // chrome as well as one serving the new.
+            dataVersion: (() => {
+                const el = document.querySelector('[data-data-version]');
+                if (el) return el.dataset.dataVersion;
+                const m = (document.querySelector(sel.header) || document.body)
+                    .innerText.match(/Data Version:\s*(\S+)/i);
+                return m ? m[1] : null;
+            })(),
             // naturalWidth is 0 for an <img> whose src failed to load, so this
             // distinguishes "logo tag present" from "logo actually rendered".
             logo: logo ? { src: logo.src, naturalWidth: logo.naturalWidth } : null,
@@ -231,9 +243,10 @@ test.describe('cross-MOD: every deployment boots and renders its own databases',
 
             // --- branding is this MOD's, not a neighbour's ---------------------
             expect(facts.headerText).toContain(mod.heading);
-            expect(facts.headerText).toContain(`Data Version: ${mod.dataVersion}`);
+            expect(facts.dataVersion,
+                'the header must publish the data version it is serving').toBe(mod.dataVersion);
             // "Powered by <semver>" is part of the shipped header chrome.
-            expect(facts.headerText).toMatch(/Powered by\s+\d+\.\d+\.\d+/);
+            expect(facts.headerText).toMatch(/Powered by\s+[\s\S]{0,40}?\d+\.\d+\.\d+/);
             // No other MOD's name may appear in this MOD's header.
             for (const other of MODS) {
                 if (other.heading === mod.heading) continue;
