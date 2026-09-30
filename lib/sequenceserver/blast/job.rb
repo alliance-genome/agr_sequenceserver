@@ -26,9 +26,10 @@ module SequenceServer
             @qfile     = store('query.fa', params[:sequence])
             @databases = Database[params[:databases]]
             @advanced  = params[:advanced].to_s.strip
+            # Set before #defaults is called: the thread count is no longer
+            # baked into the options string, so #command reads it from here.
+            @num_threads = params[:num_threads] || config[:num_threads]
             @options   = @advanced + defaults
-            # The following params are for analytics only
-            @num_threads = config[:num_threads]
             @query_length = calculate_query_size
             @number_of_query_sequences = calculate_number_of_sequences
             @databases_ncharacters_total = calculate_databases_ncharacters_total
@@ -61,9 +62,16 @@ module SequenceServer
 
       # Returns the command that will be executed. Job super class takes care
       # of actual execution.
+      # Not memoised. It used to be, which cached -num_threads from whichever
+      # job built the command first and reused that value for every later one.
+      # The thread count now comes from @num_threads, set per job, so caching
+      # the string would reintroduce exactly that.
+      #
+      # Taken from upstream: wurmlab/sequenceserver a3d047ac.
       def command
-        @command ||= "#{method} -db '#{databases.map(&:name).join(' ')}'" \
-                     " -query '#{qfile}' #{options}"
+        "#{method} -db '#{databases.map(&:name).join(' ')}'" \
+          " -query '#{qfile}' #{options}" \
+          " -num_threads #{@num_threads || config[:num_threads]}"
       end
 
       def raise!
@@ -116,8 +124,10 @@ module SequenceServer
         validate_options params[:advanced]
       end
 
+      # -num_threads moved to #command so that it follows @num_threads rather
+      # than being baked into the options string at construction time.
       def defaults
-        " -outfmt '11 qcovs qcovhsp' -num_threads #{config[:num_threads]}"
+        " -outfmt '11 qcovs qcovhsp'"
       end
 
       def validate_method(method)
