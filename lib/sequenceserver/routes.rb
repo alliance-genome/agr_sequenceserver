@@ -540,10 +540,17 @@ module SequenceServer
                            end
 
       # If error object has a more_info method, use that. If the error does not
-      # have more_info, use backtrace.join("\n") as more_info.
+      # have more_info, use backtrace.join("\n") as more_info -- but only
+      # outside production, where a backtrace in the response body hands a
+      # visitor the source paths and gem versions of the host.
+      #
+      # An error class that defines more_info is saying what it wants shown, so
+      # that branch is deliberately not gated.
+      #
+      # Taken from upstream: wurmlab/sequenceserver 6c06cbbc.
       if error.respond_to? :more_info
         error_data[:more_info] = error.more_info
-      elsif error.respond_to? :backtrace
+      elsif error.respond_to?(:backtrace) && !settings.production?
         error_data[:more_info] = error.backtrace.join("\n")
       end
 
