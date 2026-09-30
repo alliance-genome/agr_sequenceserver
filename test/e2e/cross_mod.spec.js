@@ -59,7 +59,7 @@ const MODS = [
     {
         label: 'WormBase',
         path: '/blast/WB/WS298/',
-        heading: 'Alliance WormBase BLAST',
+        heading: 'WormBase BLAST',
         dataVersion: 'WS298',
         trees: ['nucleotide_database_tree', 'protein_database_tree'],
         databaseFloor: 50,
@@ -72,7 +72,7 @@ const MODS = [
     {
         label: 'FlyBase',
         path: '/blast/FB/FB2026_03/',
-        heading: 'Alliance FlyBase BLAST',
+        heading: 'FlyBase BLAST',
         dataVersion: 'FB2026_03',
         trees: ['nucleotide_database_tree', 'protein_database_tree'],
         databaseFloor: 150,
@@ -82,7 +82,7 @@ const MODS = [
     {
         label: 'SGD (main)',
         path: '/blast/SGD/R64-5-1m/',
-        heading: 'Alliance SGD BLAST',
+        heading: 'SGD BLAST',
         dataVersion: 'R64-5-1m',
         trees: ['nucleotide_database_tree', 'protein_database_tree'],
         databaseFloor: 150,
@@ -92,7 +92,7 @@ const MODS = [
     {
         label: 'SGD (fungal)',
         path: '/blast/SGD/R64-5-1f/',
-        heading: 'Alliance SGD Fungal BLAST',
+        heading: 'SGD Fungal BLAST',
         dataVersion: 'R64-5-1f',
         trees: ['nucleotide_database_tree', 'protein_database_tree'],
         databaseFloor: 250,
@@ -105,7 +105,7 @@ const MODS = [
     {
         label: 'RGD',
         path: '/blast/RGD/8.3.0/',
-        heading: 'Alliance RGD BLAST',
+        heading: 'RGD BLAST',
         dataVersion: '8.3.0',
         // RGD, ZFIN and ALLIANCE ship nucleotide databases only, so the protein
         // tree is not rendered at all. Asserting the exact tree list keeps a
@@ -118,7 +118,7 @@ const MODS = [
     {
         label: 'ZFIN',
         path: '/blast/ZFIN/zfintest/',
-        heading: 'Alliance ZFIN BLAST',
+        heading: 'ZFIN BLAST',
         dataVersion: 'zfintest',
         trees: ['nucleotide_database_tree'],
         databaseFloor: 5,
@@ -129,8 +129,9 @@ const MODS = [
         label: 'ALLIANCE',
         path: '/blast/ALLIANCE/prod/',
         // The Alliance-wide deployment has no member name to interpolate, so the
-        // heading collapses to "Alliance BLAST".
-        heading: 'Alliance BLAST',
+        // heading collapses to the bare word. Every other heading ends in it, so
+        // the cross-MOD check below skips this one as a substring of the rest.
+        heading: 'BLAST',
         dataVersion: 'prod',
         trees: ['nucleotide_database_tree'],
         databaseFloor: 1,
@@ -179,6 +180,10 @@ function readPageFacts(page, selectors) {
 
         return {
             headerText: text(document.querySelector(sel.header)),
+            // The SequenceServer attribution used to sit in the page header and
+            // now sits in the colophon above the footer. Read both, so this spec
+            // states where it expects to find it rather than scanning the body.
+            colophonText: text(document.querySelector('.agr-colophon')),
             // Read from the attribute, not from the header's prose: the label
             // is styled (uppercased, colon dropped) and a restyle should not be
             // able to fail a branding assertion. The prose form is kept as a
@@ -245,14 +250,18 @@ test.describe('cross-MOD: every deployment boots and renders its own databases',
             expect(facts.headerText).toContain(mod.heading);
             expect(facts.dataVersion,
                 'the header must publish the data version it is serving').toBe(mod.dataVersion);
-            // "Powered by <semver>" is part of the shipped header chrome.
-            expect(facts.headerText).toMatch(/Powered by\s+[\s\S]{0,40}?\d+\.\d+\.\d+/);
+            // "Powered by <semver>" is part of the shipped chrome. It moved from
+            // the header to the colophon when the header was cut back to the
+            // service name and the data version.
+            expect(facts.colophonText).toMatch(/Powered by\s+[\s\S]{0,40}?\d+\.\d+\.\d+/);
+            expect(facts.headerText,
+                'the attribution belongs in the colophon, not the header').not.toMatch(/Powered by/);
             // No other MOD's name may appear in this MOD's header.
             for (const other of MODS) {
                 if (other.heading === mod.heading) continue;
-                // "Alliance BLAST" is a prefix of nothing, but "Alliance SGD BLAST"
-                // is a distinct string from "Alliance SGD Fungal BLAST" -- compare
-                // against the heading only when it is not a substring relationship.
+                // "BLAST" is a suffix of every other heading, and "SGD BLAST" is
+                // a distinct string from "SGD Fungal BLAST" -- compare against the
+                // heading only when it is not a substring relationship.
                 if (mod.heading.includes(other.heading) || other.heading.includes(mod.heading)) continue;
                 expect(facts.headerText,
                     `${mod.label} header shows ${other.label}'s branding`).not.toContain(other.heading);

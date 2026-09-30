@@ -1,22 +1,96 @@
 <%
   # Colophon and footer.
   #
-  # What used to sit here was one centred column holding a yellow warning box, a
-  # "please cite" line and two full citations, all at the same weight. The
-  # caveat and the credits competed, and a 24-author citation ran the width of
-  # the page.
+  # The footer is alliancegenome.org's own footer, reproduced: their light logo
+  # and the same six site-map groups, on their blue, in Lato. Read off their
+  # live site on 2026-09-30 -- the group order, the link order and the labels
+  # are theirs, not ours, so a visitor leaves this page into the same set of
+  # destinations they would have from any other Alliance page.
   #
-  # Now: the caveat stands alone as a caveat, the citations become a definition
-  # list of two entries each anchored by its DOI, and the footer is the same bar
-  # as the top nav so the page closes the way it opened.
+  # Two consequences worth knowing. This is a static copy: when they change
+  # their footer, this does not follow, and nobody currently owns re-checking
+  # it. And the arrow marks the links that leave the Alliance site entirely,
+  # which is their convention, so it is applied to the same links they apply
+  # it to rather than to every absolute URL.
+  #
+  # Above it sits the colophon, which carries what is ours rather than theirs:
+  # the attribution, the in-development caveat and the two citations.
+  alliance_footer = [
+    ['Data and Tools', [
+      ['Downloads',        '/downloads',                  false],
+      ['API',              '/swagger-ui',                 true],
+      ['AllianceMine',     '/bluegenes/alliancemine',     true],
+      ['JBrowse 2',        '/jbrowse2/',                  true],
+      ['Disease Portal',   '/disease-portal',             false],
+      ['Ontology Browser', '/ontology/disease',           false],
+      ['SimpleMine',       '/agr_simplemine.cgi',         true],
+      ['Submit Data',      '/submit-data',                false],
+      ['Textpresso',       '/textpresso',                 false],
+      ['BLAST Service',    '/blastservice',               false],
+      ['Tools',            '/prototypes',                 false],
+      ['Pavi',             '/pavi',                       true]
+    ]],
+    ['Members', [
+      ['FlyBase',   '/members/flybase',  false],
+      ['MGD',       '/members/mgd',      false],
+      ['RGD',       '/members/rgd',      false],
+      ['SGD',       '/members/sgd',      false],
+      ['WormBase',  '/members/wormbase', false],
+      ['Xenbase',   '/members/xenbase',  false],
+      ['ZFIN',      '/members/zfin',     false],
+      ['GOC',       '/members/goc',      false]
+    ]],
+    ['News', [
+      ['News / Events',  '/news',           false],
+      ['Release Notes',  '/release-notes',  false],
+      ['Event Calendar', '/event-calendar', false]
+    ]],
+    ['About', [
+      ['About Us',           '/about-us',                     false],
+      ['Funding',            '/funding',                      false],
+      ['Publications',       '/publications',                 false],
+      ['Organization',       '/organization-and-governance',  false],
+      ['Licensing, Privacy', '/privacy-warranty-licensing',   false]
+    ]],
+    ['Help', [
+      ['FAQ',       '/faq',       false],
+      ['Glossary',  '/glossary',  false],
+      ['Tutorials', '/tutorials', false],
+      ['User Docs', '/help',      false]
+    ]],
+    ['Community', [
+      ['Alliance Users', 'https://community.alliancegenome.org/categories',        true],
+      ['Facebook',       'https://www.facebook.com/AllianceOfGenomeResources',     true],
+      ['Mastodon',       'https://genomic.social/@AllianceGenome',                 true],
+      ['Bluesky',        'https://bsky.app/profile/alliancegenome.bsky.social',    true],
+      ['Github',         'https://github.com/alliance-genome',                     true],
+      ['Contact Us',     '/contact-us',                                            false],
+      ['Cite Us',        '/cite-us',                                               false]
+    ]]
+  ]
+
+  agr = 'https://www.alliancegenome.org'
 %>
 <section class="agr-colophon print:break-inside-avoid" aria-labelledby="agr-colophon-h">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
-    <div class="agr-notice" role="note">
-      <span class="agr-notice-tag">In development</span>
-      <p>JBrowse genome browser links may not resolve correctly for every
-      organism yet. The rest of the service is unaffected.</p>
+    <%# Attribution lives here rather than in the page header. It is a credit,
+        and next to the name of the service and the data version it was
+        competing with both. %>
+    <div class="agr-colophon-top">
+      <div class="agr-poweredby">
+        <span>Powered by</span>
+        <a href="https://sequenceserver.com" target="_blank" rel="noopener">
+          <img src="/blast/sequenceserver_logo.webp" alt="SequenceServer" width="1620" height="213">
+          <span class="agr-ss-version"><%= SequenceServer::VERSION %></span>
+        </a>
+      </div>
+
+      <div class="agr-notice" role="note">
+        <span class="agr-notice-tag">In development</span>
+        <p>JBrowse genome browser links may not resolve correctly for every
+        organism yet. The rest of the service is unaffected.</p>
+      </div>
     </div>
 
     <h2 id="agr-colophon-h" class="agr-colophon-h">If you use this service, please cite</h2>
@@ -73,14 +147,31 @@
 
 <footer id="alliance-footer" class="print:hidden">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-    <div class="agr-nav-row">
-      <a class="agr-nav-brand" href="https://www.alliancegenome.org">Alliance of Genome Resources</a>
-      <span class="agr-nav-sep" aria-hidden="true">/</span>
-      <span class="agr-nav-current">BLAST</span>
-      <span class="agr-nav-end">
-        <a class="agr-nav-link" href="https://www.alliancegenome.org/contact-us">Contact Us</a>
-        <a class="agr-nav-link" href="https://sequenceserver.com">SequenceServer <%= SequenceServer::VERSION %></a>
-      </span>
+    <div class="agr-footer-row">
+      <div class="agr-footer-logo">
+        <a href="<%= agr %>">
+          <img src="/blast/logos/alliance_logo_light.png"
+               alt="Alliance of Genome Resources" width="842" height="200">
+        </a>
+      </div>
+
+      <nav class="agr-sitemap" aria-label="Alliance of Genome Resources site map">
+        <% alliance_footer.each do |heading, entries| %>
+          <div class="agr-sitemap-group">
+            <span class="agr-sitemap-h"><%= heading %></span>
+            <ul>
+              <% entries.each do |label, href, external| %>
+                <li>
+                  <a href="<%= href.start_with?('http') ? href : agr + href %>"
+                     <%= 'target="_blank" rel="noopener noreferrer"' if external %>><%= label %><%
+                    if external %><i class="fa-solid fa-arrow-up-right-from-square agr-ext" aria-hidden="true"></i><% end
+                  %></a>
+                </li>
+              <% end %>
+            </ul>
+          </div>
+        <% end %>
+      </nav>
     </div>
   </div>
 </footer>

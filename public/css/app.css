@@ -921,75 +921,57 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
   #alliance-nav { display: none; }
 }
 
-/* Attribution and data version, at the right of the header.
+/* The data version, at the right of the header.
  *
- * Previously two <strong>s, the second at 1.5em and floated right, which made
- * the credit and the release number the loudest type on the page -- heavier
- * than the name of the service. The float also meant the block's height did
- * not depend on its content, so it drifted against the logos.
+ * This block held the SequenceServer credit as well, and the two competed. The
+ * credit moved to the colophon, so the version now has the block to itself and
+ * is set as the figure it is: large, in ink, with its label underneath rather
+ * than beside it. A curator reading this page is checking one thing, and this
+ * is it.
  *
- * Now a flex column: the credit recedes into the neutral ramp, and the data
- * version stays legible because it is the one thing here a curator acts on. */
+ * Kept off a float. The earlier 1.5em floated <strong> did not contribute its
+ * height to the row, so it drifted against the logos. */
 
 #header .agr-meta {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
   margin-left: auto;
   padding-left: 40px;
 }
 
-#header .agr-poweredby {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #6C757D;
-  font-size: 0.8125rem;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-#header .agr-poweredby a {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: inherit;
-  text-decoration: none;
-}
-
-#header .agr-poweredby a:hover { text-decoration: underline; }
-
-#header .agr-poweredby img {
-  height: 1.25rem;
-  width: auto;
-}
-
 #header .agr-dataversion {
   display: flex;
-  align-items: baseline;
-  gap: 7px;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
   white-space: nowrap;
-}
-
-#header .agr-dv-label {
-  color: #6C757D;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 #header .agr-dv-value {
   color: #212529;
-  font-size: 1rem;
+  font-size: 1.575rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   /* Release strings line up when several are compared side by side. */
   font-variant-numeric: tabular-nums;
 }
 
+#header .agr-dv-label {
+  margin-top: 2px;
+  color: #6C757D;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 @media (max-width: 900px) {
-  #header .agr-meta {
+  #header .agr-meta,
+  #header .agr-dataversion {
     align-items: flex-start;
+  }
+  #header .agr-meta {
     margin-left: 0;
     padding-left: 0;
   }
@@ -1005,7 +987,6 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
  * ====================================================================== */
 
 #alliance-nav,
-#alliance-footer,
 #header {
   font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
   /* alliancegenome.org's measured body size. */
@@ -1014,7 +995,6 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
 }
 
 #alliance-nav    { background: #2598C5; color: #FFFFFF; }
-#alliance-footer { background: #212529; color: #FFFFFF; margin-top: 0; }
 
 .agr-nav-row {
   display: flex;
@@ -1056,9 +1036,7 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
 .agr-nav-sep     { opacity: 0.5; }
 .agr-nav-current { font-weight: 700; white-space: nowrap; }
 
-#alliance-nav a:focus-visible,
-#alliance-footer a:focus-visible,
-#alliance-footer .agr-more:focus-visible {
+#alliance-nav a:focus-visible {
   outline: 2px solid #FFFFFF;
   outline-offset: 2px;
 }
@@ -1209,4 +1187,137 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
 
 @media (max-width: 47.5rem) {
   #header .agr-meta { align-items: flex-start; }
+}
+
+/* ====================================================================== *
+ * Footer: alliancegenome.org's own.
+ *
+ * Their light logo and their six site-map groups, on their blue, at their
+ * measured metrics (Lato, 0.9rem/1.5, bold inline group headings, lists
+ * indented 16px). Their site lays the groups out as CSS multi-column, so
+ * this does too -- a grid would reflow the groups into a different order
+ * at the same widths.
+ * ====================================================================== */
+
+#alliance-footer {
+  background: #2598C5;
+  color: #FFFFFF;
+  font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 28px 0 32px;
+}
+
+.agr-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px 32px;
+}
+
+.agr-footer-logo { flex: 0 0 auto; }
+
+.agr-footer-logo img {
+  display: block;
+  /* Their footer renders it at 50px tall. */
+  height: 50px;
+  width: auto;
+}
+
+.agr-sitemap {
+  flex: 1 1 520px;
+  min-width: 0;
+  columns: 6 150px;
+  column-gap: 24px;
+}
+
+.agr-sitemap-group {
+  /* Keep a heading with its own list. */
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+
+.agr-sitemap-h {
+  display: block;
+  font-weight: 700;
+}
+
+.agr-sitemap ul {
+  margin: 0 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.agr-sitemap a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.agr-sitemap a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#alliance-footer a:focus-visible {
+  outline: 2px solid #FFFFFF;
+  outline-offset: 2px;
+}
+
+/* Their marker for a link that leaves the Alliance site. */
+.agr-ext {
+  margin-left: 5px;
+  font-size: 0.7em;
+  vertical-align: baseline;
+}
+
+/* The attribution, in its new home at the head of the colophon. Sits opposite
+   the caveat: a credit and a disclaimer are both things you read once, and
+   neither needed the page header. */
+.agr-colophon-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px 40px;
+  margin-bottom: 30px;
+}
+
+.agr-colophon-top .agr-notice {
+  /* The flex parent owns the spacing here. */
+  margin-bottom: 0;
+  flex: 1 1 420px;
+  order: -1;
+}
+
+.agr-poweredby {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: #6C757D;
+  font-size: 0.8125rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.agr-poweredby a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.agr-poweredby a:hover { text-decoration: underline; }
+
+.agr-poweredby img {
+  height: 1.25rem;
+  width: auto;
+}
+
+.agr-ss-version { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 47.5rem) {
+  .agr-colophon-top { flex-direction: column; }
+  .agr-sitemap { columns: 2 140px; }
 }

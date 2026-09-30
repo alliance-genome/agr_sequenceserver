@@ -125,29 +125,27 @@ end
         <div class="py-8" style="padding-left:20px">
           <a href="https://www.alliancegenome.org/members/<%= member_path %>" target="_blank" class="flex items-end">
             <img id="alliance-member-logo" src="<%= member_logo_url || '/blast/logos/alliance_logo_agr.png' %>" alt="Alliance MOD logo" width="100" height="100">
-            <strong class="agr-title">Alliance <%= member_name %><%= data_version && data_version.end_with?('f') ? ' Fungal' : '' %> BLAST</strong>
+            <%# Assembled rather than interpolated inline: the Alliance-wide deployment
+                has no member name, and concatenating an empty one left the heading
+                as " BLAST" with a leading space. %>
+            <% page_title = [member_name,
+                             (data_version && data_version.end_with?('f') ? 'Fungal' : nil),
+                             'BLAST'].reject { |part| part.nil? || part.empty? }.join(' ') %>
+            <strong class="agr-title"><%= page_title %></strong>
             <span class="agr-beta" title="This service is still in beta">BETA</span>
           </a>
         </div>
-        <%# Attribution and data version.
+        <%# The data version, and only the data version.
 
-            Both were bold, and the data version was 1.5em floated right, which
-            made this the heaviest type in the header -- louder than the name of
-            the page. The attribution is a credit, not a heading, so it drops to
-            the muted grey; the data version is the one thing here a curator
-            acts on, so it keeps the ink and the weight, as a label/value pair
-            rather than a floated block. %>
+            The SequenceServer attribution used to sit here too, and the two
+            competed: a credit does not belong beside the one fact on this page
+            a curator actually acts on. The attribution moved to the colophon,
+            which leaves the version the whole block -- set large, in ink, above
+            its label. %>
         <div class="agr-meta py-4">
-          <div class="agr-poweredby">
-            <span>Powered by</span>
-            <a href="https://sequenceserver.com" target="_blank">
-              <img src="<%= "#{base_url}" %>/blast/sequenceserver_logo.webp" alt="SequenceServer" width="1620" height="213">
-              <span><%= SequenceServer::VERSION %></span>
-            </a>
-          </div>
           <div class="agr-dataversion">
-            <span class="agr-dv-label">Data Version</span>
             <span class="agr-dv-value" data-data-version="<%= data_version %>"><%= data_version %></span>
+            <span class="agr-dv-label">Data version</span>
           </div>
         </div>
       </div>
