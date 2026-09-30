@@ -1,0 +1,48 @@
+<%
+  # Alliance site navigation.
+  #
+  # A STATIC COPY. alliancegenome.org is a Vite SPA and renders its nav
+  # client-side, so there is nothing to include and nothing that tells us when
+  # it changes. These six items were read off their live nav on 2026-09-30;
+  # their route table also carries /blastservice, which does not itself appear
+  # in the nav. If their nav changes, this list is silently wrong until somebody
+  # looks — see the note in views/layout.erb.
+  #
+  # BLAST is marked current here but is NOT one of their six items; showing it
+  # is our proposal and has not been agreed with the Alliance web team.
+  alliance_nav = [
+    ['Search',         'https://www.alliancegenome.org/search'],
+    ['Disease Portal', 'https://www.alliancegenome.org/disease-portal'],
+    ['Ontology',       'https://www.alliancegenome.org/ontology'],
+    ['Downloads',      'https://www.alliancegenome.org/downloads'],
+    ['News',           'https://www.alliancegenome.org/news'],
+    ['Contact Us',     'https://www.alliancegenome.org/contact-us']
+  ]
+%>
+<nav id="alliance-nav" class="bg-alliance text-white print:hidden" aria-label="Alliance of Genome Resources">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-1 py-2">
+      <a href="https://www.alliancegenome.org"
+         class="font-semibold tracking-tight text-white no-underline hover:underline">
+        Alliance of Genome Resources
+      </a>
+      <ul class="flex flex-wrap items-center gap-x-5 gap-y-1 list-none m-0 p-0">
+        <% alliance_nav.each do |label, href| %>
+          <li>
+            <a href="<%= href %>" class="text-white no-underline hover:underline whitespace-nowrap">
+              <%= label %>
+            </a>
+          </li>
+        <% end %>
+        <li>
+          <%# The page you are on. aria-current carries that for a screen reader;
+              the underline carries it visually. %>
+          <span aria-current="page"
+                class="font-semibold whitespace-nowrap border-b-2 border-white pb-0.5">
+            BLAST
+          </span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>

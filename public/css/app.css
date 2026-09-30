@@ -874,3 +874,68 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
 #protein_database_tree .jstree-node {
   background-image: none;
 }
+
+/* ====================================================================== *
+ * Alliance site chrome.
+ *
+ * The nav bar and the header follow alliancegenome.org; everything below
+ * the header's bottom rule -- the query box, the database tree, the
+ * settings and the results -- keeps this application's own scale.
+ *
+ * That seam is deliberate. Their body text is 0.9rem (14.4px); ours is
+ * 16px. Matching them throughout would shrink hit tables, deflines and
+ * HSP alignment blocks by about a tenth, on the pages curators spend the
+ * most time reading. So the two sites match where a visitor compares
+ * them -- the top of the page -- and the sequence data does not move.
+ * ====================================================================== */
+
+#alliance-nav,
+#header {
+  font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  /* alliancegenome.org's measured body size. */
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+#alliance-nav {
+  font-weight: 400;
+}
+
+#alliance-nav a:hover {
+  /* Their nav underlines on hover rather than changing colour; keeping the
+     white means the bar never flickers to a second hue. */
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* The page title. Their h3 is 1.575rem at weight 500, which is the closest
+   step in their scale to what this line was doing at 1.5rem. */
+#header .agr-title {
+  font-size: 1.575rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding-left: 10px;
+  padding-bottom: 40px;
+}
+
+/* Was a fixed-position corner ribbon in #ef4444 at z-index 50, which sat on
+   top of the nav bar once there was one. Now an inline marker that scrolls
+   with the page, prints, and does not compete with the Alliance blue. */
+#header .agr-beta {
+  align-self: center;
+  margin-left: 10px;
+  margin-bottom: 40px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: #6C757D;
+  color: #FFFFFF;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+@media print {
+  #alliance-nav { display: none; }
+}
