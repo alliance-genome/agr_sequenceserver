@@ -1,0 +1,110 @@
+<%
+  # Colophon and footer.
+  #
+  # What used to sit here was one centred column holding a yellow warning box, a
+  # "please cite" line and two full citations, all at the same weight. The
+  # caveat and the credits competed, and a 24-author citation ran the width of
+  # the page.
+  #
+  # Now: the caveat stands alone as a caveat, the citations become a definition
+  # list of two entries each anchored by its DOI, and the footer is the same bar
+  # as the top nav so the page closes the way it opened.
+%>
+<section class="agr-colophon print:break-inside-avoid" aria-labelledby="agr-colophon-h">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+
+    <div class="agr-notice" role="note">
+      <span class="agr-notice-tag">In development</span>
+      <p>JBrowse genome browser links may not resolve correctly for every
+      organism yet. The rest of the service is unaffected.</p>
+    </div>
+
+    <h2 id="agr-colophon-h" class="agr-colophon-h">If you use this service, please cite</h2>
+
+    <dl class="agr-cites">
+      <div class="agr-cite">
+        <dt>Data</dt>
+        <dd>
+          <p class="agr-cite-authors">Bult CJ, Sternberg PW.</p>
+          <p class="agr-cite-title">The Alliance of Genome Resources: transforming
+          comparative genomics.</p>
+          <p class="agr-cite-where"><i>Mamm Genome</i> 2023;34(4):531&ndash;44.</p>
+          <p class="agr-cite-ids">
+            <a href="https://doi.org/10.1007/s00335-023-10015-2">doi:10.1007/s00335-023-10015-2</a>
+            <span class="agr-dot" aria-hidden="true">&middot;</span>
+            <a href="https://pubmed.ncbi.nlm.nih.gov/37666946/">PMID&nbsp;37666946</a>
+          </p>
+        </dd>
+      </div>
+
+      <div class="agr-cite">
+        <dt>BLAST service</dt>
+        <dd>
+          <%# 24 authors. Shown in full on request rather than by default: the
+              citation a reader needs is the DOI, and the list buried it.
+
+              Collapsed by the script below, not by markup: with no JavaScript
+              the full list stays visible and the button -- which would do
+              nothing -- never appears. %>
+          <p class="agr-cite-authors">Priyam A, Woodcroft BJ, Rai V, <i>et&nbsp;al.</i>
+            <button type="button" class="agr-more" data-agr-more="ss-authors"
+                    aria-expanded="true" aria-controls="ss-authors" hidden>all authors</button>
+          </p>
+          <p class="agr-cite-authors agr-cite-all" id="ss-authors">Anurag Priyam,
+          Ben J Woodcroft, Vivek Rai, Ismail Moghul, Alekhya Munagala, Filip Ter, Hiten
+          Chowdhary, Iwo Pieniak, Lawrence J Maynard, Mark Anthony Gibbins, HongKee Moon,
+          Austin Davis-Richardson, Mahmut Uludag, Nathan S Watson-Haigh, Richard Challis,
+          Hiroyuki Nakamura, Emeline Favreau, Esteban A G&oacute;mez, Tom&aacute;&scaron;
+          Pluskal, Guy Leonard, Wolfgang Rumpf, Yannick Wurm.</p>
+          <p class="agr-cite-title">Sequenceserver: a modern graphical user interface for
+          custom BLAST databases.</p>
+          <p class="agr-cite-where"><i>Molecular Biology and Evolution</i>
+          2019;36(12):2922&ndash;2924.</p>
+          <p class="agr-cite-ids">
+            <a href="https://doi.org/10.1093/molbev/msz185">doi:10.1093/molbev/msz185</a>
+            <span class="agr-dot" aria-hidden="true">&middot;</span>
+            <a href="https://pubmed.ncbi.nlm.nih.gov/31411700/">PMID&nbsp;31411700</a>
+          </p>
+        </dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<footer id="alliance-footer" class="print:hidden">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="agr-nav-row">
+      <a class="agr-nav-brand" href="https://www.alliancegenome.org">Alliance of Genome Resources</a>
+      <span class="agr-nav-sep" aria-hidden="true">/</span>
+      <span class="agr-nav-current">BLAST</span>
+      <span class="agr-nav-end">
+        <a class="agr-nav-link" href="https://www.alliancegenome.org/contact-us">Contact Us</a>
+        <a class="agr-nav-link" href="https://sequenceserver.com">SequenceServer <%= SequenceServer::VERSION %></a>
+      </span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Collapses the long author list and reveals the button that expands it.
+  // Runs here rather than in a bundle: the colophon is rendered by the layout,
+  // so it is present on every page, including ones that load no React bundle.
+  (function () {
+    var buttons = document.querySelectorAll('[data-agr-more]');
+    for (var i = 0; i < buttons.length; i++) {
+      (function (button) {
+        var target = document.getElementById(button.getAttribute('data-agr-more'));
+        if (!target) return;
+        target.hidden = true;
+        button.hidden = false;
+        button.setAttribute('aria-expanded', 'false');
+        button.addEventListener('click', function () {
+          var open = target.hidden;
+          target.hidden = !open;
+          button.setAttribute('aria-expanded', String(open));
+          button.textContent = open ? 'fewer authors' : 'all authors';
+        });
+      })(buttons[i]);
+    }
+  })();
+</script>
