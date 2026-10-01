@@ -1,9 +1,7 @@
-import React, { Component } from 'react';
+import { Component } from 'react';
 import _ from 'underscore';
 
 import downloadFASTA from './download_fasta';
-import asMailtoHref from './mailto';
-import CloudShareModal from './cloud_share_modal';
 import DownloadLinks from 'download_links';
 /**
  * checks whether code is being run by jest
@@ -29,10 +27,6 @@ export default class extends Component {
         this.setVisibleQueryIndex = this.setVisibleQueryIndex.bind(this);
         this.debounceScrolling = this.debounceScrolling.bind(this);
         this.scrollListener = this.scrollListener.bind(this);
-        this.copyURL = this.copyURL.bind(this);
-        this.shareCloudInit = this.shareCloudInit.bind(this);
-        this.sharingPanelJSX = this.sharingPanelJSX.bind(this);
-        this.cloudShareModal = React.createRef();
         this.timeout = null;
         this.queryElems = [];
         this.state = {
@@ -173,31 +167,8 @@ export default class extends Component {
         return false;
     }
 
-    /**
-     * Handles copying the URL into the user's clipboard. Modified from: https://stackoverflow.com/a/49618964/18117380
-     * Hides the 'Copied!' tooltip after 3 seconds
-     */
 
-    copyURL() {
-        const element = document.createElement('input');
-        const url = window.location.href;
-        document.body.appendChild(element);
-        element.value = url;
-        element.select();
-        document.execCommand('copy');
-        document.body.removeChild(element);
 
-        const tooltip = document.getElementById('tooltip');
-        tooltip.classList.remove('hidden');
-
-        setTimeout(() => {
-            tooltip.classList.add('hidden');
-        }, 3000);
-    }
-
-    shareCloudInit() {
-        this.cloudShareModal.current.show();
-    }
 
     topPanelJSX() {
         var path = location.pathname.split('/');
@@ -394,94 +365,11 @@ export default class extends Component {
         );
     }
 
-    sharingPanelJSX() {
-        return (
-            <div className="sharing-panel">
-                <div className="pl-px table mb-0 w-full">
-                    <h4 className="text-sm font-bold mb-0 mt-2.5">
-                        Share results
-                    </h4>
-                </div>
-                <ul>
-                    {!this.props.cloudSharingEnabled &&
-                        <li className="hover:text-seqorange hover:bg-gray-200">
-                            <a id="copyURL" className="flex text-sm text-seqblue hover:text-seqorange copy-URL cursor-pointer py-0.5 px-0.5 w-full" onClick={this.copyURL}>
-                                <div className="relative flex gap-2 items-center group w-full">
-                                    <i className="fa fa-copy"></i>
-                                    <div className="flex items-center">
-                                        <span className="w-full">Copy URL to clipboard</span>
-                                        <div id="tooltip" className="absolute hidden left-full ml-2 items-center">
-                                            <div className="flex items-center">
-                                                <div className="w-0 h-0 border-y-8 border-r-8 border-t-transparent border-b-transparent border-r-black -mr-px"></div>
-                                                <span className="relative z-10 p-2 side-tooltip-text leading-4 text-center text-white whitespace-no-wrap bg-black shadow-lg rounded-md">
-                                                    Copied!
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-                        </li>
-                    }
-                    {!this.props.cloudSharingEnabled &&
-                        <li className="hover:text-seqorange hover:bg-gray-200">
-                            <a id="sendEmail" className="flex text-sm text-seqblue hover:text-seqorange email-URL cursor-pointer py-0.5 px-0.5 w-full"
-                                href={asMailtoHref(this.props.data.querydb, this.props.data.program, this.props.data.queries.length, window.location.href)}
-                                target="_blank" rel="noopener noreferrer">
-                                <div className="relative flex gap-2 items-center group w-full">
-                                    <i className="fa fa-envelope"></i>
-                                    <div className="flex items-center w-full">
-                                        <span className="w-full">Send by email</span>
-                                        <div className="absolute hidden left-full ml-2 items-center group-hover:flex tooltip-wrap">
-                                            <div className="w-0 h-0 border-y-8 border-r-8 border-t-transparent border-b-transparent border-r-black -mr-px"></div>
-                                            <span className="relative z-10 p-2 side-tooltip-text leading-4 text-center text-white whitespace-no-wrap bg-black shadow-lg rounded-md">
-                                                Send by email
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-                        </li>
-                    }
-                    {this.props.cloudSharingEnabled &&
-                        <li className="hover:text-seqorange hover:bg-gray-200">
-                            <button className="flex text-sm text-seqblue hover:text-seqorange cloud-Post cursor-pointer py-0.5 px-0.5 w-full" onClick={this.shareCloudInit}>
-                                <div className="relative flex gap-2 items-center group w-full">
-                                    <i className="fa fa-cloud"></i>
-                                    <div className="flex items-center">
-                                        <span className="w-full">Share to cloud</span>
-                                        <div className="absolute hidden left-full ml-2 items-center group-hover:flex tooltip-wrap">
-                                            <div className="w-0 h-0 border-y-8 border-r-8 border-t-transparent border-b-transparent border-r-black -mr-px"></div>
-                                            <span className="relative z-10 p-2 side-tooltip-text leading-4 text-center text-white whitespace-no-wrap bg-black shadow-lg rounded-md">
-                                                Results in pairwise format
-                                                Upload results to SequenceServer Cloud where it will become accessable
-                                                to everyone who has a link.
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </button>
-                        </li>
-                    }
-                </ul>
-                {
-                    <CloudShareModal
-                        ref={this.cloudShareModal}
-                        querydb={this.props.data.querydb}
-                        program={this.props.data.program}
-                        queryLength={this.props.data.queries.length}
-                    />
-                }
-            </div>
-        );
-    }
-
     render() {
         return (
             <div className="sidebar sticky top-0 print:hidden">
                 {this.topPanelJSX()}
                 {this.downloadsPanelJSX()}
-                {this.sharingPanelJSX()}
             </div>
         );
     }
