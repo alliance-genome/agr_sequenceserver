@@ -1321,3 +1321,124 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
   .agr-colophon-top { flex-direction: column; }
   .agr-sitemap { columns: 2 140px; }
 }
+
+/* ====================================================================== *
+ * Database tree checkboxes.
+ *
+ * jstree ships these as offsets into a 32px bitmap sprite, which is why they
+ * were soft on a HiDPI screen while the chevron beside them -- already drawn
+ * in CSS -- stayed crisp. They were also the palest thing in the row, so the
+ * one control a user has to operate read as the least interactive.
+ *
+ * Drawn here instead. Two things these rules have to respect:
+ *
+ * The tree ids prefix every selector. jstree's stylesheet is injected by
+ * databases_tree.js at runtime, so it lands AFTER app.css in the cascade and
+ * wins any contest decided by order; an id beats its class selectors outright.
+ * The chevron rules above are prefixed for the same reason.
+ *
+ * The box keeps jstree's 24px cell. The chevron work found that changing that
+ * height drops every row by 2px, because the cell is what sets the line box.
+ * ====================================================================== */
+
+#nucleotide_database_tree .jstree-checkbox,
+#protein_database_tree .jstree-checkbox {
+  background-image: none;
+  position: relative;
+}
+
+#nucleotide_database_tree .jstree-checkbox::before,
+#protein_database_tree .jstree-checkbox::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border: 1.5px solid #ADB5BD;
+  border-radius: 4px;
+  background: #FFFFFF;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+/* Checked. Alliance blue, so selecting a database is the same colour as the
+   rest of the service's chrome rather than jstree's default grey-blue. */
+#nucleotide_database_tree .jstree-clicked > .jstree-checkbox::before,
+#protein_database_tree .jstree-clicked > .jstree-checkbox::before {
+  background: #2598C5;
+  border-color: #2598C5;
+}
+
+/* The tick: two borders of a rotated box. Cheaper than an SVG, and it is
+   positioned from the centre so it stays put if the box size changes. */
+#nucleotide_database_tree .jstree-clicked > .jstree-checkbox::after,
+#protein_database_tree .jstree-clicked > .jstree-checkbox::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 8px;
+  transform: translate(-50%, -60%) rotate(45deg);
+  border: solid #FFFFFF;
+  border-width: 0 2px 2px 0;
+}
+
+/* Partially selected: jstree marks a parent whose children are mixed. A dash
+   rather than a tick, because the parent is not itself selected. */
+#nucleotide_database_tree .jstree-undetermined::before,
+#protein_database_tree .jstree-undetermined::before {
+  background: #FFFFFF;
+  border-color: #2598C5;
+}
+
+#nucleotide_database_tree .jstree-undetermined::after,
+#protein_database_tree .jstree-undetermined::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  background: #2598C5;
+}
+
+/* Hovering anywhere on the row is what tells you the whole row is a hit
+   target, so the box answers the anchor's hover, not just its own. */
+#nucleotide_database_tree .jstree-hovered > .jstree-checkbox::before,
+#protein_database_tree .jstree-hovered > .jstree-checkbox::before {
+  border-color: #2598C5;
+}
+
+#nucleotide_database_tree .jstree-clicked.jstree-hovered > .jstree-checkbox::before,
+#protein_database_tree .jstree-clicked.jstree-hovered > .jstree-checkbox::before {
+  background: #1B7FA6;
+  border-color: #1B7FA6;
+}
+
+/* Keyboard focus. jstree moves focus to the anchor, so without this a keyboard
+   user operating the tree had nothing to go on. */
+#nucleotide_database_tree .jstree-anchor:focus-visible > .jstree-checkbox::before,
+#protein_database_tree .jstree-anchor:focus-visible > .jstree-checkbox::before {
+  outline: 2px solid #1B7FA6;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #nucleotide_database_tree .jstree-checkbox::before,
+  #protein_database_tree .jstree-checkbox::before {
+    transition: none;
+  }
+}
+
+/* The form's own checkboxes -- "Open results in new tab" and the hidden
+   per-database inputs -- are native. accent-color tints them to the same blue
+   in one line, so the page does not show two different blues. */
+#blast input[type="checkbox"],
+#blast input[type="radio"] {
+  accent-color: #2598C5;
+}
