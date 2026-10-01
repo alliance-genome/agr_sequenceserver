@@ -376,6 +376,45 @@ puts bad.empty? ? "OK" : "MISMATCH: #{bad.keys.join(" | ")}"
   [ "$sgd_out" = "OK" ] && ok "SGD chromosome names map to JBrowse refseqs (both defline styles)" \
                         || bad "SGD chromosome extraction" "$sgd_out"
 
+  # The fungal CDS sets name the chromosome nowhere in the title -- it is the
+  # RefSeq accession the id is built from -- and write coordinates NCBI-style.
+  # The property worth asserting is that the two formats CONVERGE: the same gene
+  # must come out at the same place whichever deployment it was found in.
+  fungal_out=$(docker exec "$TEST_CONTAINER" ruby -e '
+require "/sequenceserver/lib/sequenceserver/links"
+L = SequenceServer::Links
+problems = []
+
+# Chromosome from the accession, since the title does not carry it.
+{
+  ["[gene=ACT1] [locus_tag=YFL039C]", "NC_001138.5_cds_NP_116614.1_1760"] => "chrVI",
+  ["[gene=COX1] [location=13818..26701]", "NC_001224.1_cds_NP_009305.1_1"] => "chrmt",
+  # Any other fungus: AGR JBrowse 2 hosts no assembly for it, so no link.
+  ["[gene=X]", "NW_123456.1_cds_XP_1.1_1"] => nil,
+}.each { |(t, a), want| problems << "chrom #{a}" unless L.extract_sgd_chromosome(t, a) == want }
+
+# ACT1 and PAU8, as the fungal set writes them and as SGD writes them.
+[
+  ["[gene=ACT1] [db_xref=SGD:S000001855] [location=complement(join(53260..54377,54687..54696))]",
+   "YFL039C SGDID:S000001855, Chr VI from 54377-53260,54696-54687, reverse complement"],
+  ["[gene=PAU8] [db_xref=SGD:S000002142] [location=complement(1807..2169)]",
+   "PAU8 SGDID:S000002142, Chr I from 2169-1807, reverse complement"],
+].each do |fungal, main|
+  problems << "ranges #{fungal[0, 18]}" unless L.defline_feature_ranges(fungal) == L.defline_feature_ranges(main)
+end
+
+# Both SGD id spellings reach the same Alliance gene page.
+f = L.agr_gene_from_defline("[gene=ACT1] [db_xref=SGD:S000001855,GeneID:850504]", "x", "y")
+m = L.agr_gene_from_defline("PAU8 SGDID:S000002142, Chr I from 2169-1807", "x", "y")
+problems << "gene url" unless f && f[:url].end_with?("SGD:S000001855")
+problems << "gene symbol" unless f && f[:title] == "Alliance: ACT1"
+problems << "gene main regressed" unless m && m[:title] == "Alliance: PAU8"
+
+puts problems.empty? ? "OK" : "FAIL: #{problems.join(" | ")}"
+  ' 2>&1 | tail -1)
+  [ "$fungal_out" = "OK" ] && ok "SGD fungal deflines resolve to the same place as SGD's own" \
+                           || bad "SGD fungal defline handling" "$fungal_out"
+
   # The dataset /blast/SGD/ lands on must carry JBrowse config, or the linkout
   # silently disappears for anyone following the permanent URL.
   sgd_target=$(curl -sI "$BASE_URL/blast/SGD/" | tr -d '\r' \

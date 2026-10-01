@@ -208,29 +208,58 @@ module SequenceServer
       "XIII" => "chrXIII", "XIV" => "chrXIV", "XV" => "chrXV", "XVI" => "chrXVI"
     }.freeze
 
+    # The fungal CDS and protein sets name the chromosome NOWHERE in the title.
+    # It is only in the RefSeq accession their id is built from:
+    #
+    #   NC_001138.5_cds_NP_116614.1_1760   [gene=ACT1] [locus_tag=YFL039C] ...
+    #
+    # Read off the fungal genome assembly database, which carries both halves:
+    # "NC_001133.9 | Saccharomyces cerevisiae S288C chromosome I, ...". The
+    # accessions are S288C's, so only S. cerevisiae resolves -- which is correct,
+    # because it is the only fungus AGR's JBrowse 2 hosts. A hit in any of the
+    # other ~60 fungal species returns nil and gets no link, since there is no
+    # browser to send it to.
+    SGD_REFSEQ_CHROMOSOME = {
+      "NC_001133" => "chrI",    "NC_001134" => "chrII",   "NC_001135" => "chrIII",
+      "NC_001136" => "chrIV",   "NC_001137" => "chrV",    "NC_001138" => "chrVI",
+      "NC_001139" => "chrVII",  "NC_001140" => "chrVIII", "NC_001141" => "chrIX",
+      "NC_001142" => "chrX",    "NC_001143" => "chrXI",   "NC_001144" => "chrXII",
+      "NC_001145" => "chrXIII", "NC_001146" => "chrXIV",  "NC_001147" => "chrXV",
+      "NC_001148" => "chrXVI",  "NC_001224" => "chrmt"
+    }.freeze
+
     def self.extract_sgd_chromosome(hit_title, blast_accession)
-      return nil unless hit_title && !hit_title.empty?
+      if hit_title && !hit_title.empty?
+        chr_match = hit_title.match(/chromosome[\s=]+([IVXL]+)\b/i)
+        if chr_match
+          roman = chr_match[1].upcase
+          return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
+        end
 
-      chr_match = hit_title.match(/chromosome[\s=]+([IVXL]+)\b/i)
-      if chr_match
-        roman = chr_match[1].upcase
-        return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
+        # The feature sets (ORF and RNA) abbreviate it instead: "Chr I from
+        # 335-649". Without this they fell through to the generic fallback in
+        # extract_ref_name, which returned the first word of the defline -- the
+        # gene name, "YAL069W", which is not a sequence JBrowse can find.
+        feature_match = hit_title.match(SGD_FEATURE_LOCATION)
+        if feature_match
+          chromosome = feature_match[1]
+          return "chrmt" if chromosome.match?(/\AMito/i)
+
+          roman = chromosome.upcase
+          return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
+        end
       end
 
-      # The feature sets (ORF and RNA) abbreviate it instead: "Chr I from
-      # 335-649". Without this they fell through to the generic fallback in
-      # extract_ref_name, which returned the first word of the defline -- the
-      # gene name, "YAL069W", which is not a sequence JBrowse can find.
-      feature_match = hit_title.match(SGD_FEATURE_LOCATION)
-      if feature_match
-        chromosome = feature_match[1]
-        return "chrmt" if chromosome.match?(/\AMito/i)
-
-        roman = chromosome.upcase
-        return SGD_ROMAN_MAP[roman] if SGD_ROMAN_MAP[roman]
+      # Tried after the title, which is the more specific signal where it exists:
+      # the genome assembly carries BOTH an NC_ accession and "chromosome I" in
+      # its description, and the two agree.
+      if blast_accession
+        refseq = blast_accession[/\bNC_\d{6}/]
+        chromosome = SGD_REFSEQ_CHROMOSOME[refseq] if refseq
+        return chromosome if chromosome
       end
 
-      return "chrmt" if hit_title.match(/mitochondri/i)
+      return "chrmt" if hit_title && hit_title.match(/mitochondri/i)
 
       nil
     end
@@ -250,11 +279,42 @@ module SequenceServer
     # The ranges a defline names, as [[from, to], ...], or nil where it names
     # none. Coordinates are kept in the order given: a descending pair carries
     # the strand, which the caller needs in order to map offsets.
+    # The same information, as NCBI writes it in the fungal CDS and protein
+    # sets. Measured across all 6020 S. cerevisiae CDS entries, six shapes occur:
+    #
+    #   [location=2480..2707]                                  2858
+    #   [location=complement(1807..2169)]                      2833
+    #   [location=join(87286..87387,87501..87752)]              176
+    #   [location=complement(join(53260..54377,54687..54696))]  149   ACT1
+    #   [location=join(1,100..200)]                               2
+    #   [location=complement(join(100..200,1))]                   2
+    #
+    # NCBI always lists coordinates ascending and marks the reverse strand with
+    # complement(); SGD encodes the strand by descending the range instead. This
+    # normalises to SGD's convention, so the same ACT1 comes out as
+    # [[54377, 53260], [54696, 54687]] either way and genomic_hsp_spans needs no
+    # new case. The last two shapes carry a bare coordinate, which is one base.
+    NCBI_FEATURE_LOCATION = /\[location=([^\]]+)\]/
+
+    def self.ncbi_feature_ranges(hit_title)
+      match = hit_title.match(NCBI_FEATURE_LOCATION)
+      return nil unless match
+
+      location = match[1]
+      ranges = location.scan(/(\d+)(?:\.\.(\d+))?/).map do |from, to|
+        [from.to_i, (to || from).to_i]
+      end
+      return nil if ranges.empty?
+      return nil if ranges.any? { |range| range.any?(&:zero?) }
+
+      location.include?('complement') ? ranges.map(&:reverse) : ranges
+    end
+
     def self.defline_feature_ranges(hit_title)
       return nil if hit_title.nil? || hit_title.empty?
 
       match = hit_title.match(SGD_FEATURE_LOCATION)
-      return nil unless match
+      return ncbi_feature_ranges(hit_title) unless match
 
       ranges = match[2].split(',').map { |range| range.split('-').map(&:to_i) }
       return nil if ranges.empty?
@@ -566,7 +626,9 @@ module SequenceServer
     AGR_GENE_PATTERNS = [
       ['WB',   /\bgene=(WBGene\d+)/],
       ['FB',   /\bparent=[^;]*?\b(FBgn\d+)/],
-      ['SGD',  /\bSGDID:(S\d+)/],
+      # Two spellings deployed: SGD's own "SGDID:S000002142" and the fungal
+      # sets' NCBI-derived "db_xref=SGD:S000002142".
+      ['SGD',  /\bSGD(?:ID)?:(S\d+)/],
       ['ZFIN', /\b(ZDB-GENE-[\d-]+\d)/]
     ].freeze
 
@@ -579,8 +641,10 @@ module SequenceServer
       # name=Nep3-PA is the isoform; the gene symbol is the part before it.
       'FB' => /\bname=([^\s;]+?)-[A-Z]{2}\b/,
       # SGD leads with the symbol (PAU8) or, for unnamed ORFs, the systematic
-      # name (YAL069W). Either is the right thing to show.
-      'SGD' => /\A([A-Za-z0-9-]+)\s+SGDID:/,
+      # name (YAL069W). Either is the right thing to show. The fungal sets name
+      # it in a tag instead, and omit the tag entirely for unnamed ORFs -- which
+      # then fall through to the identifier, as they should.
+      'SGD' => [/\A([A-Za-z0-9-]+)\s+SGDID:/, /\A\[gene=([^\]]+)\]/],
       # ZFIN's title opens with the symbol: "itsn1|OTTDARP00000003616 ...",
       # also "si:ch211-106g8.33|" and "zgc:..." forms. Anchored on a lowercase
       # first letter so that the clone names that appear in the same position in
@@ -626,8 +690,10 @@ module SequenceServer
       # Searching all of them let ZFIN's own id prefix win: "tpe|OTTDART..."
       # satisfies the ZFIN symbol pattern, so a hit whose title held no symbol
       # was labelled "Alliance: tpe".
-      symbol_pattern = AGR_GENE_SYMBOL[prefix]
-      symbol = symbol_pattern && fields.first[symbol_pattern, 1]
+      # A MOD may spell the symbol more than one way across its own datasets,
+      # so each entry is a list tried in order.
+      symbol_patterns = Array(AGR_GENE_SYMBOL[prefix])
+      symbol = symbol_patterns.filter_map { |pattern| fields.first[pattern, 1] }.first
       label = symbol && !symbol.empty? ? symbol : id
 
       {
