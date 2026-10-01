@@ -217,7 +217,7 @@ test.describe('Try an example', () => {
         const expected = {
             [SGD_MAIN]: [SGD_NUCLEOTIDE, SGD_PROTEIN],
             '/blast/WB/WS298/': ['unc-54 protein (myosin heavy chain)'],
-            '/blast/FB/FB2026_03/': ['white protein (eye colour)']
+            '/blast/FB/FB2026_03/': ['white protein (eye colour)', 'white locus region (genomic)']
         };
 
         const seen = {};
@@ -231,6 +231,25 @@ test.describe('Try an example', () => {
         // The labels are genuinely MOD-specific: nothing is shared between MODs.
         const all = Object.values(seen).flat();
         expect(new Set(all).size, 'the same example label appeared under two MODs').toBe(all.length);
+    });
+
+    test('FB nucleotide example loads a genomic query against the genome assembly', async ({ page }) => {
+        // FlyBase shipped only a protein example, so there was no way to try a
+        // nucleotide search without pasting a sequence -- and the protein hits
+        // carry no JBrowse link, which is the thing curators said was missing.
+        // This example is a 601 bp fragment of the white locus taken verbatim
+        // from the deployed assembly.
+        await gotoSearch(page, '/blast/FB/FB2026_03/');
+        await clickExample(page, /white locus region \(genomic\)/);
+
+        const seq = await page.locator(S.sequence).inputValue();
+        expect(seq).toContain('type=golden_path');
+        expect(seq).toContain('X:2792700-2793300');
+        // Nucleotide, not the protein example's sequence.
+        expect(seq).not.toContain('MGQEDQELLIRGGSKHPSAE');
+
+        await expectOnlySelectedDatabase(page, 'D_melanogaster_Genome_Assembly_6_69');
+        await expect(page.locator(S.submit)).toHaveAttribute('value', 'blastn');
     });
 
     test('WB example loads a C. elegans protein query against the C. elegans protein database', async ({ page }) => {
