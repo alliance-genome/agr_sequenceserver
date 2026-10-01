@@ -127,18 +127,46 @@ module SequenceServer
 
       def_delegators SequenceServer, :config, :sys
 
+      # The databases this request is working with.
+      #
+      # This fork loads databases per request from the URL's MOD and version
+      # segments, so routes.rb assigns this collection on every request. It used
+      # to be one process-wide Hash, cleared and repopulated each time -- so two
+      # concurrent requests for different MODs overwrote each other. A WormBase
+      # search that validated its database ids just after an SGD request had
+      # replaced the collection matched none of them and was rejected with
+      # "Database id should be one of ...", HTTP 400. Two users on different MODs
+      # at the same time could break each other's searches, and the browser suite
+      # reproduced it whenever it ran more than one worker.
+      #
+      # An assignment made while serving a request is therefore kept thread-local
+      # and is invisible to other requests. Assignment on the main thread still
+      # writes the process-wide collection, which is how upstream's single
+      # database_dir is set up once at boot and read by every request thereafter.
+      #
+      # Safe because nothing outside the assigning thread reads this: a job
+      # resolves its own databases at construction (blast/job.rb) and carries
+      # them, so the BLAST thread pool never consults the collection.
       def collection
+        Thread.current[:sequenceserver_database_collection] || process_collection
+      end
+
+      def process_collection
         @collection ||= {}
       end
 
       def collection=(databases)
-        collection.clear
-        databases.each do |db|
-          collection[db.id] = db
+        built = {}
+        databases.each { |db| built[db.id] = db }
+
+        if Thread.current == Thread.main
+          @collection = built
+        else
+          Thread.current[:sequenceserver_database_collection] = built
         end
       end
 
-      private :collection
+      private :collection, :process_collection
 
       def [](ids)
         ids = Array ids

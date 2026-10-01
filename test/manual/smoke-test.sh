@@ -498,6 +498,60 @@ for asset in "app.min.css" "sequenceserver-search.min.js"; do
   status "$asset still serves at its fingerprinted URL" "$path" "200"
 done
 
+section "10. concurrent searches on different MODs"
+
+# The search POST used to validate its database ids against whatever collection
+# the PREVIOUS request had left in a process-wide Hash, because it never loaded
+# its own. Two MODs searched at the same time therefore rejected each other with
+# HTTP 400 -- measured at 4 failures in 60 before the fix, and it was also the
+# browser suite's long-standing "CSRF" flake, which was never CSRF.
+conc_tmp=$(mktemp -d)
+conc_seq='>q
+TTGTCAGACGGAAGCAGATTCAATGTAGTTTTCGAGCAAACCAGGCTTCTAAAAAGCAAATTTTTGACGAAAAGATTTCA'
+
+conc_post() {
+  conc_mod=$1; conc_ver=$2; conc_i=$3
+  conc_jar="$conc_tmp/c$conc_i.jar"
+  conc_page=$(curl -s -c "$conc_jar" "$BASE_URL/blast/$conc_mod/$conc_ver/")
+  # The tag renders as <meta name="_csrf" content="..."/>, so match the tag and
+  # then its content rather than assuming an attribute order.
+  conc_tok=$(printf '%s' "$conc_page" | grep -o '<meta[^>]*_csrf[^>]*>' \
+             | grep -o 'content="[^"]*"' | head -1 | sed 's/content="//; s/"$//')
+  conc_db=$(curl -s -b "$conc_jar" "$BASE_URL/blast/$conc_mod/$conc_ver/searchdata.json" \
+            | python3 -c 'import json,sys
+d=json.load(sys.stdin); dbs=d.get("database",[])
+if isinstance(dbs,dict): dbs=list(dbs.values())
+n=[x for x in dbs if x.get("type")=="nucleotide"]
+print(n[0]["id"] if n else "")' 2>/dev/null)
+  if [ -z "$conc_db" ]; then printf 'nodb\n'; return; fi
+  curl -s -b "$conc_jar" -o /dev/null -w '%{http_code}\n' \
+    -X POST "$BASE_URL/blast/$conc_mod/$conc_ver/" \
+    --data-urlencode 'method=blastn' \
+    --data-urlencode "sequence=$conc_seq" \
+    --data-urlencode "databases[]=$conc_db" \
+    --data-urlencode "_csrf=$conc_tok"
+}
+
+conc_out=$(
+  conc_n=0
+  for conc_pair in "WB WS298" "SGD R64-5-1m" "WB WS298" "SGD R64-5-1m" \
+                   "WB WS298" "SGD R64-5-1m" "WB WS298" "SGD R64-5-1m" \
+                   "WB WS298" "SGD R64-5-1m" "WB WS298" "SGD R64-5-1m"; do
+    conc_n=$((conc_n + 1))
+    set -- $conc_pair
+    conc_post "$1" "$2" "$conc_n" &
+  done
+  wait
+)
+rm -rf "$conc_tmp"
+
+conc_bad=$(printf '%s\n' "$conc_out" | grep -cv '^303$' || true)
+if [ "$conc_bad" = "0" ]; then
+  ok "12 interleaved WB/SGD searches were all accepted"
+else
+  bad "concurrent searches rejected each other" "$(printf '%s\n' "$conc_out" | sort | uniq -c | tr '\n' ' ')"
+fi
+
 # --- summary ---------------------------------------------------------------
 printf '\n%s%d passed%s, %s%d failed%s' "$GRN" "$PASS" "$RST" "$RED" "$FAIL" "$RST"
 [ "$XFAIL" -gt 0 ] && printf ', %s%d known-failing%s' "$YEL" "$XFAIL" "$RST"

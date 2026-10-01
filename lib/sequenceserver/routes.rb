@@ -203,6 +203,18 @@ module SequenceServer
         if params[:blast_params] && !params[:advanced]
           params[:advanced] = params[:blast_params]
         end
+
+        # Load THIS request's databases before validating the submitted ids
+        # against them. Every other route that touches Database does this; the
+        # search POST did not, so it validated against whatever collection an
+        # earlier, unrelated request had left behind. It worked whenever the
+        # previous request happened to be for the same MOD, and failed with
+        # "Database id should be one of ...", HTTP 400, when it was not --
+        # which is to say it failed when two MODs were searched at once.
+        env_database_dir = database_dir_for(params[:segment1], params[:segment2])
+        makeblastdb(env_database_dir).scan
+        Database.collection = makeblastdb(env_database_dir).formatted_fastas
+
         job = Job.create(params)
         # Use same protocol detection logic as templates to avoid mixed content issues
         if request.env['HTTP_X_FORWARDED_PROTO'] == 'https' || request.port == 443 || ENV['HTTPS'] == 'on' || request.host.include?('alliancegenome.org')
