@@ -289,7 +289,12 @@ test('the drawn expand/collapse chevron is visible and has not misaligned the ro
         const node = document.querySelector(`${treeSel} li.jstree-closed`);
         const ocl = node.querySelector(':scope > i.jstree-ocl');
         const anchor = node.querySelector(':scope > a.jstree-anchor');
-        const icon = anchor.querySelector('i.jstree-icon');
+        // i.jstree-icon matches BOTH the checkbox and the folder icon, in that
+        // order, so querySelector returns the checkbox. This test used to measure
+        // that and call it the folder icon -- which is why it asserted the
+        // checkbox's own sprite offset, -164px -4px.
+        const icon = anchor.querySelector('i.jstree-themeicon');
+        const checkbox = anchor.querySelector('i.jstree-checkbox');
         const box = (el) => {
             const r = el.getBoundingClientRect();
             const cs = getComputedStyle(el);
@@ -308,6 +313,16 @@ test('the drawn expand/collapse chevron is visible and has not misaligned the ro
             ocl: box(ocl),
             anchor: box(anchor),
             icon: box(icon),
+            checkbox: box(checkbox),
+            checkboxBox: (() => {
+                const before = getComputedStyle(checkbox, '::before');
+                return {
+                    content: before.content,
+                    width: before.width,
+                    height: before.height,
+                    borderRadius: before.borderRadius
+                };
+            })(),
             chevron: {
                 content: chevron.content,
                 width: chevron.width,
@@ -369,5 +384,18 @@ test('the drawn expand/collapse chevron is visible and has not misaligned the ro
 
     // The folder icon still comes from the sprite; only the arrow changed.
     expect(geom.icon.hasSprite).toBe(true);
-    expect(geom.icon.backgroundPosition).toBe('-164px -4px');
+
+    // The checkbox is drawn too now, for the same reason as the chevron: a
+    // sprite cannot be made crisp on a HiDPI screen. Same assertions -- sprite
+    // gone, a real box in ::before, and the 24px cell preserved, since changing
+    // that height is what dropped the row by 2px before.
+    expect(geom.checkbox.hasSprite,
+        'the checkbox sprite is back; the drawn box is being overridden').toBe(false);
+    expect(geom.checkboxBox.content).toBe('""');
+    expect(parseFloat(geom.checkboxBox.width)).toBeGreaterThan(8);
+    expect(parseFloat(geom.checkboxBox.height)).toBeGreaterThan(8);
+    expect(parseFloat(geom.checkboxBox.borderRadius)).toBeGreaterThan(0);
+    expect(geom.checkbox.width).toBe(24);
+    expect(geom.checkbox.height).toBe(24);
+    expect(geom.checkbox.top).toBe(geom.ocl.top);
 });
