@@ -672,7 +672,18 @@ module SequenceServer
     #
     # Pass the title first: it is where a readable gene symbol lives when there
     # is one.
-    def self.agr_gene_from_defline(*fields)
+    # The MOD's own gene report, where the MOD has one. Offered alongside the
+    # Alliance link rather than instead of it: a curator working in FlyBase
+    # asked for FlyBase's page, and a visitor comparing organisms wants the
+    # Alliance's. Neither is a substitute for the other.
+    MOD_GENE_URL = {
+      'FB' => { name: 'FlyBase', url: 'https://flybase.org/reports/' }
+    }.freeze
+
+    # The gene a defline names, as { mod:, id:, symbol: }, or nil where it names
+    # none. Shared by every link that needs it and by the hit list, so that the
+    # symbol shown in the table and the symbol on the link can never disagree.
+    def self.gene_from_defline(*fields)
       fields = fields.compact.reject(&:empty?)
       return nil if fields.empty?
 
@@ -694,12 +705,36 @@ module SequenceServer
       # so each entry is a list tried in order.
       symbol_patterns = Array(AGR_GENE_SYMBOL[prefix])
       symbol = symbol_patterns.filter_map { |pattern| fields.first[pattern, 1] }.first
-      label = symbol && !symbol.empty? ? symbol : id
+      symbol = nil if symbol.to_s.empty?
+
+      { mod: prefix, id: id, symbol: symbol }
+    end
+
+    def self.agr_gene_from_defline(*fields)
+      gene = gene_from_defline(*fields)
+      return nil unless gene
 
       {
         order: 2,
-        title: "Alliance: #{label}",
-        url: "https://www.alliancegenome.org/gene/#{prefix}:#{ERB::Util.url_encode(id)}",
+        title: "Alliance: #{gene[:symbol] || gene[:id]}",
+        url: "https://www.alliancegenome.org/gene/#{gene[:mod]}:#{ERB::Util.url_encode(gene[:id])}",
+        icon: 'fa-external-link'
+      }
+    end
+
+    # Deliberately ordered ahead of the Alliance link: on a MOD's own
+    # deployment, its own gene report is the one a curator reaches for.
+    def self.mod_gene_from_defline(*fields)
+      gene = gene_from_defline(*fields)
+      return nil unless gene
+
+      mod = MOD_GENE_URL[gene[:mod]]
+      return nil unless mod
+
+      {
+        order: 1,
+        title: "#{mod[:name]}: #{gene[:symbol] || gene[:id]}",
+        url: "#{mod[:url]}#{ERB::Util.url_encode(gene[:id])}",
         icon: 'fa-external-link'
       }
     end

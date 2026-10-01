@@ -415,6 +415,40 @@ puts problems.empty? ? "OK" : "FAIL: #{problems.join(" | ")}"
   [ "$fungal_out" = "OK" ] && ok "SGD fungal deflines resolve to the same place as SGD's own" \
                            || bad "SGD fungal defline handling" "$fungal_out"
 
+  # A MOD's own gene report sits alongside the Alliance one, and the symbol the
+  # hit list shows comes from the same extraction as the links -- so the table
+  # and the link can never name different genes.
+  modgene_out=$(docker exec "$TEST_CONTAINER" ruby -e '
+require "/sequenceserver/lib/sequenceserver/links"
+L = SequenceServer::Links
+problems = []
+
+fb = "FBpp0070468 type=polypeptide; name=w-PA; parent=FBgn0003996,FBtr0070491;"
+m = L.mod_gene_from_defline(fb, "x", "y")
+problems << "fb link missing" unless m
+problems << "fb url" unless m && m[:url] == "https://flybase.org/reports/FBgn0003996"
+problems << "fb symbol" unless m && m[:title] == "FlyBase: w"
+problems << "fb order" unless m && m[:order] < L.agr_gene_from_defline(fb, "x", "y")[:order]
+
+# Only FlyBase has a report URL configured, so nobody else may grow one.
+{
+  "wormpep=CE32785 gene=WBGene00007064 locus=rga-9"          => "rga-9",
+  "PAU8 SGDID:S000002142, Chr I from 2169-1807"              => "PAU8",
+}.each do |defline, symbol|
+  problems << "unexpected mod link: #{defline[0, 16]}" if L.mod_gene_from_defline(defline, "x", "y")
+  g = L.gene_from_defline(defline, "x", "y")
+  problems << "symbol #{defline[0, 16]}" unless g && g[:symbol] == symbol
+end
+
+# The symbol the table shows and the symbol on the link are one extraction.
+g = L.gene_from_defline(fb, "x", "y")
+problems << "symbol disagrees with link" unless g[:symbol] && m[:title].end_with?(g[:symbol])
+
+puts problems.empty? ? "OK" : "FAIL: #{problems.join(" | ")}"
+  ' 2>&1 | tail -1)
+  [ "$modgene_out" = "OK" ] && ok "MOD gene reports link alongside the Alliance, symbol agrees" \
+                            || bad "MOD gene linkout" "$modgene_out"
+
   # The dataset /blast/SGD/ lands on must carry JBrowse config, or the linkout
   # silently disappears for anyone following the permanent URL.
   sgd_target=$(curl -sI "$BASE_URL/blast/SGD/" | tr -d '\r' \

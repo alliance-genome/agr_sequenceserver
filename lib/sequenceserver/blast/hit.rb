@@ -22,7 +22,7 @@ module SequenceServer
       def to_json(*args)
         # List all attributes that we want to send to the browser.
         properties = %i[number id accession title length total_score
-                        qcovs sciname hsps links]
+                        qcovs sciname hsps links gene_symbol]
         properties.inject({}) { |h, k| h[k] = send(k); h }.to_json(*args)
       end
 
@@ -32,6 +32,18 @@ module SequenceServer
 
       # Include the Links module.
       include Links
+
+      # The gene symbol this hit's defline names, or nil. Sent to the client so
+      # the hit list can lead with the symbol rather than the accession: a
+      # FlyBase hit list of FBpp identifiers does not tell a curator which of
+      # them are the gene they searched for, which is what prompted this.
+      #
+      # Derived from the same extraction the gene links use, so the symbol in
+      # the table and the symbol on the link can never disagree.
+      def gene_symbol
+        gene = Links.gene_from_defline(title, id, accession)
+        gene && gene[:symbol]
+      end
 
       # Links returns a list of Hashes that can be easily turned into an href
       # in the client. These are derived by calling link generators, that is,
@@ -44,6 +56,7 @@ module SequenceServer
         # that give up early.
         defline_links = [
           Links.ncbi_link(accession, title, dbtype),
+          Links.mod_gene_from_defline(title, id, accession),
           Links.agr_gene_from_defline(title, id, accession),
           Links.ncbi_gene(title, id, accession)
         ].compact
