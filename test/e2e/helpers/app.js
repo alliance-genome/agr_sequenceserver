@@ -170,9 +170,12 @@ async function runBlast(page) {
         if (rejected) {
             throw new Error(
                 `the server refused the search: HTTP ${rejected}. The page stays on the `
-                + 'search form and shows nothing, so this is not a slow BLAST. Known '
-                + 'intermittent failure: the session the page was rendered with is not '
-                + 'accepted back at submit time and the request fails the CSRF check.');
+                + 'search form and shows nothing, so this is not a slow BLAST. '
+                + 'A 400 here used to be the search POST validating its database ids '
+                + "against some other request's databases: the POST never loaded its "
+                + 'own, and Database.collection was process-wide, so two MODs searched '
+                + 'at once rejected each other. If it returns, check both halves of '
+                + 'that fix are still in place.');
         }
         throw error;
     } finally {

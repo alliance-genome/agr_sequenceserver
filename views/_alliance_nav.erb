@@ -1,0 +1,30 @@
+<%
+  # Alliance site navigation.
+  #
+  # Deliberately short. An earlier draft mirrored all six of alliancegenome.org's
+  # top-level sections, which made the bar read as a copy of their site rather
+  # than as a way out of this one. A visitor here came to run a BLAST search, so
+  # the bar carries where they are and the two links they might actually want:
+  # back to the Alliance, and someone to tell when something is wrong.
+  #
+  # Read off their live nav on 2026-09-30. BLAST is shown as the current section
+  # although their nav has no such entry -- that remains our proposal, not
+  # something the Alliance web team has agreed.
+  alliance_nav = [
+    ['Contact Us', 'https://www.alliancegenome.org/contact-us']
+  ]
+%>
+<nav id="alliance-nav" class="print:hidden" aria-label="Alliance of Genome Resources">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="agr-nav-row">
+      <a class="agr-nav-brand" href="https://www.alliancegenome.org">Alliance of Genome Resources</a>
+      <span class="agr-nav-sep" aria-hidden="true">/</span>
+      <span class="agr-nav-current" aria-current="page">BLAST</span>
+      <span class="agr-nav-end">
+        <% alliance_nav.each do |label, href| %>
+          <a class="agr-nav-link" href="<%= href %>"><%= label %></a>
+        <% end %>
+      </span>
+    </div>
+  </div>
+</nav>

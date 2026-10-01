@@ -22,6 +22,9 @@
   <!-- CSS -->
   <%= Rack::Csrf.metatag(env) %>
   <link rel="stylesheet" media="screen,print" type="text/css" href="<%= "#{base_url}" %>/blast/css/app.min.css?v=<%= asset_version('css/app.min.css') %>"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <!--
   <% if settings.production? || settings.test? %>
@@ -105,9 +108,15 @@ if member_key
 end
 %>
 
-  <header id="header" class="border-b border-seqorange print:hidden">
+  <%= erb :_alliance_nav, layout: false %>
+
+  <header id="header" class="border-b border-alliance print:hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-none items-center">
+      <%# Wraps rather than overflows. The three blocks here -- the Alliance logo,
+          the member logo and title, and the attribution -- total more than 700px,
+          and as a non-wrapping row they pushed the version number past the right
+          edge of the page and gave the whole document a horizontal scrollbar. %>
+      <div class="flex flex-wrap items-center">
         <div class="py-4">
           <a href="https://alliancegenome.org" target="_blank" class="flex items-end">
             <img src="/blast/logos/alliance_logo_agr.png" alt="agr_logo" width="405" height="53">
@@ -116,29 +125,33 @@ end
         <div class="py-8" style="padding-left:20px">
           <a href="https://www.alliancegenome.org/members/<%= member_path %>" target="_blank" class="flex items-end">
             <img id="alliance-member-logo" src="<%= member_logo_url || '/blast/logos/alliance_logo_agr.png' %>" alt="Alliance MOD logo" width="100" height="100">
-            <strong style="font-size: 1.5rem; padding-left: 10px; padding-bottom:40px">Alliance <%= member_name %><%= data_version && data_version.end_with?('f') ? ' Fungal' : '' %> BLAST</strong>
+            <%# Assembled rather than interpolated inline: the Alliance-wide deployment
+                has no member name, and concatenating an empty one left the heading
+                as " BLAST" with a leading space. %>
+            <% page_title = [member_name,
+                             (data_version && data_version.end_with?('f') ? 'Fungal' : nil),
+                             'BLAST'].reject { |part| part.nil? || part.empty? }.join(' ') %>
+            <strong class="agr-title"><%= page_title %></strong>
+            <span class="agr-beta" title="This service is still in beta">BETA</span>
           </a>
         </div>
-        <div class="pr-8 md:pr-0 py-4" style="padding-left:40px">
-          <strong>Powered by</strong>
-          <a href="https://sequenceserver.com" target="_blank" class="flex items-end">
-            <img src="<%= "#{base_url}" %>/blast/sequenceserver_logo.webp" alt="sequenceserver_logo" width="1620" height="213" class="h-8 w-auto pr-2">
-            <span class="text-sm md:text-base">
-              <%= SequenceServer::VERSION %>
-            </span>
-          </a>
-          <strong style="font-size: 1.5em; float:right; padding-top:10px">Data Version: <%= data_version %></strong>
+        <%# The data version, and only the data version.
+
+            The SequenceServer attribution used to sit here too, and the two
+            competed: a credit does not belong beside the one fact on this page
+            a curator actually acts on. The attribution moved to the colophon,
+            which leaves the version the whole block -- set large, in ink, above
+            its label. %>
+        <div class="agr-meta py-4">
+          <div class="agr-dataversion">
+            <span class="agr-dv-value" data-data-version="<%= data_version %>"><%= data_version %></span>
+            <span class="agr-dv-label">Data version</span>
+          </div>
         </div>
       </div>
     </div>
   </header>
 
-  <!-- BETA Corner Ribbon -->
-  <div style="position: fixed; top: 0; right: 0; width: 0; height: 0; border-style: solid; border-width: 0 80px 80px 0; border-color: transparent #ef4444 transparent transparent; z-index: 50;" class="print:hidden">
-    <div style="position: absolute; top: 20px; right: -65px; transform: rotate(45deg); color: white; font-size: 12px; font-weight: bold; letter-spacing: 2px;">
-      BETA
-    </div>
-  </div>
 
   <!-- <script type="text/javascript" src="<%= "#{base_url}" %>/blast/resource_logo.js"></script> -->
   <noscript>
@@ -155,36 +168,7 @@ end
 
   <%= yield %>
 
-  <div class="mx-auto px-4">
-    <div class="container mx-auto max-w-screen-xl">
-      <p class="text-center text-sm print:hidden">
-       <div style="background-color: #fff3cd; border: 1px solid #ffedb8; border-radius: 5px; padding: 10px; margin-bottom: 15px;">
-         <p style="margin: 0; color: #856404;">
-           <strong>⚠️ Note:</strong> JBrowse genome browser links are currently under development and may not work correctly for all organisms.
-         </p>
-       </div>
-       <p>If you use this service, please cite:</p>
-
-       <h3><strong>Data:</strong></h3>
-<p>
-    Bult CJ, Sternberg PW. 2023. The Alliance of Genome Resources: transforming comparative genomics. 
-    <i>Mamm Genome</i>, 2023;34(4):531-44. 
-    doi: <a href="https://doi.org/10.1007/s00335-023-10015-2">10.1007/s00335-023-10015-2</a>. 
-    PMID: <a href="https://pubmed.ncbi.nlm.nih.gov/37666946/">37666946</a>.
-</p>
-
-<h3><strong>BLAST service:</strong></h3>
-<p>
-    Anurag Priyam, Ben J Woodcroft, Vivek Rai, Ismail Moghul, Alekhya Munagala, Filip Ter, Hiten
-    Chowdhary, Iwo Pieniak, Lawrence J Maynard, Mark Anthony Gibbins, HongKee Moon, Austin
-    Davis-Richardson, Mahmut Uludag, Nathan S Watson-Haigh, Richard Challis, Hiroyuki Nakamura,
-    Emeline Favreau, Esteban A Gómez, Tomás Pluskal, Guy Leonard, Wolfgang Rumpf, Yannick Wurm. 
-    2019. Sequenceserver: A modern graphical user interface for custom BLAST databases. 
-    <i>Molecular Biology and Evolution</i> 36(12):2922–2924, 
-    <a href="https://doi.org/10.1093/molbev/msz185">https://doi.org/10.1093/molbev/msz185</a>. 
-    PMID: <a href="https://pubmed.ncbi.nlm.nih.gov/31411700/">31411700</a>.
-</p>
-</div>
+  <%= erb :_alliance_footer, layout: false %>
 
 </body>
 </html>

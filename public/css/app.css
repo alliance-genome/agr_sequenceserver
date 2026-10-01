@@ -874,3 +874,450 @@ svg .RdYlBu .q31-32 { fill: var(--af); }
 #protein_database_tree .jstree-node {
   background-image: none;
 }
+
+/* ====================================================================== *
+ * Alliance site chrome.
+ *
+ * The nav bar and the header follow alliancegenome.org; everything below
+ * the header's bottom rule -- the query box, the database tree, the
+ * settings and the results -- keeps this application's own scale.
+ *
+ * That seam is deliberate. Their body text is 0.9rem (14.4px); ours is
+ * 16px. Matching them throughout would shrink hit tables, deflines and
+ * HSP alignment blocks by about a tenth, on the pages curators spend the
+ * most time reading. So the two sites match where a visitor compares
+ * them -- the top of the page -- and the sequence data does not move.
+ * ====================================================================== */
+
+/* The page title. Their h3 is 1.575rem at weight 500, which is the closest
+   step in their scale to what this line was doing at 1.5rem. */
+#header .agr-title {
+  font-size: 1.575rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding-left: 10px;
+  padding-bottom: 40px;
+}
+
+/* Was a fixed-position corner ribbon in #ef4444 at z-index 50, which sat on
+   top of the nav bar once there was one. Now an inline marker that scrolls
+   with the page, prints, and does not compete with the Alliance blue. */
+#header .agr-beta {
+  align-self: center;
+  margin-left: 10px;
+  margin-bottom: 40px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: #6C757D;
+  color: #FFFFFF;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+@media print {
+  #alliance-nav { display: none; }
+}
+
+/* The data version, at the right of the header.
+ *
+ * This block held the SequenceServer credit as well, and the two competed. The
+ * credit moved to the colophon, so the version now has the block to itself and
+ * is set as the figure it is: large, in ink, with its label underneath rather
+ * than beside it. A curator reading this page is checking one thing, and this
+ * is it.
+ *
+ * Kept off a float. The earlier 1.5em floated <strong> did not contribute its
+ * height to the row, so it drifted against the logos. */
+
+#header .agr-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: auto;
+  padding-left: 40px;
+}
+
+#header .agr-dataversion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+#header .agr-dv-value {
+  color: #212529;
+  font-size: 1.575rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  /* Release strings line up when several are compared side by side. */
+  font-variant-numeric: tabular-nums;
+}
+
+#header .agr-dv-label {
+  margin-top: 2px;
+  color: #6C757D;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 900px) {
+  #header .agr-meta,
+  #header .agr-dataversion {
+    align-items: flex-start;
+  }
+  #header .agr-meta {
+    margin-left: 0;
+    padding-left: 0;
+  }
+}
+
+/* ====================================================================== *
+ * The bar, top and bottom.
+ *
+ * The same row opens and closes the page. It carries where you are --
+ * Alliance / BLAST -- and the way out, and nothing else: an earlier draft
+ * mirrored all six of alliancegenome.org's sections, which made it read
+ * as a copy of their site rather than a way back to it.
+ * ====================================================================== */
+
+#alliance-nav,
+#header {
+  font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  /* alliancegenome.org's measured body size. */
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+#alliance-nav    { background: #2598C5; color: #FFFFFF; }
+
+.agr-nav-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 10px;
+  padding: 9px 0;
+}
+
+/* Pushed to the far end by an auto margin rather than by a flex spacer: an
+   empty spacer element keeps its width once the row wraps, and overflowed the
+   page by its own gap on a narrow viewport. */
+.agr-nav-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 16px;
+  margin-left: auto;
+}
+
+.agr-nav-brand,
+.agr-nav-link {
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.agr-nav-brand { font-weight: 700; letter-spacing: -0.005em; }
+
+.agr-nav-brand:hover,
+.agr-nav-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+/* The separator and the current page are structure, not links: the slash
+   says "inside", and BLAST is where you already are. */
+.agr-nav-sep     { opacity: 0.5; }
+.agr-nav-current { font-weight: 700; white-space: nowrap; }
+
+#alliance-nav a:focus-visible {
+  outline: 2px solid #FFFFFF;
+  outline-offset: 2px;
+}
+
+/* On a narrow viewport the end group wraps under the brand; left-align it
+   there so it reads as a continuation rather than a stray right-hand column. */
+@media (max-width: 40rem) {
+  .agr-nav-end { margin-left: 0; }
+}
+
+/* ====================================================================== *
+ * Colophon: the caveat and the citations.
+ *
+ * These used to be one centred column at a single weight -- a yellow
+ * warning box, a "please cite" line and two citations, one of them 24
+ * authors long. The caveat and the credits competed, and neither was
+ * easy to act on.
+ * ====================================================================== */
+
+.agr-colophon {
+  margin-top: 56px;
+  padding: 28px 0 32px;
+  border-top: 1px solid #DEE2E6;
+  background: #F8F9FA;
+  font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: #212529;
+}
+
+/* A caveat, set as one: a rule in the accent, a label, and the sentence.
+   No fill, no icon -- it is a note, not an alarm. */
+.agr-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  max-width: 78ch;
+  margin-bottom: 30px;
+  padding-left: 14px;
+  border-left: 3px solid #2598C5;
+}
+
+.agr-notice-tag {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #2598C5;
+  white-space: nowrap;
+}
+
+.agr-notice p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: #495057;
+}
+
+.agr-colophon-h {
+  margin: 0 0 16px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6C757D;
+}
+
+/* Two entries, side by side where there is room. Each is anchored by its
+   DOI, which is the part a reader actually copies. */
+.agr-cites {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 26px 44px;
+  margin: 0;
+}
+
+.agr-cite { min-width: 0; }
+
+.agr-cite dt {
+  margin-bottom: 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #2598C5;
+}
+
+.agr-cite dd { margin: 0; }
+
+.agr-cite p { margin: 0 0 2px; font-size: 0.875rem; line-height: 1.5; }
+
+.agr-cite-authors { color: #495057; }
+.agr-cite-title   { color: #212529; font-weight: 600; }
+.agr-cite-where   { color: #6C757D; }
+
+.agr-cite-all {
+  margin-top: 4px;
+  padding-left: 10px;
+  border-left: 2px solid #DEE2E6;
+}
+
+.agr-cite-ids {
+  margin-top: 7px;
+  font-size: 0.8125rem;
+  /* Identifiers line up when the two entries sit side by side. */
+  font-variant-numeric: tabular-nums;
+}
+
+.agr-cite-ids a {
+  color: #1B7FA6;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(27, 127, 166, 0.35);
+}
+
+.agr-cite-ids a:hover { border-bottom-color: currentColor; }
+.agr-cite-ids a:focus-visible { outline: 2px solid #1B7FA6; outline-offset: 2px; }
+
+.agr-dot { color: #ADB5BD; margin: 0 5px; }
+
+/* Reveals the full author list. A button because it does something, and it
+   is removed from the page entirely when there is no script to do it. */
+.agr-more {
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #1B7FA6;
+  font: inherit;
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.agr-more:hover { color: #2598C5; }
+
+@media print {
+  .agr-colophon { background: none; border-top: 1px solid #000; }
+  /* On paper there is nothing to click, so give the reader everything. */
+  .agr-cite-all { display: block !important; }
+  .agr-more { display: none; }
+}
+
+/* The header row wraps on a narrow viewport (see layout.erb). Two consequences
+   to handle: the wide Alliance logo has to be allowed to scale down, and the
+   attribution block -- right-aligned when it sits at the end of the row -- has
+   to come back to the left once it is on a line of its own. */
+#header img { max-width: 100%; height: auto; }
+
+@media (max-width: 47.5rem) {
+  #header .agr-meta { align-items: flex-start; }
+}
+
+/* ====================================================================== *
+ * Footer: alliancegenome.org's own.
+ *
+ * Their light logo and their six site-map groups, on their blue, at their
+ * measured metrics (Lato, 0.9rem/1.5, bold inline group headings, lists
+ * indented 16px). Their site lays the groups out as CSS multi-column, so
+ * this does too -- a grid would reflow the groups into a different order
+ * at the same widths.
+ * ====================================================================== */
+
+#alliance-footer {
+  background: #2598C5;
+  color: #FFFFFF;
+  font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 28px 0 32px;
+}
+
+.agr-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px 32px;
+}
+
+.agr-footer-logo { flex: 0 0 auto; }
+
+.agr-footer-logo img {
+  display: block;
+  /* Their footer renders it at 50px tall. */
+  height: 50px;
+  width: auto;
+}
+
+.agr-sitemap {
+  flex: 1 1 520px;
+  min-width: 0;
+  columns: 6 150px;
+  column-gap: 24px;
+}
+
+.agr-sitemap-group {
+  /* Keep a heading with its own list. */
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+
+.agr-sitemap-h {
+  display: block;
+  font-weight: 700;
+}
+
+.agr-sitemap ul {
+  margin: 0 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.agr-sitemap a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.agr-sitemap a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#alliance-footer a:focus-visible {
+  outline: 2px solid #FFFFFF;
+  outline-offset: 2px;
+}
+
+/* Their marker for a link that leaves the Alliance site. */
+.agr-ext {
+  margin-left: 5px;
+  font-size: 0.7em;
+  vertical-align: baseline;
+}
+
+/* The attribution, in its new home at the head of the colophon. Sits opposite
+   the caveat: a credit and a disclaimer are both things you read once, and
+   neither needed the page header. */
+.agr-colophon-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px 40px;
+  margin-bottom: 30px;
+}
+
+.agr-colophon-top .agr-notice {
+  /* The flex parent owns the spacing here. */
+  margin-bottom: 0;
+  flex: 1 1 420px;
+  order: -1;
+}
+
+.agr-poweredby {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: #6C757D;
+  font-size: 0.8125rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.agr-poweredby a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.agr-poweredby a:hover { text-decoration: underline; }
+
+.agr-poweredby img {
+  height: 1.25rem;
+  width: auto;
+}
+
+.agr-ss-version { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 47.5rem) {
+  .agr-colophon-top { flex-direction: column; }
+  .agr-sitemap { columns: 2 140px; }
+}

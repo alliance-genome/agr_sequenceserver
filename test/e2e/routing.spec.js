@@ -25,10 +25,23 @@ const NON_PUBLIC = /\/(dev|test|staging)\/?$/i;
 // The ACT1 / YFL039C record that a ?name= lookup resolves to on R64-5-1m.
 const ACT1_HEADER = /^>YFL039C ACT1 SGDID:S000001855/;
 
-/** The "Data Version: X" string the layout renders in the page chrome. */
+/**
+ * The data version the layout renders in the page chrome.
+ *
+ * Read from a data- attribute rather than from visible prose. This used to
+ * scrape /Data Version:\s*(\S+)/ out of body text, which broke the moment the
+ * header was restyled: the colon went away and the label became uppercase
+ * through CSS, so the regex returned null and four routing tests failed for a
+ * reason that had nothing to do with routing.
+ *
+ * The prose fallback is kept so this also works against a build serving the
+ * older chrome.
+ */
 function dataVersionText(page) {
-    return page.locator('body').innerText().then((t) => {
-        const m = t.match(/Data Version:\s*(\S+)/);
+    return page.evaluate(() => {
+        const el = document.querySelector('[data-data-version]');
+        if (el) return el.getAttribute('data-data-version');
+        const m = document.body.innerText.match(/Data Version:\s*(\S+)/i);
         return m ? m[1] : null;
     });
 }

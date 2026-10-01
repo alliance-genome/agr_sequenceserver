@@ -376,6 +376,79 @@ puts bad.empty? ? "OK" : "MISMATCH: #{bad.keys.join(" | ")}"
   [ "$sgd_out" = "OK" ] && ok "SGD chromosome names map to JBrowse refseqs (both defline styles)" \
                         || bad "SGD chromosome extraction" "$sgd_out"
 
+  # The fungal CDS sets name the chromosome nowhere in the title -- it is the
+  # RefSeq accession the id is built from -- and write coordinates NCBI-style.
+  # The property worth asserting is that the two formats CONVERGE: the same gene
+  # must come out at the same place whichever deployment it was found in.
+  fungal_out=$(docker exec "$TEST_CONTAINER" ruby -e '
+require "/sequenceserver/lib/sequenceserver/links"
+L = SequenceServer::Links
+problems = []
+
+# Chromosome from the accession, since the title does not carry it.
+{
+  ["[gene=ACT1] [locus_tag=YFL039C]", "NC_001138.5_cds_NP_116614.1_1760"] => "chrVI",
+  ["[gene=COX1] [location=13818..26701]", "NC_001224.1_cds_NP_009305.1_1"] => "chrmt",
+  # Any other fungus: AGR JBrowse 2 hosts no assembly for it, so no link.
+  ["[gene=X]", "NW_123456.1_cds_XP_1.1_1"] => nil,
+}.each { |(t, a), want| problems << "chrom #{a}" unless L.extract_sgd_chromosome(t, a) == want }
+
+# ACT1 and PAU8, as the fungal set writes them and as SGD writes them.
+[
+  ["[gene=ACT1] [db_xref=SGD:S000001855] [location=complement(join(53260..54377,54687..54696))]",
+   "YFL039C SGDID:S000001855, Chr VI from 54377-53260,54696-54687, reverse complement"],
+  ["[gene=PAU8] [db_xref=SGD:S000002142] [location=complement(1807..2169)]",
+   "PAU8 SGDID:S000002142, Chr I from 2169-1807, reverse complement"],
+].each do |fungal, main|
+  problems << "ranges #{fungal[0, 18]}" unless L.defline_feature_ranges(fungal) == L.defline_feature_ranges(main)
+end
+
+# Both SGD id spellings reach the same Alliance gene page.
+f = L.agr_gene_from_defline("[gene=ACT1] [db_xref=SGD:S000001855,GeneID:850504]", "x", "y")
+m = L.agr_gene_from_defline("PAU8 SGDID:S000002142, Chr I from 2169-1807", "x", "y")
+problems << "gene url" unless f && f[:url].end_with?("SGD:S000001855")
+problems << "gene symbol" unless f && f[:title] == "Alliance: ACT1"
+problems << "gene main regressed" unless m && m[:title] == "Alliance: PAU8"
+
+puts problems.empty? ? "OK" : "FAIL: #{problems.join(" | ")}"
+  ' 2>&1 | tail -1)
+  [ "$fungal_out" = "OK" ] && ok "SGD fungal deflines resolve to the same place as SGD's own" \
+                           || bad "SGD fungal defline handling" "$fungal_out"
+
+  # A MOD's own gene report sits alongside the Alliance one, and the symbol the
+  # hit list shows comes from the same extraction as the links -- so the table
+  # and the link can never name different genes.
+  modgene_out=$(docker exec "$TEST_CONTAINER" ruby -e '
+require "/sequenceserver/lib/sequenceserver/links"
+L = SequenceServer::Links
+problems = []
+
+fb = "FBpp0070468 type=polypeptide; name=w-PA; parent=FBgn0003996,FBtr0070491;"
+m = L.mod_gene_from_defline(fb, "x", "y")
+problems << "fb link missing" unless m
+problems << "fb url" unless m && m[:url] == "https://flybase.org/reports/FBgn0003996"
+problems << "fb symbol" unless m && m[:title] == "FlyBase: w"
+problems << "fb order" unless m && m[:order] < L.agr_gene_from_defline(fb, "x", "y")[:order]
+
+# Only FlyBase has a report URL configured, so nobody else may grow one.
+{
+  "wormpep=CE32785 gene=WBGene00007064 locus=rga-9"          => "rga-9",
+  "PAU8 SGDID:S000002142, Chr I from 2169-1807"              => "PAU8",
+}.each do |defline, symbol|
+  problems << "unexpected mod link: #{defline[0, 16]}" if L.mod_gene_from_defline(defline, "x", "y")
+  g = L.gene_from_defline(defline, "x", "y")
+  problems << "symbol #{defline[0, 16]}" unless g && g[:symbol] == symbol
+end
+
+# The symbol the table shows and the symbol on the link are one extraction.
+g = L.gene_from_defline(fb, "x", "y")
+problems << "symbol disagrees with link" unless g[:symbol] && m[:title].end_with?(g[:symbol])
+
+puts problems.empty? ? "OK" : "FAIL: #{problems.join(" | ")}"
+  ' 2>&1 | tail -1)
+  [ "$modgene_out" = "OK" ] && ok "MOD gene reports link alongside the Alliance, symbol agrees" \
+                            || bad "MOD gene linkout" "$modgene_out"
+
   # The dataset /blast/SGD/ lands on must carry JBrowse config, or the linkout
   # silently disappears for anyone following the permanent URL.
   sgd_target=$(curl -sI "$BASE_URL/blast/SGD/" | tr -d '\r' \
@@ -424,6 +497,60 @@ for asset in "app.min.css" "sequenceserver-search.min.js"; do
   path=$(printf '%s' "$ref" | sed "s#^.*/blast/#blast/#")
   status "$asset still serves at its fingerprinted URL" "$path" "200"
 done
+
+section "10. concurrent searches on different MODs"
+
+# The search POST used to validate its database ids against whatever collection
+# the PREVIOUS request had left in a process-wide Hash, because it never loaded
+# its own. Two MODs searched at the same time therefore rejected each other with
+# HTTP 400 -- measured at 4 failures in 60 before the fix, and it was also the
+# browser suite's long-standing "CSRF" flake, which was never CSRF.
+conc_tmp=$(mktemp -d)
+conc_seq='>q
+TTGTCAGACGGAAGCAGATTCAATGTAGTTTTCGAGCAAACCAGGCTTCTAAAAAGCAAATTTTTGACGAAAAGATTTCA'
+
+conc_post() {
+  conc_mod=$1; conc_ver=$2; conc_i=$3
+  conc_jar="$conc_tmp/c$conc_i.jar"
+  conc_page=$(curl -s -c "$conc_jar" "$BASE_URL/blast/$conc_mod/$conc_ver/")
+  # The tag renders as <meta name="_csrf" content="..."/>, so match the tag and
+  # then its content rather than assuming an attribute order.
+  conc_tok=$(printf '%s' "$conc_page" | grep -o '<meta[^>]*_csrf[^>]*>' \
+             | grep -o 'content="[^"]*"' | head -1 | sed 's/content="//; s/"$//')
+  conc_db=$(curl -s -b "$conc_jar" "$BASE_URL/blast/$conc_mod/$conc_ver/searchdata.json" \
+            | python3 -c 'import json,sys
+d=json.load(sys.stdin); dbs=d.get("database",[])
+if isinstance(dbs,dict): dbs=list(dbs.values())
+n=[x for x in dbs if x.get("type")=="nucleotide"]
+print(n[0]["id"] if n else "")' 2>/dev/null)
+  if [ -z "$conc_db" ]; then printf 'nodb\n'; return; fi
+  curl -s -b "$conc_jar" -o /dev/null -w '%{http_code}\n' \
+    -X POST "$BASE_URL/blast/$conc_mod/$conc_ver/" \
+    --data-urlencode 'method=blastn' \
+    --data-urlencode "sequence=$conc_seq" \
+    --data-urlencode "databases[]=$conc_db" \
+    --data-urlencode "_csrf=$conc_tok"
+}
+
+conc_out=$(
+  conc_n=0
+  for conc_pair in "WB WS298" "SGD R64-5-1m" "WB WS298" "SGD R64-5-1m" \
+                   "WB WS298" "SGD R64-5-1m" "WB WS298" "SGD R64-5-1m" \
+                   "WB WS298" "SGD R64-5-1m" "WB WS298" "SGD R64-5-1m"; do
+    conc_n=$((conc_n + 1))
+    set -- $conc_pair
+    conc_post "$1" "$2" "$conc_n" &
+  done
+  wait
+)
+rm -rf "$conc_tmp"
+
+conc_bad=$(printf '%s\n' "$conc_out" | grep -cv '^303$' || true)
+if [ "$conc_bad" = "0" ]; then
+  ok "12 interleaved WB/SGD searches were all accepted"
+else
+  bad "concurrent searches rejected each other" "$(printf '%s\n' "$conc_out" | sort | uniq -c | tr '\n' ' ')"
+fi
 
 # --- summary ---------------------------------------------------------------
 printf '\n%s%d passed%s, %s%d failed%s' "$GRN" "$PASS" "$RST" "$RED" "$FAIL" "$RST"

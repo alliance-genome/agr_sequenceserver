@@ -464,8 +464,17 @@ class HitsTable extends Component {
                             <tr key={hit.number}>
                                 <td className="text-left">{hit.number + '.'}</td>
                                 <td>
+                                    {/* The gene symbol leads where the defline names one. A FlyBase
+                                        hit list of FBpp identifiers does not tell a curator which
+                                        rows are the gene they searched for -- the symbol was being
+                                        resolved already, but only as a link label further down the
+                                        page. The accession still follows, because it is what a
+                                        curator copies. */}
                                     <a href={'#Query_' + this.props.query.number + '_hit_' + hit.number}
-                                        className="text-sm text-seqblue hover:text-seqorange cursor-pointer pe-1 line-clamp-1 tooltip-item" title={`${hit.id} ${hit.title}`}>{hit.id} {hit.title}</a>
+                                        className="text-sm text-seqblue hover:text-seqorange cursor-pointer pe-1 line-clamp-1 tooltip-item"
+                                        title={`${hit.gene_symbol ? hit.gene_symbol + ' ' : ''}${hit.id} ${hit.title}`}>
+                                        {hit.gene_symbol && <strong className="font-semibold">{hit.gene_symbol}</strong>}
+                                        {hit.gene_symbol ? ' ' : ''}{hit.id} {hit.title}</a>
                                 </td>
                                 {hasName &&
                                     <td className="pe-1 line-clamp-1 tooltip-item" title={hit.sciname}>
