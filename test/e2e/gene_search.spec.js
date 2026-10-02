@@ -124,6 +124,25 @@ test.describe('gene search', () => {
         expect(symbols[0].toLowerCase()).toBe('unc-5');
     });
 
+    test('one database cannot fill the list and crowd out the others', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // Reported: searching "w" on FlyBase returned fifty protein hits and
+        // never reached the transcripts, so the box looked as though FlyBase
+        // had no nucleotide genes at all. The cap is per database now, and an
+        // exact hit is exempt from it entirely.
+        await gotoSearch(page, '/blast/FB/FB2026_03/');
+        await search(page, 'w');
+
+        const types = await page.locator(`${RESULTS} span.ml-auto`).allInnerTexts();
+        expect(types).toContain('protein');
+        expect(types).toContain('nucleotide');
+
+        // Both exact matches survive, one per database, however many near
+        // misses share the prefix.
+        const symbols = await page.locator(`${RESULTS} strong`).allInnerTexts();
+        expect(symbols.filter((sym) => sym.toLowerCase() === 'w').length).toBe(2);
+    });
+
     test('a symbol nothing carries says so rather than failing silently', async ({ page }) => {
         test.setTimeout(120 * 1000);
         const pageErrors = [];
@@ -133,6 +152,10 @@ test.describe('gene search', () => {
         await page.fill(BOX, 'ZZZNOTAREALGENE123');
 
         await expect(page.locator('#gene-search')).toContainText('No gene starting with', { timeout: 30 * 1000 });
+        // ...and says which of the two the box can answer, because the
+        // commonest miss is a full gene name: "white" appears nowhere in
+        // FlyBase's deflines, only the symbol w.
+        await expect(page.locator('#gene-search')).toContainText('symbols');
         await expect(page.locator(RESULTS)).toHaveCount(0);
         // The query box is untouched and the page still works.
         await expect(page.locator(S.sequence)).toHaveValue('');

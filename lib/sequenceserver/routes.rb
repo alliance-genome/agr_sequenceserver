@@ -720,6 +720,11 @@ module SequenceServer
     # something a person will pick from a list anyway.
     GENE_SEARCH_LIMIT = 50
 
+    # How many near-misses any ONE database may contribute. Exact hits ignore
+    # this; it only stops a database with thousands of symbols sharing a prefix
+    # from crowding every other database out of the list.
+    GENE_SEARCH_PER_DATABASE = 8
+
     # "Genus species" for each database, keyed by database title.
     #
     # A database carries no organism of its own: its categories are the tree
@@ -763,8 +768,6 @@ module SequenceServer
       partial = []
 
       Database.all.each do |db|
-        break if exact.length + partial.length >= GENE_SEARCH_LIMIT
-
         path = "#{db.name}#{NAME_INDEX_SUFFIX}"
         next unless File.exist?(path)
 
@@ -777,6 +780,11 @@ module SequenceServer
           next
         end
 
+        # Per database, not globally. Capping as we go across all databases
+        # meant one of them could fill the whole list: searching "w" on FlyBase
+        # returned fifty protein hits and never reached the transcripts, so the
+        # box looked as though FlyBase had no nucleotide genes at all.
+        taken = 0
         index.each do |name, accession|
           next unless name.start_with?(prefix)
 
@@ -788,10 +796,16 @@ module SequenceServer
             type: db.type,
             organism: organisms[db.title]
           }
-          # An exact hit is what the user almost always wants, so it is never
-          # pushed below a longer symbol that merely starts the same way.
-          (name == prefix ? exact : partial) << candidate
-          break if exact.length + partial.length >= GENE_SEARCH_LIMIT
+
+          if name == prefix
+            # An exact hit is never dropped: it is what the user typed, and it
+            # must survive however many near-misses share its prefix.
+            exact << candidate
+          else
+            next if taken >= GENE_SEARCH_PER_DATABASE
+            partial << candidate
+            taken += 1
+          end
         end
       end
 
