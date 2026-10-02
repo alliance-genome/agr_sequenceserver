@@ -676,6 +676,19 @@ module SequenceServer
     # names, which is different from having no index at all.
     NAME_INDEX_SUFFIX = '.names.json'
 
+    # Written beside the index above, mapping the same lower-cased key to the
+    # spelling the source database actually uses: {"dll": "Dll", "cg2759":
+    # "CG2759"}. Only keys whose spelling differs from the key appear in it.
+    #
+    # A separate file rather than a richer value in the index, for two reasons.
+    # The index is the hot path -- a gene search checks the raw text of every
+    # index in the deployment, 928 MB of them on FlyBase -- so anything added
+    # to it is paid on every search, whereas this is read only for the few
+    # databases a search actually matches. And the index keeps its exact
+    # existing shape, so a deployment running older code goes on resolving
+    # ?name= against it unchanged.
+    NAME_DISPLAY_SUFFIX = '.names.display.json'
+
     # Resolve a gene name or locus tag (e.g. YFL039C) to a FASTA sequence, so
     # that /blast/SGD/<version>/?name=YFL039C&type=dna can prefill the query box.
     def lookup_sequence_by_name(name, type, _database_dir)
@@ -780,6 +793,12 @@ module SequenceServer
           next
         end
 
+        # Loaded on the first hit, not here: the needle above is matched
+        # against the raw text, where it can equally well land on a value's
+        # opening quote, so a database that passed it may still have no key
+        # starting with the prefix and nothing to label.
+        display = nil
+
         # Per database, not globally. Capping as we go across all databases
         # meant one of them could fill the whole list: searching "w" on FlyBase
         # returned fifty protein hits and never reached the transcripts, so the
@@ -788,8 +807,13 @@ module SequenceServer
         index.each do |name, accession|
           next unless name.start_with?(prefix)
 
+          display ||= display_names_for(db)
+
           candidate = {
-            symbol: name,
+            # Keys are lower-cased so a lookup can be case-insensitive, which
+            # left the list showing "dll" for Dll and "cg2759" for CG2759.
+            # Where the source spells it differently, show that spelling.
+            symbol: display[name] || name,
             accession: accession,
             database_id: db.id,
             database_title: db.title,
@@ -809,8 +833,26 @@ module SequenceServer
         end
       end
 
-      partial.sort_by! { |c| [c[:symbol].length, c[:symbol]] }
+      # Ordered on the lower-cased spelling, so that showing a database's own
+      # capitalisation does not reorder the list: sorting "CG2759" by its bytes
+      # would put it ahead of every lower-cased symbol.
+      partial.sort_by! { |c| [c[:symbol].length, c[:symbol].downcase] }
       (exact + partial).first(GENE_SEARCH_LIMIT)
+    end
+
+    # The spelling each name is written with in the source database, keyed by
+    # the index's lower-cased key. Empty where the file is absent, which is
+    # every database built before it was emitted -- callers then fall back to
+    # the key, i.e. to the behaviour before this file existed.
+    def display_names_for(db)
+      path = "#{db.name}#{NAME_DISPLAY_SUFFIX}"
+      return {} unless File.exist?(path)
+
+      names = JSON.parse(File.read(path))
+      names.is_a?(Hash) ? names : {}
+    rescue JSON::ParserError, SystemCallError => e
+      logger.warn "Ignoring unreadable display-name file #{path}: #{e.message}"
+      {}
     end
 
     # Read the name index sitting next to a BLAST database, or nil when the
