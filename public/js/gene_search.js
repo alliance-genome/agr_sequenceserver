@@ -142,7 +142,16 @@ export class GeneSearch extends Component {
         if (searched && !results.length) {
             return (
                 <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-gray-500">
-                    No gene starting with <strong>{query.trim()}</strong> in this deployment’s databases.
+                    <div>No gene starting with <strong>{query.trim()}</strong> in this deployment’s databases.</div>
+                    {/* The commonest miss is a full gene name. FlyBase deflines
+                        carry name=w-RA and nothing else -- the string "white"
+                        does not appear anywhere in the database -- so there is
+                        no way to match it, and the only useful thing to do is
+                        say which of the two the box can answer. */}
+                    <div className="mt-0.5 text-xs">
+                        These are gene <em>symbols</em> as each database writes them,
+                        so try the symbol rather than the full name.
+                    </div>
                 </div>
             );
         }
