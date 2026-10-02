@@ -67,8 +67,10 @@ test.describe('gene search', () => {
             .first().locator('button').click();
 
         await expect(page.locator(S.sequence)).toHaveValue(YEAST_ACT1, { timeout: 30 * 1000 });
-        // ...and the database it came from is the one now selected.
-        await expect(page.locator(`${S.databaseCheckboxChecked}`)).toHaveCount(1);
+        // ...and nothing is selected for them. The database a sequence came
+        // FROM is rarely the one anyone wants to search it against, so choosing
+        // a gene fills the query box and leaves the database choice alone.
+        await expect(page.locator(`${S.databaseCheckboxChecked}`)).toHaveCount(0);
     });
 
     test('both sequence types are searched, not just the selected one', async ({ page }) => {
@@ -94,6 +96,34 @@ test.describe('gene search', () => {
         expect(organisms).toContain('Drosophila melanogaster');
     });
 
+    test('a partial symbol finds the genes that start with it', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // The box's first report: typing ACT on FlyBase said no such gene,
+        // while Act5C, Actn and the rest sat in the index. Nobody types a
+        // symbol exactly, so an exact-match-only lookup reads as broken.
+        await gotoSearch(page, '/blast/FB/FB2026_03/');
+        await search(page, 'ACT');
+
+        const symbols = await page.locator(`${RESULTS} strong`).allInnerTexts();
+        expect(symbols.length).toBeGreaterThan(0);
+        expect(symbols.every((sym) => sym.toLowerCase().startsWith('act'))).toBe(true);
+        // Something longer than the query, i.e. this really is a prefix search.
+        expect(symbols.some((sym) => sym.length > 'act'.length)).toBe(true);
+    });
+
+    test('an exact match is listed before longer symbols that share its prefix', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // WormBase has unc-5 as well as unc-50, unc-51, unc-54 and more. The
+        // gene someone typed in full must not be pushed below the ones that
+        // merely start the same way.
+        await gotoSearch(page, '/blast/WB/WS298/');
+        await search(page, 'unc-5');
+
+        const symbols = await page.locator(`${RESULTS} strong`).allInnerTexts();
+        expect(symbols.length).toBeGreaterThan(1);
+        expect(symbols[0].toLowerCase()).toBe('unc-5');
+    });
+
     test('a symbol nothing carries says so rather than failing silently', async ({ page }) => {
         test.setTimeout(120 * 1000);
         const pageErrors = [];
@@ -102,7 +132,7 @@ test.describe('gene search', () => {
         await gotoSearch(page, '/blast/SGD/R64-5-1m/');
         await page.fill(BOX, 'ZZZNOTAREALGENE123');
 
-        await expect(page.locator('#gene-search')).toContainText('No gene named', { timeout: 30 * 1000 });
+        await expect(page.locator('#gene-search')).toContainText('No gene starting with', { timeout: 30 * 1000 });
         await expect(page.locator(RESULTS)).toHaveCount(0);
         // The query box is untouched and the page still works.
         await expect(page.locator(S.sequence)).toHaveValue('');

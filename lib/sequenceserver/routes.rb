@@ -753,12 +753,17 @@ module SequenceServer
     # match are parsed. Measured on this host that takes a search from 1.2s to
     # 0.19s.
     def gene_search_candidates(query, organisms)
-      key = query.downcase
-      needle = %("#{key}":)
-      candidates = []
+      prefix = query.downcase
+      # Keys are quoted in the JSON, so this finds any key STARTING with what
+      # was typed -- which is the point: nobody knows a symbol exactly, and the
+      # first report of this box was someone typing ACT and being told no such
+      # gene exists while ACT1 sat in the index.
+      needle = %("#{prefix})
+      exact = []
+      partial = []
 
       Database.all.each do |db|
-        break if candidates.length >= GENE_SEARCH_LIMIT
+        break if exact.length + partial.length >= GENE_SEARCH_LIMIT
 
         path = "#{db.name}#{NAME_INDEX_SUFFIX}"
         next unless File.exist?(path)
@@ -766,24 +771,32 @@ module SequenceServer
         raw = File.read(path)
         next unless raw.include?(needle)
 
-        accession = begin
-          JSON.parse(raw)[key]
+        index = begin
+          JSON.parse(raw)
         rescue JSON::ParserError
-          nil
+          next
         end
-        next unless accession
 
-        candidates << {
-          symbol: query,
-          accession: accession,
-          database_id: db.id,
-          database_title: db.title,
-          type: db.type,
-          organism: organisms[db.title]
-        }
+        index.each do |name, accession|
+          next unless name.start_with?(prefix)
+
+          candidate = {
+            symbol: name,
+            accession: accession,
+            database_id: db.id,
+            database_title: db.title,
+            type: db.type,
+            organism: organisms[db.title]
+          }
+          # An exact hit is what the user almost always wants, so it is never
+          # pushed below a longer symbol that merely starts the same way.
+          (name == prefix ? exact : partial) << candidate
+          break if exact.length + partial.length >= GENE_SEARCH_LIMIT
+        end
       end
 
-      candidates
+      partial.sort_by! { |c| [c[:symbol].length, c[:symbol]] }
+      (exact + partial).first(GENE_SEARCH_LIMIT)
     end
 
     # Read the name index sitting next to a BLAST database, or nil when the

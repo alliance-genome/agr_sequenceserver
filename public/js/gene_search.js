@@ -19,6 +19,26 @@ import { Component } from 'react';
  */
 const DEBOUNCE_MS = 350;
 
+// A symbol each MOD actually has, so the placeholder is something a visitor can
+// type and see work. "ACT1" was shown everywhere at first, which is a yeast
+// gene: on FlyBase it returned nothing, which reads as a broken box rather than
+// a wrong example. Each of these was checked against its deployment.
+//
+// ZFIN and RGD are deliberately absent. Their deflines carry no gene symbols at
+// all, so there is no example that would work, and inventing one would promise
+// something the deployment cannot do.
+const PLACEHOLDER_BY_MOD = {
+    SGD: 'ACT1',
+    FB: 'Dll',
+    WB: 'unc-54'
+};
+
+function placeholderForCurrentMod() {
+    const segment = window.location.pathname.split('/')[2];
+    const example = segment && PLACEHOLDER_BY_MOD[segment.toUpperCase()];
+    return example ? `gene symbol, e.g. ${example}` : 'gene symbol';
+}
+
 export class GeneSearch extends Component {
     constructor(props) {
         super(props);
@@ -114,22 +134,22 @@ export class GeneSearch extends Component {
         const { results, searching, searched, error, query } = this.state;
 
         if (error) {
-            return <div className="mt-1 text-sm text-red-700">{error}</div>;
+            return <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-red-700">{error}</div>;
         }
         if (searching) {
-            return <div className="mt-1 text-sm text-gray-500">Searching…</div>;
+            return <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-gray-500">Searching…</div>;
         }
         if (searched && !results.length) {
             return (
-                <div className="mt-1 text-sm text-gray-500">
-                    No gene named <strong>{query.trim()}</strong> in this deployment’s databases.
+                <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-gray-500">
+                    No gene starting with <strong>{query.trim()}</strong> in this deployment’s databases.
                 </div>
             );
         }
         if (!results.length) return null;
 
         return (
-            <ul className="gene-search-results mt-1 border border-gray-300 rounded max-h-64 overflow-y-auto">
+            <ul className="gene-search-results absolute z-20 left-0 mt-1 w-full max-w-2xl bg-white border border-gray-300 rounded shadow-lg max-h-64 overflow-y-auto">
                 {results.map((candidate, index) => (
                     <li key={`${candidate.database_id}-${index}`}>
                         <button
@@ -154,7 +174,7 @@ export class GeneSearch extends Component {
 
     render() {
         return (
-            <div className="gene-search mt-2" id="gene-search">
+            <div className="gene-search relative mb-2" id="gene-search">
                 <form onSubmit={this.handleSubmit} className="flex gap-2 items-center">
                     <label htmlFor="gene-search-input" className="text-sm text-gray-600">
                         Or find a gene:
@@ -162,8 +182,8 @@ export class GeneSearch extends Component {
                     <input
                         id="gene-search-input"
                         type="search"
-                        className="border rounded px-1 text-sm"
-                        placeholder="gene symbol, e.g. ACT1"
+                        className="border rounded px-2 py-1 text-sm w-64 max-w-full"
+                        placeholder={placeholderForCurrentMod()}
                         autoComplete="off"
                         value={this.state.query}
                         onChange={this.handleChange}
