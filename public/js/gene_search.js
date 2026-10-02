@@ -177,7 +177,7 @@ export class GeneSearch extends Component {
             <div className="gene-search relative mb-2" id="gene-search">
                 <form onSubmit={this.handleSubmit} className="flex gap-2 items-center">
                     <label htmlFor="gene-search-input" className="text-sm text-gray-600">
-                        Or find a gene:
+                        Find a gene:
                     </label>
                     <input
                         id="gene-search-input"

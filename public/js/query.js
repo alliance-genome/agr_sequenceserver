@@ -353,6 +353,12 @@ export class SearchQueryWidget extends Component {
                     first. The examples stay underneath -- they are a nudge for
                     someone who has nothing to paste, not a step in the flow. */}
                 <GeneSearch onSelect={this.props.onGeneSelected} />
+                {/* The two ways of supplying a query, with the choice between
+                    them made explicit. The box used to be labelled "Or find a
+                    gene" while sitting BELOW the textarea, which worked; it
+                    does not once the box comes first, because the alternative
+                    it offers has not been shown yet. */}
+                <div className="my-2 text-sm text-gray-500" aria-hidden="true">or</div>
                 <div
                     className="sequence">
                     <textarea
