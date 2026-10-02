@@ -19,6 +19,26 @@ import { Component } from 'react';
  */
 const DEBOUNCE_MS = 350;
 
+// A symbol each MOD actually has, so the placeholder is something a visitor can
+// type and see work. "ACT1" was shown everywhere at first, which is a yeast
+// gene: on FlyBase it returned nothing, which reads as a broken box rather than
+// a wrong example. Each of these was checked against its deployment.
+//
+// ZFIN and RGD are deliberately absent. Their deflines carry no gene symbols at
+// all, so there is no example that would work, and inventing one would promise
+// something the deployment cannot do.
+const PLACEHOLDER_BY_MOD = {
+    SGD: 'ACT1',
+    FB: 'Dll',
+    WB: 'unc-54'
+};
+
+function placeholderForCurrentMod() {
+    const segment = window.location.pathname.split('/')[2];
+    const example = segment && PLACEHOLDER_BY_MOD[segment.toUpperCase()];
+    return example ? `gene symbol, e.g. ${example}` : 'gene symbol';
+}
+
 export class GeneSearch extends Component {
     constructor(props) {
         super(props);
@@ -122,7 +142,7 @@ export class GeneSearch extends Component {
         if (searched && !results.length) {
             return (
                 <div className="mt-1 text-sm text-gray-500">
-                    No gene named <strong>{query.trim()}</strong> in this deployment’s databases.
+                    No gene starting with <strong>{query.trim()}</strong> in this deployment’s databases.
                 </div>
             );
         }
@@ -162,8 +182,8 @@ export class GeneSearch extends Component {
                     <input
                         id="gene-search-input"
                         type="search"
-                        className="border rounded px-1 text-sm"
-                        placeholder="gene symbol, e.g. ACT1"
+                        className="border rounded px-2 py-1 text-sm w-64 max-w-full"
+                        placeholder={placeholderForCurrentMod()}
                         autoComplete="off"
                         value={this.state.query}
                         onChange={this.handleChange}
