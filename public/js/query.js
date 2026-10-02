@@ -6,6 +6,7 @@ import LengthDistribution from './length_distribution'; // length distribution o
 import Utils from './utils';
 import { fastqToFasta } from './fastq_to_fasta';
 import { examplesForCurrentMod } from './examples';
+import { GeneSearch } from './gene_search';
 import CollapsePreferences from './collapse_preferences';
 import './jquery_world';
 
@@ -377,6 +378,7 @@ export class SearchQueryWidget extends Component {
                 <ExampleSequences
                     databases={this.props.databases}
                     onSelect={this.props.onExampleSelected} />
+                <GeneSearch onSelect={this.props.onGeneSelected} />
             </div>
         );
     }

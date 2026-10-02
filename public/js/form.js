@@ -34,6 +34,7 @@ export class Form extends Component {
         this.handleDatabaseSelectionChanged = this.handleDatabaseSelectionChanged.bind(this);
         this.handleAlgoChanged = this.handleAlgoChanged.bind(this);
         this.handleExampleSelected = this.handleExampleSelected.bind(this);
+        this.handleGeneSelected = this.handleGeneSelected.bind(this);
         this.handleFormSubmission = this.handleFormSubmission.bind(this);
         this.formRef = createRef();
         this.query = createRef();
@@ -234,6 +235,39 @@ export class Form extends Component {
      * in agreement; the BLAST method then follows from the sequence and
      * database types, as it does for a hand-typed query.
      */
+    /**
+     * A gene chosen from the gene search box.
+     *
+     * The candidate already names the database it came from, so unlike an
+     * example there is nothing to look up by title -- and nothing to guess at
+     * when two organisms share a symbol, which is the whole reason the box
+     * offers a list.
+     */
+    handleGeneSelected(candidate, sequence) {
+        this.query.current.value(sequence);
+
+        const database = (this.state.databases || []).find(db => db.id === candidate.database_id);
+        if (!database) {
+            console.warn(`Gene search returned a database this page does not have: ${candidate.database_title}`);
+            return;
+        }
+
+        if (this.useTreeWidget()) {
+            const tree = $(`#${database.type}_database_tree`);
+            // The tree initialises lazily on first click, so make sure it exists.
+            if (!tree.jstree(true)) tree.click();
+            tree.jstree('deselect_all');
+            tree.jstree('select_node', database.id);
+        } else {
+            const checkbox = this.formRef.current
+                .querySelector(`input.checkbox-database[value="${database.id}"]`);
+            if (checkbox && !checkbox.checked) checkbox.click();
+        }
+
+        this.handleDatabaseTypeChanged(database.type);
+        this.query.current.focus();
+    }
+
     handleExampleSelected(example) {
         this.query.current.value(example.sequence);
 
@@ -287,7 +321,7 @@ export class Form extends Component {
                 <form id="blast" ref={this.formRef} onSubmit={this.handleFormSubmission}>
                     <input type="hidden" name="_csrf" value={document.querySelector('meta[name="_csrf"]').content} />
                     <div className="px-4">
-                        <SearchQueryWidget ref={this.query} databases={this.state.databases} onSequenceTypeChanged={this.handleSequenceTypeChanged} onSequenceChanged={this.handleSequenceChanged} onExampleSelected={this.handleExampleSelected}/>
+                        <SearchQueryWidget ref={this.query} databases={this.state.databases} onSequenceTypeChanged={this.handleSequenceTypeChanged} onSequenceChanged={this.handleSequenceChanged} onExampleSelected={this.handleExampleSelected} onGeneSelected={this.handleGeneSelected}/>
 
                         {this.useTreeWidget() ?
                             <DatabasesTree

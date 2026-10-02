@@ -1,0 +1,111 @@
+// The gene search box on the search form.
+//
+// What makes this worth testing is not that a lookup returns something -- the
+// ?name= specs already cover that -- but the two things the box exists to fix:
+//
+//   * A gene symbol is ambiguous. Sixteen of SGD's fungal databases carry an
+//     "act1", and ?name= resolved that by taking the first database it found,
+//     which handed a curator typing ACT1 the Candida albicans record. The box
+//     lists candidates with their organism so the user chooses, and the test
+//     below asserts that choosing S. cerevisiae really loads the yeast record
+//     rather than merely "a record".
+//
+//   * Both sequence types are searched. WormBase carries gene symbols only on
+//     its protein databases, so a box that followed the selected type would
+//     find nothing there.
+
+const { test, expect } = require('@playwright/test');
+const { gotoSearch, S } = require('./helpers/app');
+
+const BOX = '#gene-search-input';
+const RESULTS = '.gene-search-results li';
+
+// S. cerevisiae's own ACT1, as it appears in the fungal coding set. Candida's
+// is NC_032089.x -- a different organism under the same symbol, which is the
+// whole point of the list.
+const YEAST_ACT1 = /^>NC_001138\.5_cds_NP_116614\.1_1760\b/;
+
+async function search(page, symbol) {
+    await page.fill(BOX, symbol);
+    await page.waitForSelector(RESULTS, { timeout: 30 * 1000 });
+}
+
+test.describe('gene search', () => {
+    test('the box is offered on the search form', async ({ page }) => {
+        await gotoSearch(page, '/blast/SGD/R64-5-1m/');
+        await expect(page.locator(BOX)).toBeVisible();
+        // Empty by default: it must not run a search nobody asked for.
+        await expect(page.locator(BOX)).toHaveValue('');
+        await expect(page.locator(RESULTS)).toHaveCount(0);
+    });
+
+    test('an ambiguous symbol lists every organism that has it', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        await gotoSearch(page, '/blast/SGD/R64-5-1f/');
+        await search(page, 'ACT1');
+
+        const organisms = await page.locator(`${RESULTS} em`).allInnerTexts();
+        // Several candidates, and they are genuinely different organisms rather
+        // than one organism's several databases.
+        expect(organisms.length).toBeGreaterThan(1);
+        expect(new Set(organisms).size).toBeGreaterThan(1);
+        expect(organisms).toContain('Saccharomyces cerevisiae');
+        expect(organisms.some((o) => /^Candida /.test(o))).toBe(true);
+    });
+
+    test('choosing an organism loads that organism, not the first match', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        await gotoSearch(page, '/blast/SGD/R64-5-1f/');
+        await search(page, 'ACT1');
+
+        // The first candidate is NOT S. cerevisiae -- that is the bug this box
+        // exists to fix, so assert it rather than assume the order.
+        const first = await page.locator(`${RESULTS} em`).first().innerText();
+        expect(first).not.toBe('Saccharomyces cerevisiae');
+
+        await page.locator(RESULTS, { has: page.locator('em', { hasText: 'Saccharomyces cerevisiae' }) })
+            .first().locator('button').click();
+
+        await expect(page.locator(S.sequence)).toHaveValue(YEAST_ACT1, { timeout: 30 * 1000 });
+        // ...and the database it came from is the one now selected.
+        await expect(page.locator(`${S.databaseCheckboxChecked}`)).toHaveCount(1);
+    });
+
+    test('both sequence types are searched, not just the selected one', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // WormBase carries symbols only on its protein databases; its
+        // nucleotide sets are genome assemblies with no locus=.
+        await gotoSearch(page, '/blast/WB/WS298/');
+        await search(page, 'unc-54');
+
+        const types = await page.locator(`${RESULTS} span.ml-auto`).allInnerTexts();
+        expect(types).toContain('protein');
+    });
+
+    test('a single-character symbol is searchable', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // FlyBase has 17 of them -- w, y, a, d, e, f and the rest. A minimum
+        // query length would make them unreachable on the MOD that asked for
+        // this box.
+        await gotoSearch(page, '/blast/FB/FB2026_03/');
+        await search(page, 'w');
+
+        const organisms = await page.locator(`${RESULTS} em`).allInnerTexts();
+        expect(organisms).toContain('Drosophila melanogaster');
+    });
+
+    test('a symbol nothing carries says so rather than failing silently', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        const pageErrors = [];
+        page.on('pageerror', (err) => pageErrors.push(String(err)));
+
+        await gotoSearch(page, '/blast/SGD/R64-5-1m/');
+        await page.fill(BOX, 'ZZZNOTAREALGENE123');
+
+        await expect(page.locator('#gene-search')).toContainText('No gene named', { timeout: 30 * 1000 });
+        await expect(page.locator(RESULTS)).toHaveCount(0);
+        // The query box is untouched and the page still works.
+        await expect(page.locator(S.sequence)).toHaveValue('');
+        expect(pageErrors).toEqual([]);
+    });
+});
