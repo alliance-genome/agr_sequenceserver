@@ -348,6 +348,11 @@ export class SearchQueryWidget extends Component {
     render() {
         return (
             <div className="relative">
+                {/* Above the query box rather than below it: choosing a gene
+                    FILLS that box, so the control that causes it should come
+                    first. The examples stay underneath -- they are a nudge for
+                    someone who has nothing to paste, not a step in the flow. */}
+                <GeneSearch onSelect={this.props.onGeneSelected} />
                 <div
                     className="sequence">
                     <textarea
@@ -378,7 +383,6 @@ export class SearchQueryWidget extends Component {
                 <ExampleSequences
                     databases={this.props.databases}
                     onSelect={this.props.onExampleSelected} />
-                <GeneSearch onSelect={this.props.onGeneSelected} />
             </div>
         );
     }

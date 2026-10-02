@@ -67,8 +67,10 @@ test.describe('gene search', () => {
             .first().locator('button').click();
 
         await expect(page.locator(S.sequence)).toHaveValue(YEAST_ACT1, { timeout: 30 * 1000 });
-        // ...and the database it came from is the one now selected.
-        await expect(page.locator(`${S.databaseCheckboxChecked}`)).toHaveCount(1);
+        // ...and nothing is selected for them. The database a sequence came
+        // FROM is rarely the one anyone wants to search it against, so choosing
+        // a gene fills the query box and leaves the database choice alone.
+        await expect(page.locator(`${S.databaseCheckboxChecked}`)).toHaveCount(0);
     });
 
     test('both sequence types are searched, not just the selected one', async ({ page }) => {

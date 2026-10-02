@@ -238,33 +238,15 @@ export class Form extends Component {
     /**
      * A gene chosen from the gene search box.
      *
-     * The candidate already names the database it came from, so unlike an
-     * example there is nothing to look up by title -- and nothing to guess at
-     * when two organisms share a symbol, which is the whole reason the box
-     * offers a list.
+     * Fills the query box and stops there. Unlike an example, no database is
+     * selected: the database a sequence came FROM is rarely the one anyone
+     * wants to search it against, and picking one silently would both make
+     * that choice for the user and quietly undo a selection they had already
+     * made. The sequence type is detected from the sequence itself, as it is
+     * for anything else pasted in.
      */
     handleGeneSelected(candidate, sequence) {
         this.query.current.value(sequence);
-
-        const database = (this.state.databases || []).find(db => db.id === candidate.database_id);
-        if (!database) {
-            console.warn(`Gene search returned a database this page does not have: ${candidate.database_title}`);
-            return;
-        }
-
-        if (this.useTreeWidget()) {
-            const tree = $(`#${database.type}_database_tree`);
-            // The tree initialises lazily on first click, so make sure it exists.
-            if (!tree.jstree(true)) tree.click();
-            tree.jstree('deselect_all');
-            tree.jstree('select_node', database.id);
-        } else {
-            const checkbox = this.formRef.current
-                .querySelector(`input.checkbox-database[value="${database.id}"]`);
-            if (checkbox && !checkbox.checked) checkbox.click();
-        }
-
-        this.handleDatabaseTypeChanged(database.type);
         this.query.current.focus();
     }
 

@@ -134,14 +134,14 @@ export class GeneSearch extends Component {
         const { results, searching, searched, error, query } = this.state;
 
         if (error) {
-            return <div className="mt-1 text-sm text-red-700">{error}</div>;
+            return <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-red-700">{error}</div>;
         }
         if (searching) {
-            return <div className="mt-1 text-sm text-gray-500">Searching…</div>;
+            return <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-gray-500">Searching…</div>;
         }
         if (searched && !results.length) {
             return (
-                <div className="mt-1 text-sm text-gray-500">
+                <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-gray-500">
                     No gene starting with <strong>{query.trim()}</strong> in this deployment’s databases.
                 </div>
             );
@@ -149,7 +149,7 @@ export class GeneSearch extends Component {
         if (!results.length) return null;
 
         return (
-            <ul className="gene-search-results mt-1 border border-gray-300 rounded max-h-64 overflow-y-auto">
+            <ul className="gene-search-results absolute z-20 left-0 mt-1 w-full max-w-2xl bg-white border border-gray-300 rounded shadow-lg max-h-64 overflow-y-auto">
                 {results.map((candidate, index) => (
                     <li key={`${candidate.database_id}-${index}`}>
                         <button
@@ -174,7 +174,7 @@ export class GeneSearch extends Component {
 
     render() {
         return (
-            <div className="gene-search mt-2" id="gene-search">
+            <div className="gene-search relative mb-2" id="gene-search">
                 <form onSubmit={this.handleSubmit} className="flex gap-2 items-center">
                     <label htmlFor="gene-search-input" className="text-sm text-gray-600">
                         Or find a gene:
