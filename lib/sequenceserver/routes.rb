@@ -145,6 +145,37 @@ module SequenceServer
         end
     end
 
+    # Candidates for a gene symbol, for the search form's gene box.
+    #
+    # Deliberately a list rather than a sequence. ?name= resolves a symbol to ONE
+    # record by taking the first database that matches, which is fine for a deep
+    # link but wrong for a box someone types into: 16 of SGD's fungal databases
+    # carry an "act1", so a curator typing ACT1 there was silently handed
+    # Candida albicans. Each candidate names the organism it came from, and the
+    # user chooses.
+    #
+    # Searches both sequence types. WormBase carries symbols only on its protein
+    # databases -- its nucleotide sets are genome assemblies with no locus= -- so
+    # filtering by type would make the box useless there.
+    get '/blast/:segment1/:segment2/gene_search' do
+      content_type :json
+
+      query = params[:q].to_s.strip
+      # Only the empty query is rejected. A two-character floor would have been
+      # the obvious guard against scanning on every keystroke, but FlyBase has
+      # 17 single-character gene symbols -- w, y, a, d, e, f and the rest -- so
+      # it would make them unsearchable on the MOD that asked for this box.
+      # Debouncing belongs in the UI, not in a rule about gene names.
+      return [].to_json if query.empty?
+      halt 400, { error: 'Invalid gene name' }.to_json unless query =~ /\A[a-zA-Z0-9_\-.]+\z/
+
+      env_database_dir = database_dir_for(params[:segment1], params[:segment2])
+      makeblastdb(env_database_dir).scan
+      Database.collection = makeblastdb(env_database_dir).formatted_fastas
+
+      gene_search_candidates(query, organism_by_title(params[:segment1], params[:segment2])).to_json
+    end
+
     # Returns data that is used to render the search form client side. These
     # include available databases and user-defined search options.
     get '/blast/:segment1/:segment2/searchdata.json' do
@@ -683,6 +714,76 @@ module SequenceServer
       end
 
       nil
+    end
+
+    # Most matches a gene search returns. A symbol hitting more than this is not
+    # something a person will pick from a list anyway.
+    GENE_SEARCH_LIMIT = 50
+
+    # "Genus species" for each database, keyed by database title.
+    #
+    # A database carries no organism of its own: its categories are the tree
+    # grouping, which on SGD's fungal set is a clade such as
+    # "Agaricomycetes_mushrooms_allies" rather than a species. The config does
+    # carry one, and sanitising its blast_title the way the build does yields the
+    # database title exactly -- verified at 100% across SGD, FB, WB and ZFIN.
+    def organism_by_title(segment1, segment2)
+      path = File.join('/sequenceserver', 'public', 'environments', segment1, segment2, 'environment.json')
+      return {} unless File.exist?(path)
+
+      entries = JSON.parse(File.read(path))['data'] || []
+      entries.each_with_object({}) do |entry, map|
+        title = entry['blast_title'].to_s.gsub(/\W+/, '_').gsub(/\A_|_\z/, '')
+        next if title.empty?
+
+        organism = [entry['genus'], entry['species']].compact.join(' ').strip
+        map[title] = organism unless organism.empty?
+      end
+    rescue JSON::ParserError, SystemCallError => e
+      logger.warn "Could not read organisms from #{path}: #{e.message}"
+      {}
+    end
+
+    # Databases whose name index contains this symbol, with the accession it
+    # maps to.
+    #
+    # Parsing every index in a deployment costs over a second -- 312 files and
+    # 146 MB on SGD's fungal set -- and almost none of them contain any given
+    # symbol. So the raw text is checked for the key first and only the few that
+    # match are parsed. Measured on this host that takes a search from 1.2s to
+    # 0.19s.
+    def gene_search_candidates(query, organisms)
+      key = query.downcase
+      needle = %("#{key}":)
+      candidates = []
+
+      Database.all.each do |db|
+        break if candidates.length >= GENE_SEARCH_LIMIT
+
+        path = "#{db.name}#{NAME_INDEX_SUFFIX}"
+        next unless File.exist?(path)
+
+        raw = File.read(path)
+        next unless raw.include?(needle)
+
+        accession = begin
+          JSON.parse(raw)[key]
+        rescue JSON::ParserError
+          nil
+        end
+        next unless accession
+
+        candidates << {
+          symbol: query,
+          accession: accession,
+          database_id: db.id,
+          database_title: db.title,
+          type: db.type,
+          organism: organisms[db.title]
+        }
+      end
+
+      candidates
     end
 
     # Read the name index sitting next to a BLAST database, or nil when the
