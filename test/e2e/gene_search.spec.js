@@ -143,6 +143,47 @@ test.describe('gene search', () => {
         expect(symbols.filter((sym) => sym.toLowerCase() === 'w').length).toBe(2);
     });
 
+    test("a symbol is shown with the source database's own capitalisation", async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // Index keys are lower-cased so a lookup can be case-insensitive, and
+        // the list was showing those keys: Dll came back as "dll", CG2759 as
+        // "cg2759". The spellings live in a companion file beside each index.
+        //
+        // The rest of this suite compares symbols case-insensitively, so none
+        // of it would notice this regressing.
+        await gotoSearch(page, '/blast/FB/FB2026_03/');
+        await search(page, 'Dll');
+
+        const symbols = await page.locator(`${RESULTS} strong`).allInnerTexts();
+        expect(symbols).toContain('Dll');
+        expect(symbols).not.toContain('dll');
+    });
+
+    test('an all-caps symbol is not lower-cased either', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // SGD writes its symbols in caps, so every one of them was affected:
+        // the box answered ACT1 with "act1".
+        await gotoSearch(page, '/blast/SGD/R64-5-1m/');
+        await search(page, 'ACT1');
+
+        const symbols = await page.locator(`${RESULTS} strong`).allInnerTexts();
+        expect(symbols).toContain('ACT1');
+    });
+
+    test('a name the source spells in lower case stays lower case', async ({ page }) => {
+        test.setTimeout(120 * 1000);
+        // The companion file carries only the names whose spelling differs from
+        // the key, so the fallback is the key itself. FlyBase's current name for
+        // FBgn0003996 is "white", lower case, and it must not be title-cased on
+        // the way out just because a "White" synonym also exists.
+        await gotoSearch(page, '/blast/FB/FB2026_03/');
+        await search(page, 'white');
+
+        const symbols = await page.locator(`${RESULTS} strong`).allInnerTexts();
+        expect(symbols).toContain('white');
+        expect(symbols).not.toContain('White');
+    });
+
     test('a symbol nothing carries says so rather than failing silently', async ({ page }) => {
         test.setTimeout(120 * 1000);
         const pageErrors = [];
