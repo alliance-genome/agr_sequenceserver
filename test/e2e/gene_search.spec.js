@@ -193,10 +193,11 @@ test.describe('gene search', () => {
         await page.fill(BOX, 'ZZZNOTAREALGENE123');
 
         await expect(page.locator('#gene-search')).toContainText('No gene starting with', { timeout: 30 * 1000 });
-        // ...and says which of the two the box can answer, because the
-        // commonest miss is a full gene name: "white" appears nowhere in
-        // FlyBase's deflines, only the symbol w.
-        await expect(page.locator('#gene-search')).toContainText('symbols');
+        // ...and says what the box does match. This used to assert the hint
+        // "try the symbol rather than the full name", which was true when only
+        // deflines were indexed and became wrong once FlyBase's synonym table
+        // was joined in: full names are searchable now.
+        await expect(page.locator('#gene-search')).toContainText('start of a gene');
         await expect(page.locator(RESULTS)).toHaveCount(0);
         // The query box is untouched and the page still works.
         await expect(page.locator(S.sequence)).toHaveValue('');

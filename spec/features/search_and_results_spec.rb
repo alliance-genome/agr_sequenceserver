@@ -3,8 +3,7 @@ describe 'Search and results', type: :feature, js: true do
 
   before :all do
     SequenceServer.init(
-      database_dir: "#{__dir__}/../database/v5",
-      cloud_share_url: 'disabled'
+      database_dir: "#{__dir__}/../database/v5"
     )
   end
 

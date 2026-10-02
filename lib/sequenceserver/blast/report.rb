@@ -22,7 +22,7 @@ module SequenceServer
     # (Array of values and Arrays) and information extracted from the
     # intermediate representation (ir).
     class Report < Report
-      def initialize(job, env_config)
+      def initialize(job, env_config = [])
         @env_config = env_config
         super do
           @querydb = job.databases
@@ -38,7 +38,6 @@ module SequenceServer
                    submitted_at: job.submitted_at.utc,
                    imported_xml: !job.imported_xml_file.nil?,
                    seqserv_version: SequenceServer::VERSION,
-                   cloud_sharing_enabled: SequenceServer.config[:cloud_share_url].start_with?('http'),
                    non_parse_seqids: !!job.databases&.any?(&:non_parse_seqids?)).to_json
       end
 

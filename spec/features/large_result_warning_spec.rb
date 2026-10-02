@@ -4,7 +4,6 @@ describe 'Large result warning', type: :feature, js: true do
   before :all do
     SequenceServer.init(
       database_dir: "#{__dir__}/../database/v5",
-      cloud_share_url: 'disabled',
       large_result_warning_threshold: 1 # very small
     )
   end

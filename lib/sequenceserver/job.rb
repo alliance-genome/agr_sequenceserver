@@ -21,11 +21,27 @@ module SequenceServer
   # Singleton methods provide the facility to create and queue a job,
   # fetch a job or all jobs, and delete a job.
   class Job
+    # Shape of an id this class issues: SecureRandom.uuid, and nothing else.
+    #
+    # A job id is a path segment -- `dir` is File.join(DOTDIR, id) -- so an id
+    # that is not of this shape is a path traversal. Every id entering from a
+    # request is checked against this before it reaches the filesystem.
+    VALID_ID = /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/
+
     class << self
       # Creates and queues a job. Returns created job object.
       def create(params)
         job = BLAST::Job.new(params) # TODO: Dynamic dispatch.
         enqueue(job)
+      end
+
+      # True if `id` is one this class could have issued.
+      #
+      # Used to refuse a caller-supplied id outright rather than sanitise it:
+      # the only ids that exist are the ones #initialize generates, so anything
+      # else is either a bug or an attempt to escape DOTDIR.
+      def valid_id?(id)
+        id.is_a?(String) && id.match?(VALID_ID)
       end
 
       def serializable_classes
@@ -40,6 +56,11 @@ module SequenceServer
 
       # Fetches job with the given id.
       def fetch(id)
+        # Every route reads :jid straight out of the URL, so this is the one
+        # place that keeps a crafted id from being joined onto DOTDIR. A bad id
+        # is "no such job", which is what callers already handle.
+        return nil unless valid_id?(id)
+
         job_file = File.join(DOTDIR, id, 'job.yaml')
         return nil unless File.exist?(job_file)
 
@@ -51,6 +72,8 @@ module SequenceServer
 
       # Deletes job with the given id.
       def delete(id)
+        return unless valid_id?(id)
+
         FileUtils.rm_r File.join(DOTDIR, id)
       end
 
@@ -85,7 +108,17 @@ module SequenceServer
     #
     # Subclasses should extend `initialize` as per requirement.
     def initialize(params = {})
-      @id = params.fetch(:id, SecureRandom.uuid)
+      # The id is never taken from `params`. It used to be
+      # (`params.fetch(:id, SecureRandom.uuid)`), and `params` here is the
+      # search form's request params passed through whole by routes.rb, while
+      # Job.validate checks method, sequence, databases and options but not
+      # :id. Since `dir` is File.join(DOTDIR, id), a submitted
+      # `id=../../../../tmp/x` wrote the job -- query.fa included -- anywhere
+      # the process could reach, as root in the container, and the rescue
+      # below then made it an arbitrary delete. No caller has ever needed to
+      # supply an id: Job.create is the only one, and ids restored from
+      # job.yaml are rebuilt by YAML without going through initialize.
+      @id = SecureRandom.uuid
       @submitted_at = Time.now
       mkdir_p dir
       yield if block_given?
@@ -95,7 +128,11 @@ module SequenceServer
     rescue Errno::EACCES
       raise SystemError, "Permission denied to write to #{DOTDIR}"
     rescue StandardError => e
-      rm_rf dir
+      # Belt and braces. With the id generated above this can only ever be the
+      # directory we just made, but this cleanup deletes recursively on any
+      # unexpected error, so it refuses to step outside DOTDIR rather than
+      # trusting that to stay true.
+      rm_rf dir if File.expand_path(dir).start_with?("#{File.expand_path(DOTDIR)}/")
       raise e
     end
 

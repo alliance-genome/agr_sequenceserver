@@ -2,7 +2,6 @@ require 'digest'
 require 'json'
 require 'tilt/erb'
 require 'sinatra/base'
-require 'rest-client'
 
 require 'sequenceserver/job'
 require 'sequenceserver/blast'
@@ -68,7 +67,7 @@ module SequenceServer
         secret: ENV.fetch('SESSION_SECRET') { SecureRandom.alphanumeric(64) }
       )
 
-      use Rack::Csrf, raise: true, skip: ['POST:/cloud_share'] unless ENV['SKIP_CSRF_PROTECTION'] == 'true'
+      use Rack::Csrf, raise: true unless ENV['SKIP_CSRF_PROTECTION'] == 'true'
     end
 
     unless ENV['SEQUENCE_SERVER_COMPRESS_RESPONSES'] == 'false'
@@ -381,93 +380,16 @@ module SequenceServer
       send_file out.filepath, filename: out.filename, type: out.mime
     end
 
-    post '/cloud_share' do
-      content_type :json
-      request_params = JSON.parse(request.body.read)
-      job = Job.fetch(request_params['job_id'])
-      halt 404, { error: 'Job not found' }.to_json if job.nil?
-
-      unless job.done?
-        status 422
-        { errors: ["Job #{request_params['job_id']} is not finished yet."] }.to_json
-      end
-
-      unless SequenceServer.config[:cloud_share_url]
-        status 503
-        { errors: ['Sorry, cloud sharing is not enabled on this server.'] }.to_json
-      end
-
-      begin
-        job.as_archived_file do |archived_job_file|
-          cloud_share_response = RestClient.post(
-            SequenceServer.config[:cloud_share_url],
-            {
-              shared_job: {
-                sender: {
-                  email: request_params['sender_email']
-                },
-                archived_job_file: archived_job_file,
-                original_job_id: job.id
-              }
-            }
-          )
-
-          return cloud_share_response.body
-        end
-      rescue RestClient::ExceptionWithResponse => e
-        cloud_share_response = e.response
-
-        case cloud_share_response.code
-        when 413
-          halt 413,
-               { errors: ['Sorry, the results are too large to share, please consider \
-                  using https://sequenceserver.com/cloud'] }.to_json
-        when 422
-          halt 422, JSON.parse(cloud_share_response.body).to_json
-        else
-          error cloud_share_response.code,
-                { errors: ["Unexpected Cloudshare response: #{cloud_share_response.code}"] }.to_json
-        end
-      rescue Errno::ECONNREFUSED
-        error 503, { errors: ['Sorry, the cloud sharing server may not be running. Try again later.'] }.to_json
-      end
-    end
-
     get '/blast/logos/*' do |file|
-      # Combine with the base directory
-      file_path = File.join(settings.root, 'public', 'logos', file)
-      # Check if the file exists
-      if File.exist?(file_path)
-        send_file file_path, disposition: :inline
-      else
-        # Handle case when file doesn't exist
-        status 404
-        'File not found'
-      end
+      serve_public_file('logos', file)
     end
 
     get '/blast/fonts/*' do |file|
-      # Combine with the base directory
-      file_path = File.join(settings.root, 'public', 'fonts', file)
-      # Check if the file exists
-      if File.exist?(file_path)
-        send_file file_path, disposition: :inline
-      else
-        # Handle case when file doesn't exist
-        status 404
-        'File not found'
-      end
+      serve_public_file('fonts', file)
     end
 
     get '/blast/css/*' do |file|
-      file_path = File.join(settings.root, 'public', 'css', file)
-
-      if File.exist?(file_path)
-        send_file file_path, disposition: :inline
-      else
-        status 404
-        'File not found'
-      end
+      serve_public_file('css', file)
     end
 
     # Named aliases for datasets that sit alongside each other under one MOD, so
@@ -527,23 +449,7 @@ module SequenceServer
     end
 
     get '/blast/*' do |file|
-      # Combine with the base directory
-      # Check if `settings` is nil
-      if settings.nil?
-        status 500
-        return 'Internal Server Error'
-      end
-      file_path = File.join(settings.root, 'public', file)
-      # Check if the file exists
-      if File.exist?(file_path)
-        send_file file_path, disposition: :inline
-      else
-        puts "file does not exist"
-        puts file
-        # Handle case when file doesn't exist
-        status 404
-        'File not found'
-      end
+      serve_public_file(nil, file)
     end
     # Catches any exception raised within the app and returns JSON
     # representation of the error:
@@ -643,9 +549,18 @@ module SequenceServer
     # The segments are also pattern-checked before being joined into a path.
     # Rack already rejects encoded traversal with a 400, so this is defence in
     # depth rather than the only guard.
+    # A release directory may contain dots (R64-5-1m, 8.3.0) but must not start
+    # with one. Two reasons. Releases are retired on this volume by renaming
+    # them with a leading dot -- .retired-WS295, .retired-WS296, .retired-WS297
+    # -- and while the pattern allowed that, all three went on being served in
+    # full by every instance, which rather defeated retiring them. And because
+    # the dot was in the class, ".." matched too, so segment2 could step up out
+    # of the MOD's directory.
+    VALID_VERSION_SEGMENT = /\A[A-Za-z0-9_-][A-Za-z0-9_.-]*\z/
+
     def database_dir_for(segment1, segment2)
       not_found unless segment1 =~ /\A[A-Za-z0-9_-]+\z/ &&
-                       segment2 =~ /\A[A-Za-z0-9_.-]+\z/
+                       segment2 =~ VALID_VERSION_SEGMENT
 
       dir = File.join('/db', segment1, segment2, 'databases')
       not_found unless File.directory?(dir)
@@ -660,6 +575,32 @@ module SequenceServer
 
     def makeblastdb(database_dir)
       @makeblastdb ||= MAKEBLASTDB.new(database_dir)
+    end
+
+    # Send a file from public/, or 404.
+    #
+    # The four asset routes used to do File.join(settings.root, 'public', file)
+    # with the splat capture straight from the URL. Mustermann percent-decodes
+    # that capture AFTER the server has normalised the path, so `%2F` survives
+    # normalisation and then becomes a real separator: GET /blast/..%2FGemfile
+    # returned /sequenceserver/Gemfile, and /blast/..%2Flib%2Fsequenceserver%2F
+    # routes.rb returned the application source. conf/*.conf went the same way,
+    # which is where a credential would live.
+    #
+    # So resolve the path and require that it is still inside the directory it
+    # is supposed to be in. expand_path collapses the `..` segments; the
+    # start_with? check is what actually refuses them, and File.file? keeps a
+    # directory from being handed to send_file.
+    def serve_public_file(subdir, file)
+      base = File.expand_path(File.join(*[settings.root, 'public', subdir].compact))
+      path = File.expand_path(File.join(base, file))
+
+      unless path.start_with?("#{base}#{File::SEPARATOR}") && File.file?(path)
+        logger.warn "Refusing asset request outside #{base}: #{file.inspect}" unless path.start_with?(base)
+        halt 404, 'File not found'
+      end
+
+      send_file path, disposition: :inline
     end
 
     # Longest a ?name= lookup may spend scanning databases that have no name
@@ -728,6 +669,12 @@ module SequenceServer
 
       nil
     end
+
+    # What blastdbcmd returns in place of an accession for a database built
+    # without -parse_seqids: a synthetic ordinal, "BL_ORD_ID:0" upwards. These
+    # were written into the name indexes by the backfill, so the index of such
+    # a database maps every symbol to an id no lookup can resolve.
+    BL_ORD_ID_PREFIX = 'BL_ORD_ID:'
 
     # Most matches a gene search returns. A symbol hitting more than this is not
     # something a person will pick from a list anyway.
@@ -806,6 +753,18 @@ module SequenceServer
         taken = 0
         index.each do |name, accession|
           next unless name.start_with?(prefix)
+          # A database built without -parse_seqids has no real accessions:
+          # blastdbcmd hands back the synthetic ordinal "BL_ORD_ID:0" instead,
+          # and the backfill wrote those into the index as though they were
+          # accessions. 762 of the 2,387 deployed indexes are like this. Such a
+          # candidate cannot be retrieved, so offering it gives the user a row
+          # that fails when clicked. Worse, on ZFIN they crowd out everything
+          # else. Skip them, which puts the box back to honestly having no
+          # answer for those databases.
+          #
+          # Checked against this pattern rather than VALID_SEQUENCE_ID: that
+          # one allows ':' and so accepts "BL_ORD_ID:0" quite happily.
+          next if accession.to_s.start_with?(BL_ORD_ID_PREFIX)
 
           display ||= display_names_for(db)
 
