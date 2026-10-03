@@ -22,7 +22,7 @@ module SequenceServer
     # (Array of values and Arrays) and information extracted from the
     # intermediate representation (ir).
     class Report < Report
-      def initialize(job, env_config)
+      def initialize(job, env_config = [])
         @env_config = env_config
         super do
           @querydb = job.databases

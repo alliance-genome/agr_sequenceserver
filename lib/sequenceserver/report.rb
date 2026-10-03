@@ -11,7 +11,7 @@ module SequenceServer
     extend Forwardable
     def_delegators SequenceServer, :config, :logger
 
-    def initialize(job, env_config)
+    def initialize(job, env_config = [])
       @job = job
       @env_config = env_config
       yield if block_given?
