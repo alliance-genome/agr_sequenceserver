@@ -34,7 +34,6 @@ class Report extends Component {
             stats: [],
             alignment_blob_url: '',
             allQueriesLoaded: false,
-            cloud_sharing_enabled: false,
         };
         this.prepareAlignmentOfAllHits = this.prepareAlignmentOfAllHits.bind(this);
         this.setStateFromJSON = this.setStateFromJSON.bind(this);
@@ -187,7 +186,6 @@ class Report extends Component {
                         atLeastOneHit={this.atLeastOneHit()}
                         shouldShowIndex={this.shouldShowIndex()}
                         allQueriesLoaded={this.state.allQueriesLoaded}
-                        cloudSharingEnabled={this.state.cloud_sharing_enabled}
                     />
                 </div>
                 <div className="col-span-1 md:col-span-3 print:col-span-1">

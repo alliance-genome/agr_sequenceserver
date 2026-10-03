@@ -233,6 +233,22 @@ module SequenceServer
       # Sequences are retrieved from the first database in which the accession
       # is found. The returned sequences can, thus, be incorrect if accessions
       # are not unique across all database (admins should make sure of that).
+      # Most ids one ?query= may ask for, and how long the whole lookup may
+      # take.
+      #
+      # Every id is looked up in every database until one matches, and each of
+      # those lookups forks the VM to exec blastdbcmd -- so a MISS costs one
+      # fork per database. SGD's fungal set has 312 of them, which is ~19s for
+      # a single absent accession, and nothing bounded the number of commas: a
+      # ?query= with 100 ids was ~31,000 process spawns and about 26 minutes of
+      # one worker, unauthenticated. The ?name= path next to it was given a
+      # budget for exactly this reason; this one had none.
+      #
+      # 10 is well above what a deep link needs (they carry one id) and the
+      # deadline is what actually bounds the cost on a large deployment.
+      RETRIEVE_LOCI_LIMIT = 10
+      RETRIEVE_BUDGET_SECONDS = 15
+
       def retrieve(loci)
         # Exit early if loci is nil.
         return unless loci
@@ -241,6 +257,13 @@ module SequenceServer
         # We may have empty string if loci contains a double comma as a result
         # of typo (remember - loci is external input). These are eliminated.
         loci = loci.split(',').delete_if(&:empty?)
+
+        dropped = [loci.length - RETRIEVE_LOCI_LIMIT, 0].max
+        loci = loci.first(RETRIEVE_LOCI_LIMIT)
+
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) +
+                   RETRIEVE_BUDGET_SECONDS
+        expired = false
 
         # Each database is searched for each locus. For each locus, search is
         # terminated on the first database match.
@@ -254,8 +277,16 @@ module SequenceServer
           # Initialise a variable to store retrieved sequence.
           seq = nil
 
-          # Go over each database looking for this accession.
+          # Go over each database looking for this accession. Each iteration
+          # forks and execs blastdbcmd, so the deadline is checked per
+          # database, not merely per locus: one absent accession on a large
+          # deployment is itself hundreds of spawns.
           each do |database|
+            if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+              expired = true
+              break
+            end
+
             # Database lookup  will return a string if given accession is
             # present in the database, nil otherwise.
             seq = database.retrieve(accession, coords)
@@ -268,11 +299,21 @@ module SequenceServer
           # message in place of the sequence. The line starts with '#'
           # and should be ignored by BLAST (not tested).
           unless seq
-            seq = "# ERROR: #{locus} not found in any database"
+            seq = if expired
+                    "# ERROR: lookup of #{locus} gave up after " \
+                    "#{RETRIEVE_BUDGET_SECONDS}s"
+                  else
+                    "# ERROR: #{locus} not found in any database"
+                  end
           end
 
           # Return seq.
           seq
+        end
+
+        if dropped.positive?
+          seqs << "# ERROR: #{dropped} further id(s) ignored; at most " \
+                  "#{RETRIEVE_LOCI_LIMIT} may be requested at once"
         end
 
         # Array -> String

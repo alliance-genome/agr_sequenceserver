@@ -46,7 +46,7 @@ export class GeneSearch extends Component {
         this.timer = null;
         this.requestId = 0;
         this.handleChange = this.handleChange.bind(this);
-        this.handleSubmit = this.handleSubmit.bind(this);
+        this.handleKeyDown = this.handleKeyDown.bind(this);
         this.choose = this.choose.bind(this);
     }
 
@@ -79,8 +79,20 @@ export class GeneSearch extends Component {
         this.timer = setTimeout(() => this.search(query), DEBOUNCE_MS);
     }
 
-    handleSubmit(event) {
+    /**
+     * Enter searches, and must not reach the BLAST form.
+     *
+     * This box sits inside <form id="blast">, and it used to be a <form> of
+     * its own. Nested forms are not valid HTML -- the parser discards the
+     * inner one -- so the browser treated Enter here as a submit of the BLAST
+     * search, firing off a real search with whatever was in the query box.
+     * There is no inner form any more, so Enter is handled on the input and
+     * stopped from bubbling.
+     */
+    handleKeyDown(event) {
+        if (event.key !== 'Enter') return;
         event.preventDefault();
+        event.stopPropagation();
         clearTimeout(this.timer);
         if (this.state.query.trim()) this.search(this.state.query);
     }
@@ -143,14 +155,18 @@ export class GeneSearch extends Component {
             return (
                 <div className="absolute z-20 left-0 w-full max-w-2xl mt-1 bg-white border border-gray-300 rounded shadow-lg px-2 py-1 text-sm text-gray-500">
                     <div>No gene starting with <strong>{query.trim()}</strong> in this deployment’s databases.</div>
-                    {/* The commonest miss is a full gene name. FlyBase deflines
-                        carry name=w-RA and nothing else -- the string "white"
-                        does not appear anywhere in the database -- so there is
-                        no way to match it, and the only useful thing to do is
-                        say which of the two the box can answer. */}
+                    {/* This hint used to say "try the symbol rather than the
+                        full name", because FlyBase deflines carry name=w-RA
+                        and the string "white" appeared nowhere. That is no
+                        longer true: FlyBase's synonym table is joined in at
+                        index time, so full names and CG numbers are both
+                        searchable. What remains true is that the match is on
+                        the START of a name, and that ZFIN and RGD deflines
+                        carry no symbols at all. */}
                     <div className="mt-0.5 text-xs">
-                        These are gene <em>symbols</em> as each database writes them,
-                        so try the symbol rather than the full name.
+                        Matches are on the start of a gene’s symbol, name or
+                        synonym. Some datasets carry no gene names at all, in
+                        which case nothing here will match.
                     </div>
                 </div>
             );
@@ -184,7 +200,10 @@ export class GeneSearch extends Component {
     render() {
         return (
             <div className="gene-search relative mb-2" id="gene-search">
-                <form onSubmit={this.handleSubmit} className="flex gap-2 items-center">
+                {/* A div, not a form: this sits inside <form id="blast">
+                    and a nested form is discarded by the parser, which made
+                    Enter here submit the BLAST search. */}
+                <div className="flex gap-2 items-center">
                     <label htmlFor="gene-search-input" className="text-sm text-gray-600">
                         Find a gene:
                     </label>
@@ -196,8 +215,9 @@ export class GeneSearch extends Component {
                         autoComplete="off"
                         value={this.state.query}
                         onChange={this.handleChange}
+                        onKeyDown={this.handleKeyDown}
                     />
-                </form>
+                </div>
                 {this.resultsJSX()}
             </div>
         );
