@@ -30,7 +30,15 @@
         - name: BLAST PATH
           run: mkdir /opt/bin && echo "/opt/bin:/opt/ncbi-blast-2.16.0+/bin" >> $GITHUB_PATH
 
+        # CodeClimate retired this download; it answers 404, and because this
+        # step ran before everything else the whole job died here without ever
+        # reaching a test. Coverage reporting is best-effort now -- the five
+        # cc-test-reporter steps below are all allowed to fail -- so what
+        # decides this job is the test suites and the assertion at the end. If
+        # CodeClimate is not coming back, delete these steps and the
+        # CC_TEST_REPORTER_ID above.
         - name: Get CodeClimate
+          continue-on-error: true
           working-directory: /opt
           run: wget -c "https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64" -O bin/cc-test-reporter && chmod +x bin/cc-test-reporter
 
@@ -74,6 +82,7 @@
           run: bundle exec bin/sequenceserver -s -d spec/database/v5/sample
 
         - name: CodeClimate before-build hook
+          continue-on-error: true
           run: cc-test-reporter before-build
 
         - name: Run main specs and import spec for BLAST 2.9.0+
@@ -88,6 +97,7 @@
             path: coverage
 
         - name: format-coverage (Rspec)
+          continue-on-error: true
           run: cc-test-reporter format-coverage --output coverage/codeclimate_rspec.json
 
         - name: Jest tests
@@ -102,12 +112,15 @@
             path: coverage/lcov-report/
 
         - name: format-coverage (Jest)
+          continue-on-error: true
           run: cc-test-reporter format-coverage coverage/lcov.info --input-type lcov --output coverage/codeclimate_jest.json
 
         - name: sum-coverage
+          continue-on-error: true
           run: cc-test-reporter sum-coverage --parts 2 coverage/codeclimate_*.json
 
         - name: upload coverage to code-CodeClimate
+          continue-on-error: true
           run: cc-test-reporter upload-coverage
 
         - name: Assert both test suites passed in full
