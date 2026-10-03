@@ -21,12 +21,15 @@ module SequenceServer
   # Singleton methods provide the facility to create and queue a job,
   # fetch a job or all jobs, and delete a job.
   class Job
-    # Shape of an id this class issues: SecureRandom.uuid, and nothing else.
+    # Characters a single segment of a job id may contain.
     #
-    # A job id is a path segment -- `dir` is File.join(DOTDIR, id) -- so an id
-    # that is not of this shape is a path traversal. Every id entering from a
-    # request is checked against this before it reaches the filesystem.
-    VALID_ID = /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/
+    # An id becomes a path -- `dir` is File.join(DOTDIR, id) -- so the property
+    # that matters is that it cannot address anything outside DOTDIR. It is NOT
+    # that the id looks like a uuid: ids issued at runtime are uuids, but the
+    # specs legitimately address fixture jobs by a nested id
+    # ("blast_2.9.0/blastn", laid out under spec/dotdir), and a uuid-shaped
+    # check rejected those and left ten spec files unable to load a job at all.
+    VALID_ID_SEGMENT = /\A[A-Za-z0-9._-]+\z/
 
     class << self
       # Creates and queues a job. Returns created job object.
@@ -35,13 +38,28 @@ module SequenceServer
         enqueue(job)
       end
 
-      # True if `id` is one this class could have issued.
+      # True if `id` names something inside DOTDIR.
       #
-      # Used to refuse a caller-supplied id outright rather than sanitise it:
-      # the only ids that exist are the ones #initialize generates, so anything
-      # else is either a bug or an attempt to escape DOTDIR.
+      # Checked two ways, because either alone is weaker than it looks. The
+      # per-segment pattern rejects "..", an absolute path and a null byte;
+      # the expand_path comparison is the backstop that states the actual
+      # invariant, so a gap in the pattern cannot become an escape. Note that
+      # on its own expand_path would accept a leading "/" (File.join then
+      # discards DOTDIR entirely), which is why both are here.
       def valid_id?(id)
-        id.is_a?(String) && id.match?(VALID_ID)
+        return false unless id.is_a?(String) && !id.empty?
+
+        segments = id.split('/')
+        return false if segments.empty?
+        # '.' and '..' both match VALID_ID_SEGMENT, since a segment may contain
+        # dots (fixture ids look like "blast_2.9.0/blastn"). Rejected by name
+        # so that the pattern carries the no-traversal property by itself,
+        # rather than relying on expand_path to notice a pair that cancels out.
+        return false if segments.any? { |s| ['.', '..'].include?(s) }
+        return false unless segments.all? { |s| s.match?(VALID_ID_SEGMENT) }
+
+        root = File.expand_path(DOTDIR)
+        File.expand_path(File.join(root, id)).start_with?("#{root}/")
       end
 
       def serializable_classes
