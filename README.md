@@ -15,6 +15,33 @@ If you use SequenceServer, please cite our paper:
 [Sequenceserver: A modern graphical user interface for custom BLAST databases. Molecular Biology and Evolution (2019).](https://doi.org/10.1093/molbev/msz185)
 
 
+## This is the Alliance of Genome Resources fork
+
+This repository is `alliance-genome/agr_sequenceserver`, a fork of
+`wurmlab/sequenceserver` that runs the Alliance BLAST service. Everything below
+about running and developing SequenceServer still applies, but two things differ
+enough that reading the upstream documentation alone will mislead you.
+
+First, this fork serves many MODs and many data releases from one deployment.
+Every route is `/blast/:mod/:version/…`, and the BLAST databases for a request
+are discovered by scanning `/db/:mod/:version/databases` when the request
+arrives, rather than from a single `database_dir` fixed at startup. Adding a
+release is a matter of a directory appearing on the shared volume; no
+configuration change and no restart are involved.
+
+Second, this repository does not build the databases it serves. They are built
+by [`agr_blastdb_manager`](https://github.com/alliance-genome/agr_blastdb_manager)
+from JSON declared in
+[`agr_blast_service_configuration`](https://github.com/alliance-genome/agr_blast_service_configuration),
+and copied onto a volume that this app only reads. The app also reads a
+per-release `environment.json` from that volume for genome-browser metadata, and
+gene-name index files written beside each database.
+
+Start with [docs/ALLIANCE_BLAST_OVERVIEW.md](docs/ALLIANCE_BLAST_OVERVIEW.md),
+which maps the three repositories, the shared volume between them, and the data
+flow end to end. `docs/` also holds the deployment, architecture and gene-search
+documents, and `docs/ALLIANCE_WIDE_PLAN.md` for the cross-species deployment.
+
 ## Installation
 
 For installation instructions and how to use SequenceServer please see
@@ -36,6 +63,12 @@ New releases are announced on [GitHub release page](https://github.com/wurmlab/s
 ## Reporting issues
 
 Please report any issues here: https://github.com/wurmlab/sequenceserver/issues or on the [community support forum](https://support.sequenceserver.com)
+
+Issues with the Alliance deployment — a missing database, a wrong genome-browser
+link, anything under `/blast/:mod/:version/` — belong on
+https://github.com/alliance-genome/agr_sequenceserver/issues instead. Note that
+a missing database is usually a build problem rather than a server one; see the
+overview document linked above before filing.
 
 ## Develop and contribute
 
