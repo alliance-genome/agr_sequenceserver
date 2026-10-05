@@ -107,11 +107,9 @@ module SequenceServer
       def tsv_ir
         @tsv_ir ||=
           if job.imported_xml_file
-            Hash.new do |h1, k1|
-              h1[k1] = Hash.new do |h2, k2|
-                h2[k2] = ['', '', []]
-              end
-            end
+            # An imported XML report has no TSV beside it, so every query
+            # yields no rows and each hit falls back to empty sciname/qcovs.
+            Hash.new { |h, k| h[k] = [] }
           else
             job.raise!
             parse_tsv(tsv_formatter.read_file)
@@ -163,9 +161,16 @@ module SequenceServer
       end
 
       # Create Hit objects for the given query from the given ir.
-      def query_hits(xml_ir, tsv_ir, query)
+      #
+      # `tsv_rows` is this query's TSV rows in order, one per HSP. They are
+      # consumed positionally: the first hit takes as many rows as it has HSPs,
+      # the next hit the rows after those, and so on. Nothing is looked up by
+      # subject id, because a subject id does not identify a hit across
+      # databases -- see parse_tsv.
+      def query_hits(xml_ir, tsv_rows, query)
         return [] if xml_ir == ["\n"] # => No hits.
 
+        cursor = 0
         xml_ir.map do |n|
           # If hit comes from a non -parse_seqids database, then id (n[1]) is a
           # BLAST assigned internal id of the format 'gnl|BL_ORD_ID|serial'. We
@@ -182,10 +187,19 @@ module SequenceServer
             n[2] = defline.empty? ? original_title : defline.join(' ')  # Keep full title if single word
           end
 
-          hit = Hit.new(query, n[0], n[1], n[3], n[2], n[4],
-                        tsv_ir[n[1]][0], tsv_ir[n[1]][1], [])
+          # This hit's slice of the TSV, by position.
+          rows = tsv_rows[cursor, n[5].length] || []
+          cursor += n[5].length
 
-          hit.hsps = hsps(n[5], tsv_ir[n[1]][2], hit)
+          # sciname and qcovs are per hit, so they come from its first row.
+          # They are '' for an imported XML report, which has no TSV, and
+          # "N/A" from BLAST itself where no taxdb is installed.
+          first = rows.first || ['', '', nil]
+
+          hit = Hit.new(query, n[0], n[1], n[3], n[2], n[4],
+                        first[0], first[1], [])
+
+          hit.hsps = hsps(n[5], rows.map { |r| r[2] }, hit)
 
           hit
         end
@@ -250,20 +264,39 @@ module SequenceServer
       # Parses the given TSV string as:
       #
       # {
-      #    qseqid: {
-      #      sseqid: [sciname, qcovs, [qcovhsp]],
-      #      ...
-      #    },
+      #    qseqid: [[sciname, qcovs, qcovhsp], ...],   # one entry per HSP, in order
       #    ...
       # }
+      #
+      # Ordered, and NOT keyed on sseqid. It used to be
+      # {qseqid => {sseqid => [sciname, qcovs, [qcovhsp]]}}, which assumes a
+      # subject id identifies a hit. It does not, once a search spans more than
+      # one database: human, mouse, rat and zebrafish all name a chromosome
+      # "1", so two hits called "1" from two genomes shared one entry. The
+      # `||=` meant the first hit's sciname and qcovs were handed to both, and
+      # every hit's qcovhsp values were appended to a single array, which
+      # `hsps` then indexes positionally -- so the second hit's HSPs were shown
+      # the first hit's coverage.
+      #
+      # Measured on a nine-genome tblastn against /blast/ALLIANCE/prod/: 131
+      # hits over 78 distinct subject ids, 21 ids claimed by more than one hit,
+      # and 53 of the 131 hits displaying another hit's per-HSP coverage.
+      #
+      # There is no column that would fix the key. BLAST has no outfmt
+      # specifier for the subject database; staxids names an organism, not a
+      # database, and is not unique per entry on any deployment here -- SGD has
+      # 183 entries over 50 taxids with 11 sharing one. So the join is
+      # positional: both files come from the same archive through
+      # Formatter.run, hit and HSP order is identical between them, and the
+      # count is exact (XML 1163 HSPs, TSV 1163 rows on that same search).
       def parse_tsv(tsv)
-        ir = Hash.new { |h, k| h[k] = {} }
+        ir = Hash.new { |h, k| h[k] = [] }
         tsv.each_line do |line|
           next if line.start_with? '#'
 
           row = line.chomp.split("\t")
 
-          (ir[row[0]][row[1]] ||= [row[2], row[3], []])[2] << row[4]
+          ir[row[0]] << [row[2], row[3], row[4]]
         end
         ir
       end
