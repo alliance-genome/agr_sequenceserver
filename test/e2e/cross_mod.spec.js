@@ -54,6 +54,14 @@ const THIRD_PARTY = /(google-analytics|googletagmanager|doubleclick)\./;
  * SGD fungal 312, RGD 9, ZFIN 9, ALLIANCE 1. Floors sit well under those so that
  * a routine data release does not turn the suite red, but far enough above zero
  * that a MOD whose databases failed to load is caught.
+ *
+ * ALLIANCE is the exception, and it is worth knowing why. Its floor was 1,
+ * which was the count at the time -- but that count was the symptom of a build
+ * that had failed: the config declared nine reference genomes and eight of them
+ * had never been produced. A floor of 1 therefore asserted the broken state was
+ * correct, and agreed with it for two years. The nine are built now, and its
+ * floor is 9 -- the declared number, not a margin below the observed one,
+ * because for this deployment "fewer than declared" is exactly the failure.
  */
 const MODS = [
     {
@@ -134,8 +142,18 @@ const MODS = [
         heading: 'BLAST',
         dataVersion: 'prod',
         trees: ['nucleotide_database_tree'],
-        databaseFloor: 1,
+        databaseFloor: 9,
         hasProtein: false,
+        // What the example BUTTONS target, not what the deployment holds --
+        // the test below reads each button's tooltip and requires the named
+        // database to be present. ALLIANCE offers one example, a zebrafish
+        // nucleotide fragment.
+        //
+        // Worth noting as a gap rather than fixing here: a nucleotide example
+        // demonstrates almost nothing on a cross-species deployment, because
+        // cross-species nucleotide identity between, say, yeast and human
+        // genomic DNA is below blastn's detection. tblastn is what this
+        // deployment is for, and there is no protein example to show it.
         exampleDatabases: ['ZFIN_GRCz11']
     }
 ];

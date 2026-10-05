@@ -469,6 +469,40 @@ section "8. cross-MOD regression"
 status "WB WS298 search page still loads"  "blast/WB/WS298/"        "200"
 status "WB WS298 searchdata.json still OK" "blast/WB/WS298/searchdata.json" "200"
 
+# --- 8b. the Alliance-wide deployment --------------------------------------
+#
+# This had no coverage at all, which is part of how it went two years serving
+# one of its nine declared genomes without anyone noticing. The count is
+# asserted as EXACTLY nine rather than "at least one": the config declares
+# nine, so for this deployment any smaller number is a failed build rather
+# than a lighter data release.
+section "8b. ALLIANCE cross-species deployment"
+
+status "ALLIANCE search page loads" "blast/ALLIANCE/prod/" "200"
+
+jsoncheck "ALLIANCE serves all nine declared genomes" \
+  "blast/ALLIANCE/prod/searchdata.json" \
+  "len(d['database'] if isinstance(d['database'], list) else list(d['database'].values())) == 9"
+
+# One per member organism, plus human and mouse. Named individually because a
+# count alone would pass if the same genome were built nine times.
+jsoncheck "ALLIANCE has one database per member organism" \
+  "blast/ALLIANCE/prod/searchdata.json" \
+  "set(x['title'] for x in (d['database'] if isinstance(d['database'], list) else d['database'].values())) == {'C_elegans_Genome_Assembly','ZFIN_GRCz11','RGD_mRatBN7_2','Mouse_GRCm39','Human_GRCh38','Fly_Release_6_plus_ISO1_MT','Yeast_R64','X_laevis_XENLA_9_2','X_tropicalis_XENTR_9_1'}"
+
+# tblastn is the point of this deployment: a protein query against nucleotide
+# subjects. blastn finds almost nothing between yeast and human genomic DNA.
+jsoncheck "ALLIANCE offers tblastn" \
+  "blast/ALLIANCE/prod/searchdata.json" \
+  "'tblastn' in d['options']"
+
+# Genus misspellings and lowercase genera shipped in this config for two years
+# ("xenupus", "xenupos", "mus", "homo"), and genus is interpolated into the
+# on-disk path that becomes the database tree.
+jsoncheck "ALLIANCE genome titles are not misspelled" \
+  "blast/ALLIANCE/prod/searchdata.json" \
+  "not [x for x in (d['database'] if isinstance(d['database'], list) else d['database'].values()) if 'xenup' in x['title'].lower()]"
+
 # --- 9. asset cache busting ------------------------------------------------
 section "9. frontend assets are cache-busted"
 # The bundles are served with no Cache-Control and no ETag, so a browser falls
