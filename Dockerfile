@@ -48,6 +48,36 @@ COPY --from=ncbi-blast \
 # Add BLAST+ binaries to PATH.
 ENV PATH=/blast/bin:${PATH}
 
+# NCBI's taxonomy database, so that BLAST can turn the taxid baked into each
+# BLAST database into a species name.
+#
+# Without it the `sscinames` column of the custom TSV report is the literal
+# string "N/A" for every hit, on every deployment -- BLAST even says so:
+# "Taxonomy name lookup from taxid requires installation of taxdb database".
+# The front end gates its Species column on every hit having a name, so the
+# column never appeared, and a cross-species result never named a species.
+# That is the whole question /blast/ALLIANCE/prod/ exists to answer.
+#
+# Baked into the image rather than mounted. A mount is one more thing that has
+# to be remembered on every `docker run`, and this deployment has already been
+# bitten once by data that travelled separately from the code (the
+# config/config-dev split that let production serve a 2024 config against 2026
+# databases). ~195 MB uncompressed, which is small beside BLAST+ itself.
+#
+# Only taxdb.btd and taxdb.bti are needed. taxonomy4blast.sqlite3, also in that
+# archive, is for taxid filtering (get_species_taxids.sh) and is not extracted.
+RUN mkdir -p /blast/taxonomy \
+    && curl -fsSL -o /tmp/taxdb.tar.gz https://ftp.ncbi.nlm.nih.gov/blast/db/taxdb.tar.gz \
+    && curl -fsSL -o /tmp/taxdb.tar.gz.md5 https://ftp.ncbi.nlm.nih.gov/blast/db/taxdb.tar.gz.md5 \
+    && (cd /tmp && md5sum -c taxdb.tar.gz.md5) \
+    && tar -xzf /tmp/taxdb.tar.gz -C /blast/taxonomy taxdb.btd taxdb.bti \
+    && rm -f /tmp/taxdb.tar.gz /tmp/taxdb.tar.gz.md5
+
+# Where BLAST looks for taxdb. Database names are passed to BLAST as absolute
+# paths (see BLAST::Job#command), so this cannot change which databases
+# resolve -- it only adds the taxonomy lookup.
+ENV BLASTDB=/blast/taxonomy
+
 RUN apt-get update && apt-get install -y curl \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs

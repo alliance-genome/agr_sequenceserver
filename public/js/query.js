@@ -441,8 +441,14 @@ class HitsTable extends Component {
     }
 
     tableJSX() {
-        var hasName = _.every(this.props.query.hits, function (hit) {
-            return hit.sciname !== '';
+        // `some`, not `every`. A single hit without a species name used to
+        // suppress the column for the whole table, which is the wrong way
+        // round: a database built without a taxid, or one BLAST cannot resolve,
+        // should cost that row its label rather than cost every other row the
+        // column. Before taxdb was installed no hit had a name anywhere, so
+        // the distinction never showed.
+        var hasName = _.some(this.props.query.hits, function (hit) {
+            return hit.sciname !== '' && hit.sciname !== 'N/A';
         });
 
         // Width of sequence column is 55% when species name is not shown and
@@ -489,8 +495,8 @@ class HitsTable extends Component {
                                         {hit.gene_symbol ? ' ' : ''}{hit.id} {hit.title}</a>
                                 </td>
                                 {hasName &&
-                                    <td className="pe-1 line-clamp-1 tooltip-item" title={hit.sciname}>
-                                        {hit.sciname}
+                                    <td className="pe-1 line-clamp-1 tooltip-item" title={Utils.speciesName(hit)}>
+                                        {Utils.speciesName(hit)}
                                     </td>
                                 }
                                 {!this.props.imported_xml && <td className="text-right">{hit.qcovs}</td>}

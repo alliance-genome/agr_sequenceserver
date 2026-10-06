@@ -13,6 +13,20 @@ var Utils = {
     /**
      * Returns fraction as percentage
      */
+    /**
+     * The species name for a hit, or '' where there is none to show.
+     *
+     * BLAST writes the literal string "N/A" into the sscinames column when it
+     * cannot resolve a taxid -- which, before taxdb was installed in the
+     * image, was every hit on every deployment. "N/A" is not a species, and
+     * rendering it reads as though the organism were called that, so it is
+     * normalised away here rather than at each of the three call sites.
+     */
+    speciesName: function (hit) {
+        var name = (hit && hit.sciname) || '';
+        return name === 'N/A' ? '' : name;
+    },
+
     inPercentage: function (num, den) {
         var x = (num * 100.0 / den).toFixed(1);
         if (x % 1 == 0) {

@@ -3,6 +3,7 @@ import _ from 'underscore';
 
 import downloadFASTA from './download_fasta';
 import DownloadLinks from 'download_links';
+import Utils from './utils';
 /**
  * checks whether code is being run by jest
  */
@@ -205,10 +206,25 @@ export default class extends Component {
         var numqueries = this.props.data.queries.length;
         var numquerydb = this.props.data.querydb.length;
 
+        // How many organisms actually answered, which on a cross-species
+        // search is the first thing a reader wants and the database count
+        // does not give: selecting nine genomes and hearing back from three
+        // is the result. Added only when it says something the database
+        // count does not.
+        var organisms = {};
+        (this.props.data.queries || []).forEach(function (query) {
+            (query.hits || []).forEach(function (hit) {
+                var name = Utils.speciesName(hit);
+                if (name) organisms[name] = true;
+            });
+        });
+        var numorganisms = Object.keys(organisms).length;
+
         return (
             program.toUpperCase() + ': ' +
             numqueries + ' ' + (numqueries > 1 ? 'queries' : 'query') + ', ' +
-            numquerydb + ' ' + (numquerydb > 1 ? 'databases' : 'database')
+            numquerydb + ' ' + (numquerydb > 1 ? 'databases' : 'database') +
+            (numorganisms > 1 ? ', ' + numorganisms + ' organisms' : '')
         );
     }
 
