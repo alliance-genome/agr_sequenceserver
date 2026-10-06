@@ -5,6 +5,7 @@ import HSPOverview from './kablammo';
 import downloadFASTA from './download_fasta';
 import AlignmentExporter from './alignment_exporter'; // to download textual alignment
 import HitButtons from 'hit_buttons';
+import Utils from './utils';
 
 /**
  * Component for each hit. Receives props from Report. Has no state.
@@ -121,6 +122,14 @@ export default class extends Component {
                     <strong className="cursor-text ml-1 print:ml-0"> {this.props.hit.id}</strong>
                 </div>
                 <span className="ml-1">{this.props.hit.title}</span>
+                {/* The organism, where BLAST could resolve one from the
+                    taxid in the database. On a cross-species search the id
+                    alone is ambiguous -- four of the nine Alliance genomes
+                    have a chromosome "1" -- so the species is the only thing
+                    on this line that says which genome aligned. */}
+                {Utils.speciesName(this.props.hit) &&
+                    <em className="ml-2 text-sm font-normal">{Utils.speciesName(this.props.hit)}</em>
+                }
             </h4>
             <span className="label first-letter:capitalize text-sm font-normal text-inherit cursor-text">{meta}</span>
         </div>;

@@ -123,17 +123,46 @@ class Graph {
         return query;
     }
 
+    /**
+     * The key that identifies one arc.
+     *
+     * Was `hit.id` alone, which assumes a subject id is unique within a
+     * report. It is not once a search spans genomes: four of the nine Alliance
+     * reference genomes have a chromosome "1", so they deduped into a single
+     * arc and the chords of one organism were drawn against another
+     * organism's chromosome.
+     *
+     * The species is what distinguishes them here. The plan asks for the
+     * database instead, which would be better -- two assemblies of one
+     * organism still collide on this key, as WormBase's N2 and CB4856 do --
+     * but a hit does not yet carry the database it came from. That is the
+     * remaining half of the plan's Step 7 and it is not done, so this uses the
+     * strongest discriminator that actually exists today.
+     *
+     * Used for the arc id AND the chord target, which must agree or chords
+     * point at the wrong arc.
+     */
+    hitKey(hit) {
+        var species = Utils.speciesName(hit);
+        return this.clean_id(species ? species + '_' + hit.id : hit.id);
+    }
+
     processHit(num_hits, query, hit) {
         if (hit.number < num_hits) {
-            if (_.indexOf(this.hit_arr, hit.id) == -1) {
-                var label = hit.id;
+            var key = this.hitKey(hit);
+            if (_.indexOf(this.hit_arr, key) == -1) {
+                var species = Utils.speciesName(hit);
+                // The arc is labelled with the organism where there is one,
+                // because an arc marked "1" says nothing on a nine-genome
+                // search.
+                var label = species ? species + ' ' + hit.id : hit.id;
                 var len = hit.length;
-                this.hit_arr.push(hit.id);
+                this.hit_arr.push(key);
                 var item2 = {
                     len: len,
                     color: '#80b1d3',
                     label: label,
-                    id: 'Hit_' + this.clean_id(hit.id),
+                    id: 'Hit_' + key,
                     ori_id: label,
                 };
                 this.layout_arr.push(item2);
@@ -148,7 +177,7 @@ class Graph {
             'Query_' + this.clean_id(query.id),
             hsp.qstart,
             hsp.qend,
-            'Hit_' + this.clean_id(hit.id),
+            'Hit_' + this.hitKey(hit),
             hsp.sstart,
             hsp.send,
             hit.number,
