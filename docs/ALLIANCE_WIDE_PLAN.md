@@ -471,10 +471,47 @@ count; the real fix for cross-species ranking is Step 11.
 
 ### Step 11: Stop one genome eating the result list
 
-**Problem.** BLAST ranks hits globally across all databases, so a conserved
-query fills the list from whichever genome scores best, and the page cannot
-distinguish "no hit in mouse" from "mouse ranked below the cut" — the one thing
-a cross-species tool must be able to say.
+**Revised after measurement — the premise was wrong, and the truth is worse.**
+
+The problem is not ranking. When a search spans several databases that use the
+same sequence ids, **BLAST reports each id once and drops the rest**. The
+alignments are not ranked below a cut; they never reach the output, and nothing
+in BLAST's output says so.
+
+Demonstrated with two databases built here, each holding one sequence called
+`1` with different content and different taxids. Searched separately, each
+returns its own. Searched together, only the first appears.
+
+Measured over this host's deployments, counting only same-type pairs that could
+actually be searched together:
+
+| deployment | databases | colliding pairs |
+|---|---|---|
+| `ALLIANCE/prod` | 9 | **23 of 36** |
+| `WB/WS298` | 63 | 6 (the nematode genome assemblies, all naming `I`–`VI`, `X`) |
+| `FB/FB2026_03` | 200 | 0 |
+| `RGD/8.3.0` | 9 | 0 |
+
+Human, mouse, rat and zebrafish all name chromosomes `1..n`. A nine-genome
+`tblastn` for human ACTB returned 131 hits and **not one was mouse or rat**,
+while mouse alone returns 20 at e-value 0.0. Human×mouse share 22 ids,
+human×rat 23, human×zebrafish 23.
+
+So the original prescription — render "no hits: *Mus musculus*" — would state
+as fact the one thing that is false. What shipped instead is a warning that the
+**result** is incomplete, naming the databases involved, plus a per-organism
+count of what did answer. The real fix is at the data level: sequence ids must
+be unique across genomes searched together, which means prefixing them at build
+time in `agr_blastdb_manager`. That is a rebuild of all nine and is not done.
+
+Note this also affects WormBase today, independently of ALLIANCE: selecting two
+nematode genome assemblies silently loses chromosomes.
+
+**Original problem statement, kept for the record.** BLAST ranks hits globally
+across all databases, so a conserved query fills the list from whichever genome
+scores best, and the page cannot distinguish "no hit in mouse" from "mouse
+ranked below the cut" — the one thing a cross-species tool must be able to
+say.
 
 **Change.** In `hits.js`, group the rendered list by organism with per-organism
 counts and a collapse control, and render an explicit "no hits: *Mus musculus*"

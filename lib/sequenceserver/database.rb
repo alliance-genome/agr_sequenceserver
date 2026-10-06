@@ -1,6 +1,8 @@
 require 'open3'
 require 'digest/md5'
 require 'forwardable'
+require 'json'
+require 'set'
 
 require 'sequenceserver/sequence'
 
@@ -79,6 +81,33 @@ module SequenceServer
 
     # Return true if the database was _not_ created using the -parse_seqids
     # option of makeblastdb.
+    # The sequence ids this database holds, as a Set, or nil where they cannot
+    # be read.
+    #
+    # Taken from the <db>.names.json index agr_blastdb_manager writes beside
+    # each database, which maps a lower-cased name to the accession it resolves
+    # to. The accessions are the part that matters: they are what BLAST reports
+    # as sseqid, and what it deduplicates results on when a search spans
+    # several databases.
+    def accessions
+      return @accessions if defined?(@accessions)
+
+      @accessions =
+        begin
+          path = "#{name}.names.json"
+          if File.exist?(path)
+            index = JSON.parse(File.read(path))
+            if index.is_a?(Hash)
+              index.each_value.with_object(Set.new) do |v, set|
+                set << (v.is_a?(Array) ? v[0] : v)
+              end
+            end
+          end
+        rescue JSON::ParserError, SystemCallError
+          nil
+        end
+    end
+
     def non_parse_seqids?
       return if alias?
       case format

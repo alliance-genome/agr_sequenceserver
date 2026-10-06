@@ -67,3 +67,75 @@ test.describe('ALLIANCE: a hit names its organism', () => {
         await expect(page.locator('table').first()).toContainText('Caenorhabditis elegans');
     });
 });
+
+test.describe('ALLIANCE: an incomplete result says so', () => {
+    test('searching genomes that share chromosome names warns the result is incomplete',
+        async ({ page }) => {
+            test.setTimeout(BLAST_TIMEOUT + 180 * 1000);
+            await gotoSearch(page, '/blast/ALLIANCE/prod/');
+
+            // Human and mouse both name chromosomes 1..n, so BLAST reports
+            // each id once and mouse's alignments never reach the page. Mouse
+            // on its own returns 20 hits at evalue 0.0, so "no hits in mouse"
+            // would be false -- which is why this is a warning about the
+            // result rather than a list of absent organisms.
+            await selectDatabaseByTitle(page, 'Human_GRCh38');
+            await selectDatabaseByTitle(page, 'Mouse_GRCm39');
+            await page.fill(S.sequence, `>ACTB\n${ACTB}`);
+            await runBlast(page);
+
+            await expect(page.locator(S.hitById(1, 1))).toBeVisible({ timeout: BLAST_TIMEOUT });
+
+            const notice = page.locator('#shared-accession-notice');
+            await expect(notice).toBeVisible();
+            await expect(notice).toContainText('incomplete');
+            await expect(notice).toContainText('Human_GRCh38');
+            await expect(notice).toContainText('Mouse_GRCm39');
+        });
+
+    test('a single database is never called incomplete', async ({ page }) => {
+        test.setTimeout(BLAST_TIMEOUT + 120 * 1000);
+        await gotoSearch(page, '/blast/ALLIANCE/prod/');
+
+        await selectDatabaseByTitle(page, 'Human_GRCh38');
+        await page.fill(S.sequence, `>ACTB\n${ACTB}`);
+        await runBlast(page);
+
+        await expect(page.locator(S.hitById(1, 1))).toBeVisible({ timeout: BLAST_TIMEOUT });
+        await expect(page.locator('#shared-accession-notice')).toHaveCount(0);
+    });
+
+    test('databases that do not share ids are not called incomplete', async ({ page }) => {
+        // FlyBase's melanogaster set has no shared accessions at all, measured
+        // across every pair. A false warning here would train people to ignore
+        // the real one.
+        test.setTimeout(BLAST_TIMEOUT + 180 * 1000);
+        await gotoSearch(page, '/blast/FB/FB2026_03/');
+
+        await selectDatabaseByTitle(page, 'D_melanogaster_Genome_Assembly_6_69');
+        await selectDatabaseByTitle(page, 'D_melanogaster_Transcripts_6_69');
+        await page.fill(S.sequence, `>ACTB\n${ACTB}`);
+        await runBlast(page);
+
+        await expect(page.locator(S.hitById(1, 1))).toBeVisible({ timeout: BLAST_TIMEOUT });
+        await expect(page.locator('#shared-accession-notice')).toHaveCount(0);
+    });
+
+    test('a multi-organism result lists which organisms answered', async ({ page }) => {
+        test.setTimeout(BLAST_TIMEOUT + 180 * 1000);
+        await gotoSearch(page, '/blast/ALLIANCE/prod/');
+
+        // Three genomes whose chromosome vocabularies do not overlap, so the
+        // result is complete and the summary can be trusted.
+        await selectDatabaseByTitle(page, 'C_elegans_Genome_Assembly');
+        await selectDatabaseByTitle(page, 'Yeast_R64');
+        await page.fill(S.sequence, `>ACTB\n${ACTB}`);
+        await runBlast(page);
+
+        await expect(page.locator(S.hitById(1, 1))).toBeVisible({ timeout: BLAST_TIMEOUT });
+        const summary = page.locator('#organism-summary');
+        await expect(summary).toBeVisible();
+        await expect(summary).toContainText('Caenorhabditis elegans');
+        await expect(summary).toContainText('Saccharomyces cerevisiae');
+    });
+});
