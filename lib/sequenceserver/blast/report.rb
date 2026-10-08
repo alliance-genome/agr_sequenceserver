@@ -95,6 +95,17 @@ module SequenceServer
           return nil if accessions.nil?
 
           accessions.each do |accession|
+            # Not a real sequence id. A database built without -parse_seqids
+            # has none, so blastdbcmd hands back the synthetic ordinal
+            # "BL_ORD_ID:0" upwards, and the backfill wrote those into the name
+            # index. They are per-database ordinals, numbered from zero in
+            # every one, so comparing them finds every database "colliding"
+            # with every other -- on ZFIN that meant 21 of 21 pairs and a
+            # warning quoting "BL_ORD_ID:0" as a shared id, on a search that
+            # was not incomplete at all. BLAST offsets these across the
+            # databases of one search, so they never actually collide.
+            next if accession.to_s.start_with?(BL_ORD_ID_PREFIX)
+
             previous = owner[accession]
             if previous.nil?
               owner[accession] = database.title

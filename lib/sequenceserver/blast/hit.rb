@@ -121,7 +121,13 @@ module SequenceServer
              if reference_sequence.key?("genome_browser") && locatable
                 genome_browser_metadata = reference_sequence["genome_browser"]
                 filepath_parts = hit_db.name.split(File::SEPARATOR)
-                links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, accession, title, hit_db.name, protein_hit))
+                # Every refName rule reads the chromosome out of the accession,
+                # so a database built with seqid_prefix has to have it removed
+                # first or no rule will recognise the name. The prefix is on
+                # the config entry we just matched, which is why this happens
+                # here rather than inside Links.
+                ref_accession = Links.strip_seqid_prefix(accession, reference_sequence["seqid_prefix"])
+                links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, ref_accession, title, hit_db.name, protein_hit))
 
                 # The gene_track lookup is driven by the hit's own coordinates,
                 # which for a protein hit are amino acid offsets. Feeding those
