@@ -83,6 +83,29 @@ module SequenceServer
     }.freeze
 
     # Extract chromosome name for WormBase hits
+    # An accession with its seqid_prefix removed, for deriving a refName.
+    #
+    # A config entry may carry `seqid_prefix`, which the build prepends to
+    # every sequence id so that genomes searched together cannot collide --
+    # four of the nine Alliance reference genomes name their chromosomes 1..n,
+    # and BLAST conflates sequences that share an id.
+    #
+    # Every genome browser refName rule here reads the chromosome out of the
+    # accession: extract_wormbase_chromosome looks "I" up in
+    # WORMBASE_CHROMOSOME_MAP, the FlyBase rule matches arm names, SGD's maps
+    # a RefSeq id. None of them would recognise "WBcel235_I" or "GRCh38_1", so
+    # without this a prefixed database would simply stop producing links --
+    # a working feature broken in order to fix a different one.
+    #
+    # Only a leading "<prefix>_" is removed, and only when it is there, so an
+    # unprefixed database is untouched.
+    def self.strip_seqid_prefix(accession, prefix)
+      return accession if accession.nil? || prefix.nil? || prefix.empty?
+
+      marker = "#{prefix}_"
+      accession.start_with?(marker) ? accession[marker.length..] : accession
+    end
+
     def self.extract_wormbase_chromosome(hit_title, blast_accession, database_path = nil)
       # Handle C. elegans length-only format: "length=14890789"
       if hit_title && hit_title.match(/^length=\d+$/) && blast_accession.include?("BL_ORD_ID")

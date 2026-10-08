@@ -4,6 +4,12 @@ module SequenceServer
   module BLAST
     ERROR_LINE = /Error:\s(.*)/i
 
+    # What blastdbcmd returns in place of an accession for a database built
+    # without -parse_seqids: a synthetic per-database ordinal, "BL_ORD_ID:0"
+    # upwards. Not a sequence id, and numbered from zero in every database, so
+    # anything comparing ids across databases has to skip these.
+    BL_ORD_ID_PREFIX = 'BL_ORD_ID:'
+
     ALGORITHMS = %w[blastn blastp blastx tblastn tblastx].freeze
 
     OUTFMT_SPECIFIERS = %w[qseqid qgi qacc sseqid sallseqid sgi sallgi sacc

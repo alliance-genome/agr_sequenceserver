@@ -670,12 +670,6 @@ module SequenceServer
       nil
     end
 
-    # What blastdbcmd returns in place of an accession for a database built
-    # without -parse_seqids: a synthetic ordinal, "BL_ORD_ID:0" upwards. These
-    # were written into the name indexes by the backfill, so the index of such
-    # a database maps every symbol to an id no lookup can resolve.
-    BL_ORD_ID_PREFIX = 'BL_ORD_ID:'
-
     # Most matches a gene search returns. A symbol hitting more than this is not
     # something a person will pick from a list anyway.
     GENE_SEARCH_LIMIT = 50
@@ -764,7 +758,7 @@ module SequenceServer
           #
           # Checked against this pattern rather than VALID_SEQUENCE_ID: that
           # one allows ':' and so accepts "BL_ORD_ID:0" quite happily.
-          next if accession.to_s.start_with?(BL_ORD_ID_PREFIX)
+          next if accession.to_s.start_with?(SequenceServer::BLAST::BL_ORD_ID_PREFIX)
 
           display ||= display_names_for(db)
 
