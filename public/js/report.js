@@ -7,6 +7,7 @@ import ReportPlugins from 'report_plugins';
 import RunSummary from './report/run_summary';
 import GraphicalOverview from './report/graphical_overview';
 import AlignmentResults from './report/alignment_results';
+import Utils from './utils';
 
 /**
  * Renders entire report.
@@ -177,6 +178,76 @@ class Report extends Component {
     /**
    * Return results JSX.
    */
+    /**
+     * Says so when the result is known to be missing alignments.
+     *
+     * BLAST reports a hit once per sequence id across every database searched
+     * together, so where two of them use the same ids the later one's
+     * alignments are dropped from the output. Nothing in BLAST's output says
+     * this happened. On the Alliance deployment it is the difference between
+     * "mouse has no actin" and "mouse was never reported": a nine-genome
+     * tblastn returned 131 hits with no mouse among them, while mouse on its
+     * own returns 20 at evalue 0.0.
+     *
+     * This is deliberately a warning and not a list of absent organisms. The
+     * plan this came from proposed rendering "no hits: Mus musculus", which
+     * would state as fact the one thing that is false here.
+     */
+    incompleteResultNoticeJSX() {
+        var shared = this.state.shared_accessions;
+        if (!shared || !shared.count) return null;
+
+        return (
+            <div className="my-2 px-3 py-2 border border-amber-400 bg-amber-50 text-sm rounded"
+                id="shared-accession-notice" role="alert">
+                <strong>This result is incomplete.</strong>{' '}
+                {shared.count === 1 ? 'One sequence id is' : shared.count + ' sequence ids are'}
+                {' '}used by more than one of the databases searched
+                ({shared.databases.join(', ')}){shared.examples && shared.examples.length
+                    ? ' — for example ' + shared.examples.join(', ') : ''}.
+                {' '}BLAST reports such a sequence once, so alignments from the
+                other databases are missing from this page rather than absent
+                from the data. Search those databases one at a time to see them.
+            </div>
+        );
+    }
+
+    /**
+     * Which organisms answered, and how many hits each contributed.
+     *
+     * The first question a cross-species result raises, and one the hit list
+     * does not answer at a glance: selecting nine genomes and hearing back
+     * from seven IS the result. Shown only where more than one organism
+     * replied, so single-organism reports are unchanged.
+     */
+    organismSummaryJSX() {
+        var counts = {};
+        (this.state.queries || []).forEach(function (query) {
+            (query.hits || []).forEach(function (hit) {
+                var name = Utils.speciesName(hit);
+                if (name) counts[name] = (counts[name] || 0) + 1;
+            });
+        });
+        var names = Object.keys(counts).sort(function (a, b) {
+            return counts[b] - counts[a] || a.localeCompare(b);
+        });
+        if (names.length < 2) return null;
+
+        return (
+            <div className="my-2 text-sm" id="organism-summary">
+                <span className="font-semibold">Organisms with hits:</span>{' '}
+                {names.map(function (name, i) {
+                    return (
+                        <span key={name}>
+                            {i > 0 ? ', ' : ''}
+                            <em>{name}</em> ({counts[name]})
+                        </span>
+                    );
+                })}
+            </div>
+        );
+    }
+
     resultsJSX() {
         return (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:grid-cols-1" id="results">
@@ -197,6 +268,8 @@ class Report extends Component {
                         stats={this.state.stats}
                         params={this.state.params}
                     />
+                    {this.incompleteResultNoticeJSX()}
+                    {this.organismSummaryJSX()}
                     <GraphicalOverview
                         queries={this.state.queries}
                         prorgam={this.state.program}

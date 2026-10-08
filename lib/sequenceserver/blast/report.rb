@@ -38,8 +38,84 @@ module SequenceServer
                    submitted_at: job.submitted_at.utc,
                    imported_xml: !job.imported_xml_file.nil?,
                    seqserv_version: SequenceServer::VERSION,
+                   shared_accessions: shared_accessions,
                    non_parse_seqids: !!job.databases&.any?(&:non_parse_seqids?)).to_json
       end
+
+      # Sequence ids claimed by more than one of the databases searched.
+      #
+      # This is not a tidiness check. When a search spans several databases
+      # that use the same sequence ids, BLAST reports the hit ONCE and drops
+      # the rest -- so the result is missing alignments that exist, with
+      # nothing in the output to say so.
+      #
+      # Demonstrated on two databases built here, each holding one sequence
+      # called "1" with different content and different taxids: searched
+      # separately each returns its own, searched together only the first
+      # appears. On the Alliance deployment the effect is large -- human,
+      # mouse, rat and zebrafish all name chromosomes 1..n, so a nine-genome
+      # tblastn for human ACTB returned 131 hits and not one of them was mouse
+      # or rat, while mouse alone returns 20 at evalue 0.0.
+      #
+      # Measured over the deployments here: ALLIANCE/prod 23 of 36 same-type
+      # database pairs collide, WB/WS298 6 pairs (the nematode genome
+      # assemblies, which all name chromosomes I-VI and X), FB/FB2026_03 and
+      # RGD/8.3.0 none.
+      #
+      # Returns a hash the front end can render, or nil when there is nothing
+      # to say or the question cannot be answered cheaply.
+      def shared_accessions
+        @shared_accessions ||= compute_shared_accessions
+      end
+
+      private
+
+      # Most databases to read indexes for before giving up on the question.
+      #
+      # Reading and parsing them is linear and fast for the handfuls this
+      # matters to -- 0.07s for the nine Alliance genomes, 0.63s for all 63
+      # WormBase databases -- but someone can tick all 200 FlyBase ones, which
+      # is 2.2s of index parsing to answer a question that has no collisions
+      # anyway. Past this many, the check is skipped rather than slowing the
+      # report down.
+      SHARED_ACCESSION_DATABASE_LIMIT = 80
+
+      def compute_shared_accessions
+        databases = job.databases || []
+        return nil if databases.length < 2
+        return nil if databases.length > SHARED_ACCESSION_DATABASE_LIMIT
+
+        owner = {}
+        collisions = {}
+        databases.each do |database|
+          accessions = database.accessions
+          # An index missing for even one database makes the answer
+          # incomplete, and a half-answer here is worse than none: it would
+          # say "these two collide" while silently ignoring a third.
+          return nil if accessions.nil?
+
+          accessions.each do |accession|
+            previous = owner[accession]
+            if previous.nil?
+              owner[accession] = database.title
+            elsif previous != database.title
+              (collisions[accession] ||= Set.new) << previous
+              collisions[accession] << database.title
+            end
+          end
+        end
+
+        return nil if collisions.empty?
+
+        affected = collisions.each_value.reduce(Set.new) { |a, e| a | e }
+        {
+          count: collisions.size,
+          databases: affected.to_a.sort,
+          examples: collisions.keys.sort.first(5)
+        }
+      end
+
+      public
 
       def xml_file_size
         return File.size(job.imported_xml_file) if job.imported_xml_file
