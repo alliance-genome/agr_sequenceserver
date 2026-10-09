@@ -241,17 +241,63 @@ docker build . -t agr-blast:$TAG
 
 ### prod
 
+**Rescue the job history first.** Until the `jobs-prod` volume below exists,
+prod keeps its jobs in `/root/.sequenceserver` *inside the container's writable
+layer*, so the `docker rm -f` that starts a redeploy deletes every one of them.
+Each is a result URL someone may have shared or bookmarked; at the last count
+there were 1,758 of them, 3.6 GB. They do not come back.
+
 ```bash
-docker rm -f agr-blast-prod
+# Point-in-time copy, so run it IMMEDIATELY before the swap -- anything
+# submitted after this runs and before the container stops is lost.
+mkdir -p /var/sequenceserver-data/jobs-prod
+docker cp agr-blast-prod:/root/.sequenceserver/. /var/sequenceserver-data/jobs-prod/
+
+# Must match, and must not be zero.
+docker exec agr-blast-prod sh -c 'find /root/.sequenceserver -name job.yaml | wc -l'
+find /var/sequenceserver-data/jobs-prod -name job.yaml | wc -l
+```
+
+Then recreate, with that directory mounted so the next redeploy needs no rescue
+at all:
+
+```bash
+# Keep the old container rather than deleting it, so rollback is a rename.
+docker stop agr-blast-prod
+docker rename agr-blast-prod agr-blast-prod-pre-$TAG
+
 docker run -d --name agr-blast-prod \
   --restart unless-stopped \
   -p 4568:4567 \
   -v /var/sequenceserver-data/blast:/db \
   -v /var/sequenceserver-data/config:/sequenceserver/public/environments \
+  -v /var/sequenceserver-data/jobs-prod:/root/.sequenceserver \
   -e HTTPS=on \
   -e NODE_ENV=production \
   agr-blast:$TAG \
   sequenceserver -c /sequenceserver/public/configs/sequenceserver.conf
+```
+
+Both `-e` lines are load-bearing and easy to drop: `HTTPS=on` drives the fork's
+own proxy detection (see "Why test has no HTTPS" above), and without it the
+URLs the page builds for itself come out as `http://` behind the Alliance
+proxy. Confirm an old job still resolves before announcing the deploy:
+
+```bash
+# Any id from /var/sequenceserver-data/jobs-prod; the segments are not checked
+# against the job, so WB/WS298 works for any of them.
+JID=$(ls /var/sequenceserver-data/jobs-prod | head -1)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "http://localhost:4568/blast/WB/WS298/$JID.json"
+# 200 -- a 404 here means the job history did not survive; roll back.
+```
+
+Rollback, if it did not:
+
+```bash
+docker rm -f agr-blast-prod
+docker rename agr-blast-prod-pre-$TAG agr-blast-prod
+docker start agr-blast-prod
 ```
 
 ### dev
@@ -572,13 +618,21 @@ npm run build          # webpack --mode production && tailwindcss --minify
 git add public/sequenceserver-*.min.js public/css/app.min.css
 ```
 
-## prod is seven merged pull requests behind
+## prod is fifteen merged pull requests behind
 
 Prod runs `agr-blast:fda1db1f`, PR #23, merged 2026-09-29. `main` is
-`73e4a38a`, PR #30, merged 2026-10-02. `git log --oneline fda1db1f..73e4a38a`
-is seven commits, one per pull request:
+`effcac18`, PR #40, merged 2026-10-08. `git log --oneline fda1db1f..effcac18`
+is fifteen commits, one per pull request:
 
 ```
+effcac18  Keep genome browser links working when a database prefixes its ids (#40)
+97d53cd5  Say when a result is incomplete, instead of guessing why (#39)
+d92e0086  Name the organism a hit came from (#38)
+51798959  Join the TSV to the XML by position, not by subject id (#37)
+70f2006b  Make the ALLIANCE tests able to fail (#36)
+c4441c47  Document the system, the deployment and the audit (#35)
+a7fcccde  Let CI reach the tests (#32)
+b435058e  Stop trusting request input that becomes a filesystem path (#31)
 73e4a38a  Show a gene symbol as its database spells it (#30)
 b2f4a6ad  Stop one database filling the gene search list, and say what the box matches (#29)
 6f1dd06d  Say "Find a gene", then "or", then the paste box (#28)
@@ -588,9 +642,20 @@ b2f4a6ad  Stop one database filling the gene search list, and say what the box m
 b9d9de72  Alliance chrome, SGD fungal and FlyBase linkouts, and a concurrency fix (#24)
 ```
 
-Seven, not four. `docs/ARCHITECTURE.md` and the capture notes this file was
-written from both say "four merged PRs behind"; the git history says seven, and
-the bundle md5 above pins prod to `fda1db1f` exactly, so seven is the number.
+Count the history, not the notes. `docs/ARCHITECTURE.md` and the capture notes
+this file was first written from say "four merged PRs behind"; it was seven when
+this section was written and fifteen now, and the bundle md5 above pins prod to
+`fda1db1f` exactly, so the `git log` range is the number that can be trusted.
+
+The eight PRs added since this section was first written change what the gap
+costs. #31 is four request-handling defects where request input became a
+filesystem path, all of them live on prod right now. #37 fixes a join that
+attributed the wrong organism and coverage figures to hits, #38 and #39 make
+what a result is and is not explicit, and #40 keeps genome browser links
+working for the databases that now prefix their sequence ids — which prod's
+config volume already carries (all thirteen `seqid_prefix` values are deployed
+in `/var/sequenceserver-data/config`), so prod is serving prefixed databases
+with code that does not know to strip the prefix.
 
 Most of that gap is visible to a visitor. The gene search box does not exist at
 all — `GET /blast/:mod/:version/gene_search` returns 404 on 4568 and 200 on
@@ -620,13 +685,26 @@ appears on most runs but not all — three consecutive runs gave 47/3, 47/3, 48/
 requests actually interleave inside the window. An occasional 48/2 is not prod
 being fixed.
 
-**Closing this gap needs an image rebuild and nothing else.** The data is
-shared: prod mounts the same `/var/sequenceserver-data/blast`, so every
-`*.names.json` and `*.names.display.json` index the gene search box needs is
-already on disk and already being read by dev. Prod serves the same 200
-FlyBase FB2026_03 databases that dev and test do. Run the prod block under
-"Rebuilding and redeploying an instance" above, then the two curl checks and
-the smoke suite against `http://localhost:4568`, and expect 50/0.
+**Closing this gap needs an image rebuild and a job rescue, and nothing else.**
+The data is shared: prod mounts the same `/var/sequenceserver-data/blast`, so
+every `*.names.json` and `*.names.display.json` index the gene search box needs
+is already on disk and already being read by dev. Prod serves the same 200
+FlyBase FB2026_03 databases that dev and test do. The config is shared too, in
+content if not in path: `diff -rq /var/sequenceserver-data/config
+/var/sequenceserver-data/config-dev` is currently empty, so no config promotion
+is owed before this deploy — but check it rather than assume, because the two
+are separate directories that drift (see the `CONFIG_DEPLOY_ROOT` note under
+"The config volume split").
+
+What is *not* free is the job history, because it lives in the container. Run
+the prod block under "Rebuilding and redeploying an instance" above **including
+its `docker cp` step**, then the job-id curl, the two curl checks and the smoke
+suite against `http://localhost:4568`, and expect 50/0.
+
+Build the image ahead of time and the deploy window is only as long as a
+container restart: `agr-blast:effcac18` is already built, and is the same image
+id as `agr-blast:restyle`, so the test instance on 4570 has been exercising
+exactly this code.
 
 ## The hazard that will take a MOD offline: `copy_to_production`
 
