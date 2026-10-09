@@ -401,6 +401,69 @@ each link carries that genome's assembly and a `loc=` refName present verbatim
 in its `.fai` — never a Roman numeral for an Arabic-named genome. Open rat and
 zebrafish in a browser. Confirm WB, FB, SGD and RGD links byte-identical.
 
+**Outcome, measured 2026-10-09.** Five of the nine are linked, not nine, and
+the reason is the data rather than the code.
+
+Alliance JBrowse 2 serves one assembly per species, and for four of the nine it
+is a different build from the one BLAST searches. Compared sequence by sequence
+against each assembly's `.fai`:
+
+| genome | BLAST database | Alliance JB2 | names resolve | lengths agree |
+|---|---|---|---|---|
+| human | GRCh38.p14 | GRCh38.p14 | 705/705 | 705/705 |
+| mouse | GRCm39 | GRCm39 | 61/61 | 61/61 |
+| C. elegans | WBcel235 | WBcel235 | 7/7 | 7/7 |
+| yeast | R64 | R64 | 17/17 | 17/17 |
+| fly | Release_6_plus_ISO1_MT | dmel-all-chromosome-r6.67 | 8/8 | 8/8 |
+| rat | mRatBN7.2 | GRCr8 | 23/23 | **0/23** |
+| zebrafish | GRCz11 | GRCz12tu | 26/26 | **1/26** |
+| X. laevis | XENLA_9.2 | v10.1 | **1/108033** | n/a |
+| X. tropicalis | XENTR_9.1 | UCB_Xtro_10.0 | **2/6822** | n/a |
+
+Rat and zebrafish are the dangerous pair: every chromosome name matches, so a
+link would be built and would open, and the coordinates belong to another
+assembly. Rat chromosome 1 is 260,522,016 bases in the BLAST database and
+270,518,180 in JBrowse 2. Those two are left unlinked for that reason, and both
+Xenopus because their scaffold names are absent from the chromosome-level
+assemblies JBrowse 2 carries. Linking any of the four needs the BLAST database
+rebuilt on the assembly JBrowse 2 serves, or a second assembly added there.
+
+Three of the plan's claims above are wrong, corrected here:
+
+* The Xenopus vocabularies are not `Chr1L`/`Chr1S` and `Chr1`...`Chr10`. The
+  served assemblies are scaffold-level: `Scaffold81822` for *X. laevis*,
+  `scaffold_57` for *X. tropicalis*.
+* Fly resolves perfectly, 8 of 8. The worry was a RefSeq-derived name meeting
+  an assembly with no `refNameAliases`, but the Alliance fly BLAST database
+  already carries FlyBase arm names, which are the `.fai` names verbatim.
+* `refNameAliases` never comes into it. Once `seqid_prefix` is stripped, the
+  sequence id **is** the `.fai` refName for seven of the nine, so no alias
+  lookup is required and the question of whether JBrowse 2 applies aliases to
+  `FromConfigAdapter` features does not arise.
+
+The code change is smaller than planned, too. Rather than an Alliance branch in
+`extract_ref_name` gated on a combination of substrings, a config entry now
+says `"ref_name": "accession"` and `extract_ref_name` returns early on it. That
+was necessary as well as tidier: the Alliance rat directory is named
+`RGD_mRatBN7_2`, so `database_path.include?("RGD")` was true and the RGD rule
+answered `Chr1`; the Alliance yeast assembly is `Saccharomyces_cerevisiae`,
+which the SGD rule matches verbatim; and for the 704 human and mouse scaffolds,
+the only Alliance sequences with a defline, the generic fallback returned the
+first word, `Homo` or `Mus`.
+
+One more defect surfaced while testing. `routes.rb` built the path to
+`environment.json` from the literal string `/sequenceserver`, the app's location
+inside the container image, in two places. Anywhere else the file was not found,
+the branch fell back to an empty config, and every hit silently lost its genome
+browser and MOD gene links. Both now use `settings.root` through one helper.
+
+**Verified.** 60 JBrowse links across two cross-species searches, every refName
+present in its assembly's `.fai`, none wrong. Human, mouse, C. elegans, yeast
+and fly each hit and linked, including the titled human and mouse scaffolds
+that used to yield `Homo` and `Mus`. Rat hits appear with no link. WB, FB, SGD
+and RGD links byte-identical to the previous build: 1, 1, 12 and 14 links
+compared.
+
 ### Step 9: Name the organism, everywhere a hit appears
 
 **Problem.** A cross-species result page never names a species.

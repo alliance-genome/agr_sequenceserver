@@ -399,6 +399,30 @@ module SequenceServer
 
     # Main extraction method that delegates to MOD-specific methods
     def self.extract_ref_name(hit_title, blast_accession, database_path = nil, genome_browser_metadata = nil)
+      # A config entry may state outright that its sequence ids ARE the browser's
+      # refNames, which skips the guessing below entirely.
+      #
+      # Every rule after this point infers the genome from a substring of the URL,
+      # the assembly name or the database path, and each one is a trap for the
+      # Alliance databases. The path
+      # /db/ALLIANCE/prod/databases/Rattus/norvegicus/RGD_mRatBN7_2/... contains
+      # "RGD", so the RGD rule claims it and returns "Chr1" where Alliance
+      # JBrowse 2 wants "1". The Alliance yeast assembly is
+      # "Saccharomyces_cerevisiae", which the SGD rule matches verbatim. And
+      # where no rule claims the hit, the generic fallback takes the first word
+      # of the defline, so the 680 human and 39 mouse scaffolds that carry one,
+      # titled "Homo sapiens chromosome 1 unlocalized genomic scaffold, ...",
+      # yield a refName of "Homo" or "Mus".
+      #
+      # The accession is right for all nine Alliance genomes, measured against
+      # each assembly's .fai in Alliance JBrowse 2: 7/7 for C. elegans, 8/8 fly,
+      # 705/705 human, 61/61 mouse, 17/17 yeast, 23/23 rat, 26/26 zebrafish. It
+      # arrives here already stripped of any seqid_prefix, which hit.rb does
+      # because the prefix is on the config entry and not visible from here.
+      if genome_browser_metadata && genome_browser_metadata["ref_name"] == "accession"
+        return blast_accession
+      end
+
       # Determine which MOD based on genome browser metadata or database path
       if genome_browser_metadata
         if genome_browser_metadata["url"]&.include?("flybase")
@@ -579,7 +603,13 @@ module SequenceServer
                                                       "end": features_end,
                                                       "name": "Hits",
                                                       "subfeatures": subfeatures}]}}].to_json)
-            tracks = ERB::Util.url_encode(genome_browser_metadata["tracks"].join(",") + ",blasthits")
+            # "tracks" is optional in a config entry, and a missing one used to
+            # raise NoMethodError on nil here, which surfaced as a 500 on the
+            # whole report rather than one absent link. The BLAST hits track is
+            # added either way, so a browser with no preselected tracks still
+            # opens on the hit.
+            configured_tracks = genome_browser_metadata["tracks"] || []
+            tracks = ERB::Util.url_encode((configured_tracks + ["blasthits"]).join(","))
             ref_name = Links.extract_ref_name(hit_title, accession, database_path, genome_browser_metadata)
 
             # Don't generate JBrowse2 link if we don't have a valid chromosome/reference name
