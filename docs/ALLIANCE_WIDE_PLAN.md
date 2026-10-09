@@ -464,6 +464,45 @@ that used to yield `Homo` and `Mus`. Rat hits appear with no link. WB, FB, SGD
 and RGD links byte-identical to the previous build: 1, 1, 12 and 14 links
 compared.
 
+**All nine linked, 2026-10-09.** The four that could not be linked were
+rebuilt on the assemblies Alliance JBrowse 2 serves, so the obstacle above is
+gone:
+
+| genome | now built from | sequences | names and lengths match the .fai |
+|---|---|---|---|
+| zebrafish | GCF_049306965.1_GRCz12tu | 26 | 26 of 26 |
+| rat | GCF_036323735.1_GRCr8 | 77 | 77 of 77 |
+| X. laevis | GCF_017654675.1_Xenopus_laevis_v10.1 | 55 | 55 of 55 |
+| X. tropicalis | GCF_000004195.4_UCB_Xtro_10.0 | 167 | 167 of 167 |
+
+Both Xenopus went from scaffold-level to chromosome-level, 108,033 and 6,822
+sequences down to 55 and 167, named Chr1L, Chr1S and Chr1 to Chr10. So the
+per-assembly vocabularies this plan listed were right after all; they describe
+these assemblies, and the earlier correction above applies only to the
+scaffold-level builds that were being searched at the time.
+
+Titles and seqid_prefixes changed with the assemblies, so each database names
+what it holds. The prefixes stay distinct because rat, zebrafish, human and
+mouse all name chromosomes 1..n: 1,123 ids across the nine, none in more than
+one database.
+
+**Verified live**, on the test instance against the deployed tree and config:
+152 hits, 152 JBrowse links, every refName present in its assembly's .fai, none
+wrong and none missing, with all nine assemblies represented. Rat alone went
+from no links to 18. WB links unchanged.
+
+The four superseded databases are kept at
+/var/sequenceserver-data/retired-alliance-2026-10-09, 2.0 GB, so a rollback is
+a move back.
+
+One consequence to watch. Production still runs agr-blast:fda1db1f, which
+predates the ref_name support, and it reads /var/sequenceserver-data/config
+rather than config-dev. Its config therefore still names the old assemblies and
+matches none of the rebuilt databases, so production shows the new data with no
+genome browser links, as it did before. That is the safe state: the old code
+with the new config would have produced "Chr1" for rat, which GRCr8 does not
+contain. Promote the config to production only together with the code.
+
 ### Step 9: Name the organism, everywhere a hit appears
 
 **Problem.** A cross-species result page never names a species.
