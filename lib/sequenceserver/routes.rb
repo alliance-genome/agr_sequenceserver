@@ -267,7 +267,12 @@ module SequenceServer
       halt 404, { error: 'Job not found' }.to_json if job.nil?
       halt 202 unless job.done?
 
-      env_file_path = File.join('/sequenceserver', 'public', 'environments', params[:segment1], params[:segment2], 'environment.json')
+      # settings.root, not the literal "/sequenceserver", which is only the app's
+      # path inside the container image. Outside it the file was never found, the
+      # branch below fell back to an empty config, and every hit lost its genome
+      # browser and MOD gene links -- silently, since an empty config is also
+      # what a release with no environment.json legitimately has.
+      env_file_path = environment_file_path(params[:segment1], params[:segment2])
 
       # Load environment config if it exists, otherwise use empty config
       env_config = if File.exist?(env_file_path)
@@ -714,8 +719,16 @@ module SequenceServer
     # "Agaricomycetes_mushrooms_allies" rather than a species. The config does
     # carry one, and sanitising its blast_title the way the build does yields the
     # database title exactly -- verified at 100% across SGD, FB, WB and ZFIN.
+    # Where a release's environment.json lives. One definition, because the two
+    # callers had the path written out separately and both hardcoded the app's
+    # location inside the container image.
+    def environment_file_path(segment1, segment2)
+      File.join(settings.root, 'public', 'environments', segment1, segment2,
+                'environment.json')
+    end
+
     def organism_by_title(segment1, segment2)
-      path = File.join('/sequenceserver', 'public', 'environments', segment1, segment2, 'environment.json')
+      path = environment_file_path(segment1, segment2)
       return {} unless File.exist?(path)
 
       entries = JSON.parse(File.read(path))['data'] || []
