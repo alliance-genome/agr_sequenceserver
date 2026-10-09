@@ -8,17 +8,34 @@ module SequenceServer
     ENV['RACK_ENV'] = 'test'
     include Rack::Test::Methods
 
+    # This fork serves everything under /blast/<mod>/<version>/ (6e969b2c,
+    # November 2023). The bare "/" and "/get_sequence" these specs used to post
+    # to have not existed since, so all twelve of them had been failing on a
+    # 404 for two years.
+    #
+    # The MOD and version are not free-form: a route turns them into
+    # <database_dir>/<mod>/<version>/databases and 404s unless that is a
+    # directory. spec/mods/TEST/v5/databases is a symlink to the v5 sample set,
+    # so the fixtures are not duplicated.
+    #
+    # It lives in spec/mods rather than under spec/database because job_spec
+    # scans the whole of spec/database and then picks databases by position --
+    # Database.ids[17] and friends. A symlink inside that tree makes the sample
+    # set appear twice, shifts every index, and silently changes what those
+    # specs are asserting about.
+    ROUTE = '/blast/TEST/v5'
+
     before do
-      SequenceServer.init(database_dir: "#{__dir__}/database/v5/sample")
+      SequenceServer.init(database_dir: "#{__dir__}/mods")
     end
 
     let 'app' do
       SequenceServer
     end
 
-    context 'POST /' do
+    context "POST #{ROUTE}" do
       before :each do
-        get '/' # make a request so we have an env with CSRF token
+        get "#{ROUTE}/" # make a request so we have an env with CSRF token
         @params = {
           'sequence'  => 'AGCTAGCTAGCT',
           'databases' => [Database.first.id],
@@ -29,19 +46,19 @@ module SequenceServer
 
       it 'returns Bad Request (400) if no blast method is provided' do
         @params.delete('method')
-        post '/', @params
+        post ROUTE, @params
         last_response.status.should == 400
       end
 
       it 'returns Bad Request (400) if no input sequence is provided' do
         @params.delete('sequence')
-        post '/', @params
+        post ROUTE, @params
         last_response.status.should == 400
       end
 
       it 'returns Bad Request (400) if no database id is provided' do
         @params.delete('databases')
-        post '/', @params
+        post ROUTE, @params
         last_response.status.should == 400
       end
 
@@ -51,36 +68,36 @@ module SequenceServer
         # ensure the list of databases is empty
         @params['databases'].should be_empty
 
-        post '/', @params
+        post ROUTE, @params
         last_response.status.should == 400
       end
 
       it 'returns Bad Request (400) if incorrect database id is provided' do
         @params['databases'] = ['123']
-        post '/', @params
+        post ROUTE, @params
         last_response.status.should == 400
       end
 
       it 'returns Bad Request (400) if an incorrect blast method is supplied' do
         @params['method'] = 'foo'
-        post '/', @params
+        post ROUTE, @params
         last_response.status.should == 400
       end
 
       it 'returns Bad Request (400) if incorrect advanced params are supplied' do
         @params['advanced'] = '-word_size 5; rm -rf /'
-        post '/', @params
+        post ROUTE, @params
         last_response.status.should == 400
       end
 
       it 'redirects to /:jobid (302) when correct method, sequence, and database ids are'\
         'provided but no advanced params' do
-        post '/', @params
+        post ROUTE, @params
         last_response.should be_redirect
         last_response.status.should eq 302
 
         @params['advanced'] = '  '
-        post '/', @params
+        post ROUTE, @params
         last_response.should be_redirect
         last_response.status.should == 302
       end
@@ -88,15 +105,15 @@ module SequenceServer
       it 'redirects to /jobid (302) when correct method, sequence, and database ids and'\
         'advanced params are provided' do
         @params['advanced'] = '-evalue 1'
-        post '/', @params
+        post ROUTE, @params
         last_response.should be_redirect
         last_response.status.should == 302
       end
     end
 
-    context 'POST /get_sequence' do
+    context "POST #{ROUTE}/get_sequence" do
       before :each do
-        get '/' # make a request so we have an env with CSRF token
+        get "#{ROUTE}/" # make a request so we have an env with CSRF token
         @csrf_token = Rack::Csrf.token(last_request.env)
       end
 
@@ -109,7 +126,7 @@ module SequenceServer
       end
 
       it 'returns 422 if no sequence_ids are provided' do
-        post '/get_sequence', {
+        post "#{ROUTE}/get_sequence", {
           '_csrf' => @csrf_token,
           'sequence_ids' => "",
           'database_ids' => Database.first.id.to_s
@@ -120,7 +137,7 @@ module SequenceServer
       end
 
       it 'returns 422 if no database_ids are provided' do
-        post '/get_sequence', {
+        post "#{ROUTE}/get_sequence", {
           '_csrf' => @csrf_token,
           'sequence_ids' => "contig1",
           'database_ids' => ""
@@ -131,7 +148,7 @@ module SequenceServer
       end
 
       it 'does not allow invalid sequence ids' do
-        post '/get_sequence', {
+        post "#{ROUTE}/get_sequence", {
           '_csrf' => @csrf_token,
           'sequence_ids' => "invalid_sequence_id';sleep 30;",
           'database_ids' => Database.first.id.to_s

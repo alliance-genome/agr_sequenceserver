@@ -356,6 +356,23 @@ module SequenceServer
 
       begin
         sequences = Sequence::Retriever.new(sequence_ids, database_ids, true)
+      rescue ValidationError => e
+        # A ValidationError already knows what it is: InvalidSequenceIdError and
+        # DatabaseUnreachableError both answer 422, because the request is at
+        # fault rather than the server. The blanket rescue below used to catch
+        # these as well and report them as 500, which contradicted both
+        # `http_status` and the two 422 branches just above -- an id that failed
+        # validation looked to the caller like a server fault.
+        #
+        # `more_info` rather than `message`, because `message` on these classes
+        # is a fixed sentence and `more_info` is the part that says which ids
+        # were rejected. Served as text/plain, so the echoed id is not markup.
+        # All three current subclasses carry `more_info`; the check is so that
+        # a future one without it degrades to its message rather than raising
+        # NoMethodError from inside this rescue and becoming a 500 again.
+        status e.http_status
+        content_type :text
+        return (e.respond_to?(:more_info) && e.more_info) || e.message
       rescue StandardError => e
         # This route is reached by a form submission, so the browser navigates to
         # the response. Return a readable message instead of a stack trace page.
@@ -558,11 +575,22 @@ module SequenceServer
     # of the MOD's directory.
     VALID_VERSION_SEGMENT = /\A[A-Za-z0-9_-][A-Za-z0-9_.-]*\z/
 
+    # The root under the MOD and version segments was the literal string
+    # "/db" -- the container's mount point -- so the only tree this app could
+    # ever serve was the one in a container, and `database_dir` in the config
+    # file was read, validated and then ignored by every route. That also left
+    # the request side of the app untestable: a spec can point `database_dir`
+    # at spec/database, but it cannot create /db.
+    #
+    # Taking the root from the config changes no deployment: all three
+    # instances set `:database_dir: "/db"` in sequenceserver.conf and mount the
+    # data there, so the path this builds is the one it has always built.
     def database_dir_for(segment1, segment2)
       not_found unless segment1 =~ /\A[A-Za-z0-9_-]+\z/ &&
                        segment2 =~ VALID_VERSION_SEGMENT
 
-      dir = File.join('/db', segment1, segment2, 'databases')
+      dir = File.join(SequenceServer.config[:database_dir], segment1, segment2,
+                      'databases')
       not_found unless File.directory?(dir)
       dir
     end

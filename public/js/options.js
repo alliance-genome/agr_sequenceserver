@@ -14,6 +14,7 @@ export class Options extends Component {
         this.optionsPresetsJSX = this.optionsPresetsJSX.bind(this);
         this.advancedParamsJSX = this.advancedParamsJSX.bind(this);
         this.showAdvancedOptionsHelp = this.showAdvancedOptionsHelp.bind(this);
+        this.advancedOptionsHelpJSX = this.advancedOptionsHelpJSX.bind(this);
     }
 
     defaultObjectValue() {
@@ -242,12 +243,42 @@ export class Options extends Component {
         modal.showModal();
     }
 
+    // The link that opens the per-algorithm options reference.
+    //
+    // There was no way to open that dialog at all. views/search.erb renders it,
+    // search.js wires its close button, and showAdvancedOptionsHelp below picks
+    // the right algorithm's block and calls showModal -- but nothing ever
+    // called showAdvancedOptionsHelp, so the whole thing was unreachable. The
+    // trigger went missing when this component replaced the old options form
+    // with the inline dropdowns above, and the binding in the constructor was
+    // all that was left of it.
+    //
+    // Only rendered once an algorithm is known, because the dialog shows the
+    // options for one algorithm and has nothing to show before then. That is
+    // also the pair of cases public/js/tests/form.spec.js asserts.
+    advancedOptionsHelpJSX() {
+        if (!this.props.blastMethod) return null;
+
+        return (
+            <button
+                type="button"
+                data-target="#help"
+                className="text-seqblue hover:text-seqorange underline text-sm"
+                onClick={this.showAdvancedOptionsHelp}
+            >
+                {`View all ${this.props.blastMethod.toLowerCase()} options`}
+            </button>
+        );
+    }
+
     render() {
         return (
             <div className="flex-grow flex flex-col items-start sm:items-center space-y-4">
                 {this.optionsPresetsJSX()}
 
                 {this.advancedParamsJSX()}
+
+                {this.advancedOptionsHelpJSX()}
 
                 {/* Hidden input fields to include options in form submission */}
                 <input 
