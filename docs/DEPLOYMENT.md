@@ -481,88 +481,88 @@ PR #24's commit message records the same two suites failing identically with its
 changes stashed, so this is the state of the repository, not a regression. A
 clean `npm test` is not currently the bar; "still exactly these two" is.
 
-### RSpec, which does not currently run as documented
+### RSpec
 
-`bundle exec rspec` does not work on this host, and does not work as written
-anywhere. Three separate obstacles, all verified:
+The suite passes: **362 examples, 0 failures**. It did not until recently, and
+the history is worth keeping, because most of the failures were specs that a
+fork-wide change left behind rather than anything broken in the app.
 
 **There is no Ruby on the host.** No `ruby`, `gem`, `bundle` or `rspec` on
 `PATH`, nothing under `/opt` or `/usr/local`, no ruby RPM installed. The suite
 can only be run inside a container.
 
-**The image cannot run it either.** `rspec` is a development dependency
+**The shipped image cannot run it either.** `rspec` is a development dependency
 (`sequenceserver.gemspec:36`), the builder stage runs
 `bundle install --without=development` (`Dockerfile:18`), and that writes
 `BUNDLE_WITHOUT: "development"` into `/usr/local/bundle/config`, which is then
 copied into the final stage. The Dockerfile's `dev` target does run a plain
-`bundle install` (`Dockerfile:115-117`), but it inherits that same config file,
-so it installs no development gems and still has no `rspec`. And `spec/` is
-excluded by `.dockerignore`, so no image contains the specs at all.
-
-**The suite aborts at load.** Even with the gems and the specs in place,
-`bundle exec rspec` collects **0 examples and 10 errors**. All ten live under
-`spec/blast_versions/` — nine BLAST releases from 2.2.30 to 2.9.0 and one
-DIAMOND 0.9.24 — and all ten fail the same way at load time, constructing
-`BLAST::Report.new(job)` with one argument where this fork's
-`lib/sequenceserver/blast/report.rb:25` takes `(job, env_config)`:
-`ArgumentError: wrong number of arguments (given 1, expected 2)`. They drifted
-when the fork added per-request environment config and were never updated.
-
-`harden-request-handling` takes the obvious half of that fix: `env_config` now
-defaults to `[]` on both report classes, which is not a test-only concession —
-`routes.rb:274-281` already passes `[]` for a release with no
-`environment.json`, so the default is a state the code supports anyway. It does clear the `ArgumentError`.
-It does not yet make those ten specs run, and the reason is the other change on
-the same branch: `Job.fetch` returns `nil` for any id that is not a UUID
-(`Job::VALID_ID`, `lib/sequenceserver/job.rb:29` on that branch), while the `blast_versions`
-fixtures are fetched by path-shaped ids such as `blast_2.2.30/blastn`. So the
-ten now abort with `undefined method 'databases' for nil:NilClass` instead.
-Measured both ways in the container recipe below — `main` and the branch each
-give 0 examples, 10 errors — so the load failure survives the fix and still has
-to be dealt with in the specs.
-
-What does run, in a container with the specs mounted and the development group
-forced back on:
+`bundle install` (`Dockerfile:115-117`) but inherits the same config file, so it
+installs no development gems either. Unset it and mount the working tree:
 
 ```bash
 cd /home/ec2-user/gitroot/pull-upstream/agr_sequenceserver
-docker run --rm --entrypoint sh -v "$PWD":/src:ro agr-blast:73e4a38a -c '
-  apt-get update -qq && apt-get install -y -qq gcc make patch
-  mkdir -p /work && cd /src && cp -a spec lib bin conf public views \
-      Gemfile Gemfile.lock sequenceserver.gemspec config.ru /work/
-  cd /work
-  bundle config set --local without ""
-  bundle install
-  echo n | bundle exec bin/sequenceserver -s -d spec/database/v5/sample
-  bundle exec rspec spec/links_spec.rb spec/gene_links_spec.rb spec/genomic_coordinates_spec.rb
+docker run --rm -v "$PWD:/work" -w /work --entrypoint bash agr-blast:effcac18 -c '
+  bundle config unset without
+  bundle install --quiet
+  bundle exec bin/sequenceserver -s -d spec/database/v5/sample
+  bundle exec rspec spec
 '
-# 57 examples, 0 failures
+# 362 examples, 0 failures
 ```
 
 The `bin/sequenceserver -s -d spec/database/v5/sample` line is not optional and
-is easy to miss: it is a step in `.github/workflows/tests.yml:70-71`, and
-without it `Database.first` is `nil` and all twelve `routes_spec.rb` examples
-fail with `undefined method 'id' for nil:NilClass` before testing anything.
+is easy to miss. It is a step in the workflow
+(`.github/workflows/tests.yml:81-82`) and it writes the config file that gives
+`database_dir` to the specs that call `SequenceServer.init` with no arguments.
 
-The three spec files above are the fork's own — `links_spec.rb` came in with
-PR #15, `gene_links_spec.rb` and `genomic_coordinates_spec.rb` with PR #22 — and
-they pass. The wider picture is worse: with `features/` and `blast_versions/`
-excluded the suite is **128 examples, 41 failures**. Whether those 41 are real
-regressions or gaps in this ad-hoc environment is undetermined — `spec/features/`
-drives Capybara against headless Chrome, which no image here contains — and
-there is no green baseline to compare against, because **CI has never run on
-this fork — not on one push, not on one pull request**:
-`.github/workflows/tests.yml:8-14` triggers on push and pull request to
-`master`, and `git ls-remote --heads origin` shows no `master` branch — the
-default branch is `main`. Every event the workflow listens for is one that
-cannot occur in this repository, so the file has been sitting there looking like
-coverage without ever having been executed.
-`harden-request-handling` points the triggers at `main` (`tests.yml:11-17` on
-that branch), so the first run will happen when that merges — and will be the
-first time anyone sees what this suite does in a clean environment. After that
-the ten load errors still have to be fixed and the real baseline established.
-Until then, treat the Ruby suite as "the fork's own specs are green, the rest is
-unknown".
+Note the image must carry **BLAST 2.16.0**. `spec/fixtures`' BLAST archive
+reports `BLASTN 2.16.0+`, and report_spec compares that string, so the one
+example fails on an older BLAST. The Dockerfile pinned 2.15.0 while CI and
+CLAUDE.md both said 2.16.0; that is now 2.16.0 everywhere.
+
+#### What had been failing, and why it went unnoticed
+
+CI had never run on this fork: `tests.yml` triggered on `master`, and the
+default branch is `main`, so every event it listened for was one that could not
+occur. #32 pointed it at `main` and the first run reported **66 failures**.
+Five causes, all fixed:
+
+* `init_database` was dead code. `6e969b2c` removed the call and the method when
+  it introduced `/blast/<mod>/<environment>` URLs; an upstream merge
+  (`83f1ee87`) brought the body back without the call, and it then sat
+  unreachable for a year -- and uncallable, since the body referenced a
+  `makeblastdb` reader this fork had moved into routes.rb. Restoring it fixed 27
+  examples, because scanning is only half of what it did and validating
+  `database_dir` is the other half.
+* `routes.rb` hardcoded `/db` as the root beneath the MOD and version segments,
+  so `database_dir` was validated and then ignored, and no spec could exercise a
+  route. It now takes the root from the config -- the same path, since every
+  instance sets `:database_dir: "/db"`.
+* `get_sequence` reported a rejected sequence id as 500, because a blanket
+  `rescue StandardError` swallowed the 422 that `InvalidSequenceIdError` already
+  declares.
+* `makeblastdb_spec` had contradicted the code since upstream's `72a7dce3`
+  (June 2021) deliberately made non-parse_seqids databases reformattable
+  without updating the spec.
+* `report_spec` resolved its fixture paths against a checkout named
+  `sequenceserver`; this one is `agr_sequenceserver`, so `blast_formatter`
+  failed on a database that was not there. Its golden file was also stale in
+  five ways, every one of them this fork's own features.
+
+#### What was removed, and what is dormant
+
+`spec/features/` is gone -- 25 Capybara examples driving upstream's flat
+checkbox list. Fixing their URLs was not enough: this fork renders databases
+with jstree, so `.protein .database` elements are empty and `check "<title>"`
+cannot find a visible checkbox, because jstree mirrors hidden inputs. The
+Playwright suite in `test/e2e` covers the same ground against the markup this
+fork actually serves, and its README documents those pitfalls.
+
+`spec/blast_versions/` is still present and still stale -- ten importers built
+on `BLAST::Report.new(job)` with one argument, and fixture ids shaped like
+`blast_2.2.30/blastn`. They are inert: none is named `*_spec.rb`, so `rspec`
+does not collect them, and they neither pass nor fail. Either port or delete
+them; do not assume they are coverage.
 
 ## The frontend bundle rule
 

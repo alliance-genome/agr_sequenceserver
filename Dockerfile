@@ -1,6 +1,11 @@
 # Build variables. These need to be declared befored the first FROM
 # for the variables to be accessible in FROM instruction.
-ARG BLAST_VERSION=2.15.0
+# 2.16.0 is what the rest of the project already says it uses: CLAUDE.md names
+# it twice, the CI workflow downloads it, and spec/fixtures' BLAST archive
+# expects "BLASTN 2.16.0+" in the report, so report_spec cannot pass in an
+# image built on 2.15.0. The Dockerfile was the only place still pinning the
+# older one.
+ARG BLAST_VERSION=2.16.0
 
 ## Stage 1: gem dependencies.
 FROM docker.io/library/ruby:3.2-bookworm AS builder
