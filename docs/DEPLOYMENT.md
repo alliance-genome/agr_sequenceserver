@@ -39,7 +39,12 @@ nothing on this host was started from it.
 | | test | dev | prod |
 |---|---|---|---|
 | container | `agr-blast-restyle` | `agr-blast-dev` | `agr-blast-prod` |
-| image | `agr-blast:restyle` | `agr-blast:b435058e` | `agr-blast:fda1db1f` |
+| image | `agr-blast:a3ecb680` | `agr-blast:a3ecb680` | `agr-blast:fda1db1f` |
+
+Test and dev were moved onto `a3ecb680`, which is `main` at the Alliance
+JBrowse 2 work, on 2026-10-09. Both now run the same image, so the floating
+`agr-blast:restyle` tag no longer names what the test instance serves; read the
+image off the container rather than trusting a tag.
 | host port | 4570 | 4569 | 4568 |
 | reached at | `http://172.31.3.193:4570` | `https://blast-dev.alliancegenome.org` | `https://blast.alliancegenome.org` |
 | `public/environments` from | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config` |
