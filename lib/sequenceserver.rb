@@ -76,6 +76,27 @@ module SequenceServer
       # Now locate binaries, scan databases directory, require any plugin files.
       load_extension
       init_binaries
+      # Dropped by 6e969b2c, the commit that moved this fork to
+      # /blast/<mod>/<environment> URLs, and reasonably so: routes.rb assigns
+      # Database.collection per request from the URL's own MOD and version, so
+      # the collection built here is never the one a request reads.
+      #
+      # Restored because validating database_dir is the other half of what this
+      # method does, and that half is not optional. Losing it meant a bad or
+      # unmounted database_dir was no longer caught at boot: the process came up
+      # happily and every request then failed on its own. The comment below
+      # still promised this validation, and spec/sequenceserver_spec.rb still
+      # asserts all four of the errors it raises -- DATABASE_DIR_NOT_SET, ENOENT
+      # for a path that is absent or not a directory, and NO_BLAST_DATABASE_FOUND
+      # -- so the specs had been failing ever since.
+      #
+      # The method itself survived only because an upstream merge (83f1ee87)
+      # brought the body back without the call, leaving it dead for a year.
+      #
+      # Cost on the real tree is a 600 ms `blastdbcmd -recursive -list` over
+      # /db's 2,395 databases plus a Dir glob each; all 2,395 are v5 with an
+      # njs/pjs index, so check_database_compatibility warns about none of them.
+      init_database
 
       # The above methods validate bin dir, database dir, and path to plugin
       # files. Port and host settings don't need to be validated: if running
@@ -199,9 +220,18 @@ module SequenceServer
 
       logger.debug("Will look for BLAST+ databases in: #{config[:database_dir]}")
 
-      fail NO_BLAST_DATABASE_FOUND, config[:database_dir] unless makeblastdb.any_formatted?
+      # Built here rather than read off a `makeblastdb` reader, which is what
+      # the body did while it was dead code. Upstream had one scanner for the
+      # process's single database_dir; this fork scans a different directory per
+      # request, so the reader moved to routes.rb as `makeblastdb(database_dir)`
+      # and nothing answers to a bare `makeblastdb` at this scope any more.
+      # Calling this method therefore raised NameError, so it was not merely
+      # uncalled -- it could not have run.
+      scanner = MAKEBLASTDB.new(config[:database_dir])
 
-      Database.collection = makeblastdb.formatted_fastas
+      fail NO_BLAST_DATABASE_FOUND, config[:database_dir] unless scanner.any_formatted?
+
+      Database.collection = scanner.formatted_fastas
       check_database_compatibility unless config[:optimistic].to_s == 'true'
     end
 

@@ -99,20 +99,36 @@ module SequenceServer
     end
 
     it 'can tell databases that require reformatting' do
-      # Control: shouldn't report sample v5 databases as requiring reformatting.
-      makeblastdb = SequenceServer::MAKEBLASTDB.new(database_dir_v5)
-      expect(makeblastdb.any_to_format_or_reformat?).to be_falsey
-
-      # Databases created using blastdb_aliastool don't require reformatting either.
+      # Control: a v5 database built with -parse_seqids needs nothing done to
+      # it. The blastdb_aliastool fixture is the only one of these that
+      # qualifies -- every other v5 fixture here, the sample set included, was
+      # built without -parse_seqids.
       makeblastdb = SequenceServer::MAKEBLASTDB.new(database_dir_blastdb_aliastool)
       expect(makeblastdb.any_to_format_or_reformat?).to be_falsey
 
-      # Databases created without -parse_seqids option don't require reformatting either.
-      # We disable 'sequence download' link instead.
+      # Databases created without -parse_seqids ARE listed as reformattable.
+      #
+      # This pair of assertions used to expect the opposite, and had been
+      # failing since upstream's 72a7dce3 (June 2021), "non-parse_seqids should
+      # be listed when using sequenceserver -m / Just not during startup
+      # routine". That commit added `|| ff.non_parse_seqids?` to both
+      # determine_fastas_to_reformat and fastas_to_reformat and did not touch
+      # this spec, so the two have disagreed ever since. The code carries the
+      # deliberate, documented intent, so it is the spec that was corrected.
+      #
+      # What the old comment here said -- that such a database is usable and
+      # only loses its FASTA download -- is still true, and is still what
+      # check_database_compatibility does with it: warn, never refuse to serve.
+      # Offering it under `-m` is a separate question from blocking startup.
       makeblastdb = SequenceServer::MAKEBLASTDB.new(database_dir_without_parse_seqids)
-      expect(makeblastdb.any_to_format_or_reformat?).to be_falsey
+      expect(makeblastdb.any_to_format_or_reformat?).to be_truthy
 
-      # v4 databases require reformatting.
+      # And so the v5 tree as a whole is reformattable, because all six of the
+      # databases under it are non-parse_seqids.
+      makeblastdb = SequenceServer::MAKEBLASTDB.new(database_dir_v5)
+      expect(makeblastdb.any_to_format_or_reformat?).to be_truthy
+
+      # v4 databases require reformatting whether or not -parse_seqids was used.
       makeblastdb = SequenceServer::MAKEBLASTDB.new(database_dir_v4)
       expect(makeblastdb.any_to_format_or_reformat?).to be_truthy
     end
