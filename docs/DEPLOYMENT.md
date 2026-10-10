@@ -246,6 +246,33 @@ docker build . -t agr-blast:$TAG
 
 ### prod
 
+**The image is already built.** `agr-blast:c3867140` is `main`, built and
+checked on 2026-10-09, and it is the same image id as the `agr-blast:a3ecb680`
+that test and dev run, so it has been exercised on both. All four committed
+bundles in it match `git show HEAD:public/...`. Rebuild only if `main` has moved
+since.
+
+**Promote the config in the same window.** Production reads
+`/var/sequenceserver-data/config`, whose ALLIANCE entries still name the
+assemblies retired on 2026-10-09 and so match none of the rebuilt databases.
+The deploy is therefore two copies, not one:
+
+```bash
+cp -a /var/sequenceserver-data/config-dev/. /var/sequenceserver-data/config/
+```
+
+Measured on `agr-blast:c3867140` against the real database tree, with one
+cross-species search of 152 hits:
+
+| config | links | correct refName | wrong |
+|---|---|---|---|
+| production's current config | 6 | 6 | 0 |
+| after the copy above | 152 | 152 | 0 |
+
+So forgetting the copy costs 146 links and breaks nothing. Doing the copy
+without the new image is the combination to avoid: the older code ignores
+`ref_name` and answers `Chr1` for rat, which GRCr8 does not contain.
+
 **Rescue the job history first.** Until the `jobs-prod` volume below exists,
 prod keeps its jobs in `/root/.sequenceserver` *inside the container's writable
 layer*, so the `docker rm -f` that starts a redeploy deletes every one of them.
