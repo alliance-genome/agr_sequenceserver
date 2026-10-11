@@ -613,11 +613,24 @@ cannot find a visible checkbox, because jstree mirrors hidden inputs. The
 Playwright suite in `test/e2e` covers the same ground against the markup this
 fork actually serves, and its README documents those pitfalls.
 
-`spec/blast_versions/` is still present and still stale -- ten importers built
-on `BLAST::Report.new(job)` with one argument, and fixture ids shaped like
-`blast_2.2.30/blastn`. They are inert: none is named `*_spec.rb`, so `rspec`
-does not collect them, and they neither pass nor fail. Either port or delete
-them; do not assume they are coverage.
+`spec/blast_versions/` is live coverage, and an earlier version of this note
+said the opposite. It claimed none of its files is named `*_spec.rb` and that
+the directory is inert. Both were wrong. Each of the ten release directories
+holds a `blast_<version>_spec.rb` alongside the importer, those ten are
+collected, and they contribute **214 of the suite's 376 examples**, all
+passing. They read the same report fixtures through nine BLAST releases from
+2.2.30 to 2.9.0 plus DIAMOND 0.9.24, by the nested fixture ids
+`blast_2.9.0/blastn` that `Job.valid_id?` exists to permit. Exclude them and
+you lose 57% of the suite.
+
+What was genuinely dead, and is now deleted, is the other file in each
+directory: `import_spec_capybara_local_<version>.rb`, 5,499 lines across ten
+files. Those were Capybara feature specs, `type: :feature, js: true`, and
+`rspec` never collected them, their names not ending in `_spec.rb`. They
+navigated with `visit "/#{url}"`, the upstream root-level job URL this fork
+replaced with `/blast/:mod/:version/:jid` in November 2023, so they could not
+have passed here either. They went the same way as `spec/features`, and for the
+same reason.
 
 ## The frontend bundle rule
 
