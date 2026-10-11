@@ -99,6 +99,25 @@ module SequenceServer
     #
     # Only a leading "<prefix>_" is removed, and only when it is there, so an
     # unprefixed database is untouched.
+    # A FASTA id written in NCBI's bar notation, "gb|CM008509.1|", which BLAST
+    # keeps verbatim. Two WormBase assemblies are built from files that use it,
+    # and their browsers list the bare accession, so the wrapper has to come off
+    # before the name will resolve: c_nigoni_PRJNA384657 serves "CM008509.1" and
+    # p_redivivus_PRJNA186477 serves "AOMH01000001".
+    #
+    # Anchored on NCBI's own list of database tags rather than "two to six
+    # letters", which was the first attempt and was too broad: SGD's
+    # "CHRMT|NC_001224|" matched it and came back as "NC_001224". No SGD entry
+    # asks for the accession as its refName, so nothing broke, but a chromosome
+    # name that happens to precede a bar is not this notation and must survive.
+    BAR_DELIMITED_ACCESSION =
+      /\A(?:gb|emb|dbj|ref|tpg|tpe|tpd|pir|prf|sp|pdb|pat|bbs|gi)\|([^|]+)\|?\z/i.freeze
+
+    def self.unwrap_accession(accession)
+      match = BAR_DELIMITED_ACCESSION.match(accession.to_s)
+      match ? match[1] : accession
+    end
+
     def self.strip_seqid_prefix(accession, prefix)
       return accession if accession.nil? || prefix.nil? || prefix.empty?
 
@@ -420,7 +439,7 @@ module SequenceServer
       # arrives here already stripped of any seqid_prefix, which hit.rb does
       # because the prefix is on the config entry and not visible from here.
       if genome_browser_metadata && genome_browser_metadata["ref_name"] == "accession"
-        return blast_accession
+        return unwrap_accession(blast_accession)
       end
 
       # Determine which MOD based on genome browser metadata or database path

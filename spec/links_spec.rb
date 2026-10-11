@@ -124,6 +124,51 @@ module SequenceServer
         name = Links.extract_ref_name('2 length=15279421', '2', '/db/WB/WS298/x', WORMBASE)
         expect(name).to eq 'II'
       end
+
+      # WormBase's VC2010, C. inopinata, C. latens and O. tipulae assemblies all
+      # carry the defline "1 <length>", so WORMBASE_CHROMOSOME_MAP turned every
+      # sequence in those four databases into chromosome "I" -- 2,062 of them.
+      # Their ids are already the refNames their browsers list, so the entries
+      # say so, and the map must not get a look in.
+      it 'does not map a VC2010 defline of "1" onto chromosome I' do
+        vc2010 = {
+          'assembly' => 'c_elegans_PRJEB28388',
+          'ref_name' => 'accession',
+          'url' => 'https://wormbase.org/tools/genome/jbrowse2/index.html'
+        }
+        name = Links.extract_ref_name('1 15525148', 'chrII_pilon',
+                                      '/db/WB/WS298/databases/C_elegans_VC2010_Genome_Assembly/x',
+                                      vc2010)
+        expect(name).to eq 'chrII_pilon'
+      end
+
+      # c_nigoni_PRJNA384657 lists "CM008509.1" and
+      # p_redivivus_PRJNA186477 lists "AOMH01000001", while BLAST keeps the
+      # bar notation its FASTA used.
+      it 'unwraps a bar-delimited accession' do
+        nigoni = {
+          'assembly' => 'c_nigoni_PRJNA384657',
+          'ref_name' => 'accession',
+          'url' => 'https://wormbase.org/tools/genome/jbrowse2/index.html'
+        }
+        name = Links.extract_ref_name('', 'gb|CM008509.1|',
+                                      '/db/WB/WS298/databases/C_nigoni_Genome_Assembly/x',
+                                      nigoni)
+        expect(name).to eq 'CM008509.1'
+      end
+
+      it 'leaves an accession that merely contains a bar alone' do
+        # SGD's genome deflines are "CHRMT|NC_001224|", a chromosome name in
+        # front of a bar rather than a database tag. A first attempt matched any
+        # two-to-six letters and turned this into "NC_001224"; the tag list is
+        # NCBI's instead, so it survives.
+        expect(Links.unwrap_accession('CHRMT|NC_001224|')).to eq 'CHRMT|NC_001224|'
+        # Three fields, and BL_ORD_ID is a synthetic ordinal rather than an
+        # accession.
+        expect(Links.unwrap_accession('gnl|BL_ORD_ID|0')).to eq 'gnl|BL_ORD_ID|0'
+        expect(Links.unwrap_accession('II')).to eq 'II'
+        expect(Links.unwrap_accession(nil)).to be_nil
+      end
     end
 
     describe '.jbrowse' do

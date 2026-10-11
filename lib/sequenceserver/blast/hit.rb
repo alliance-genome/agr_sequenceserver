@@ -107,11 +107,43 @@ module SequenceServer
 
         links = defline_links.dup
 
-        for reference_sequence in database_config
+        # Prefer the config entry whose title names this database's own
+        # directory, and fall back to the uri comparison below when no single
+        # entry does.
+        #
+        # The uri comparison alone cannot tell WormBase's C. elegans databases
+        # apart. All five are stored under the filename "c_elegansdb", so
+        # species_identifier is "c_elegans" for every one of them, and the
+        # PRJNA13758 branch below then bound the lot to the N2 entry: a CB4856
+        # hit was given N2's genome_browser, pointing at assembly
+        # c_elegans_PRJNA13758, and N2's seqid_prefix, which left the accession
+        # as "CB4856_II" because there was no "N2_" to strip. Both halves of
+        # that link were wrong. VC2010 had it too.
+        #
+        # The directory is the sanitised blast_title, which routes.rb's
+        # organism_by_title already relies on. Measured across every deployed
+        # environment.json: a unique title match covers 63 of 63 WB WS298
+        # databases, 9 of 9 ALLIANCE, 200 of 200 on the four current FlyBase
+        # releases and 495 of 495 across both SGD. Where it does not -- the
+        # older FlyBase releases, whose directories carry an accession the
+        # titles lack, RGD's strain directories, one ambiguous ZFIN pair -- the
+        # loop runs exactly as before, so nothing that works today changes.
+        scoped_config = config_entries_for_database(database_config, hit_db)
+        matched_by_title = !scoped_config.nil?
+        scoped_config ||= database_config
+
+        for reference_sequence in scoped_config
           uri_matches = false
           uri_project = reference_sequence["uri"].match(/PRJ[A-Z]+\d+/i)&.to_s
 
-          if species_identifier == "c_elegans" && database_filename == "c_elegansdb"
+          if matched_by_title
+            # The directory named this entry, which is a stronger statement
+            # than anything the uri can make. Checking the uri as well would
+            # throw the match away again: the PRJNA13758 branch below answers
+            # false for every C. elegans entry except N2, which is the bug this
+            # scoping exists to fix.
+            uri_matches = true
+          elsif species_identifier == "c_elegans" && database_filename == "c_elegansdb"
             uri_matches = uri_project == "PRJNA13758"
           elsif reference_sequence["uri"].include?(species_identifier)
             uri_matches = true
@@ -167,6 +199,31 @@ module SequenceServer
           end
         end
         return dedupe_links(links)
+      end
+
+      # Characters the build replaces when it turns a blast_title into a
+      # directory name, matching routes.rb's organism_by_title so the two agree
+      # on what a database is called.
+      TITLE_SEPARATOR = /\W+/.freeze
+
+      def self.sanitise_title(title)
+        title.to_s.gsub(TITLE_SEPARATOR, '_').gsub(/\A_|_\z/, '')
+      end
+
+      # The one config entry that names this database's directory, or nil.
+      #
+      # nil when no entry matches and when more than one does: a caller that
+      # cannot be sure which entry describes the database is better off with the
+      # behaviour it already had than with a guess between two.
+      def config_entries_for_database(database_config, hit_db)
+        dir = File.basename(File.dirname(hit_db.name.to_s))
+        return nil if dir.empty?
+
+        matches = database_config.select do |entry|
+          self.class.sanitise_title(entry['blast_title']) == dir
+        end
+
+        matches.size == 1 ? matches : nil
       end
 
       # One link per destination, in display order.
