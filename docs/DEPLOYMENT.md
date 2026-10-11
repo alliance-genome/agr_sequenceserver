@@ -39,12 +39,13 @@ nothing on this host was started from it.
 | | test | dev | prod |
 |---|---|---|---|
 | container | `agr-blast-restyle` | `agr-blast-dev` | `agr-blast-prod` |
-| image | `agr-blast:a3ecb680` | `agr-blast:a3ecb680` | `agr-blast:fda1db1f` |
+| image | `agr-blast:8c8bcba4` | `agr-blast:8c8bcba4` | `agr-blast:fda1db1f` |
 
-Test and dev were moved onto `a3ecb680`, which is `main` at the Alliance
-JBrowse 2 work, on 2026-10-09. Both now run the same image, so the floating
-`agr-blast:restyle` tag no longer names what the test instance serves; read the
-image off the container rather than trusting a tag.
+Test and dev were moved onto `8c8bcba4`, `main` at the WormBase C. elegans link
+fix, on 2026-10-11. They had been on `a3ecb680` since 2026-10-09. Both run the
+same image, so the floating `agr-blast:restyle` tag no longer names what the
+test instance serves; read the image off the container rather than trusting a
+tag.
 | host port | 4570 | 4569 | 4568 |
 | reached at | `http://172.31.3.193:4570` | `https://blast-dev.alliancegenome.org` | `https://blast.alliancegenome.org` |
 | `public/environments` from | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config` |
@@ -246,23 +247,28 @@ docker build . -t agr-blast:$TAG
 
 ### prod
 
-**The image is already built.** `agr-blast:c3867140` is `main`, built and
-checked on 2026-10-09, and it is the same image id as the `agr-blast:a3ecb680`
-that test and dev run, so it has been exercised on both. All four committed
-bundles in it match `git show HEAD:public/...`. Rebuild only if `main` has moved
-since.
+**The image is already built.** `agr-blast:8c8bcba4` is `main`, built on
+2026-10-11, and it is the image test and dev have run since, so it has been
+exercised on both. All four committed bundles in it match
+`git show main:public/...`. Rebuild only if `main` has moved since.
+
+An earlier note here named `c3867140`. That tag is stale: it predates the
+WormBase fix, and on it a CB4856 hit links to the wrong assembly with an
+unstripped accession. Check the tag against `git rev-parse --short=8 main`
+rather than taking any tag written down here.
 
 **Promote the config in the same window.** Production reads
-`/var/sequenceserver-data/config`, whose ALLIANCE entries still name the
-assemblies retired on 2026-10-09 and so match none of the rebuilt databases.
-The deploy is therefore two copies, not one:
+`/var/sequenceserver-data/config`, which is behind `config-dev` twice over: its
+ALLIANCE entries still name the assemblies retired on 2026-10-09, so they match
+none of the rebuilt databases, and it lacks the six WB WS298 `ref_name` entries
+deployed on 2026-10-11. The deploy is therefore two copies, not one:
 
 ```bash
 cp -a /var/sequenceserver-data/config-dev/. /var/sequenceserver-data/config/
 ```
 
-Measured on `agr-blast:c3867140` against the real database tree, with one
-cross-species search of 152 hits:
+Measured on this image against the real database tree, with one cross-species
+search of 152 hits:
 
 | config | links | correct refName | wrong |
 |---|---|---|---|
