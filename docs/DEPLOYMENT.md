@@ -25,7 +25,7 @@ Nothing here is automated. There is no CI deploy, no orchestration, no image
 registry, and no image is pushed anywhere — the tags below exist only in this
 host's local Docker. `deploy.sh` in the repository root looks like the deploy
 script and is not: it builds an image called `agr-blast-prod-container`, and the
-container actually serving production runs `agr-blast:fda1db1f`. Running it
+container actually serving production runs `agr-blast:8c8bcba4`. Running it
 would redeploy prod from an untagged image and lose the one record of which
 commit is live, so treat it as historical. `monitor.sh` beside it is harmless —
 an interactive menu of `docker logs`, `restart`, `stop`, `exec` against
@@ -39,13 +39,16 @@ nothing on this host was started from it.
 | | test | dev | prod |
 |---|---|---|---|
 | container | `agr-blast-restyle` | `agr-blast-dev` | `agr-blast-prod` |
-| image | `agr-blast:8c8bcba4` | `agr-blast:8c8bcba4` | `agr-blast:fda1db1f` |
+| image | `agr-blast:8c8bcba4` | `agr-blast:8c8bcba4` | `agr-blast:8c8bcba4` |
 
-Test and dev were moved onto `8c8bcba4`, `main` at the WormBase C. elegans link
-fix, on 2026-10-11. They had been on `a3ecb680` since 2026-10-09. Both run the
-same image, so the floating `agr-blast:restyle` tag no longer names what the
-test instance serves; read the image off the container rather than trusting a
-tag.
+All three run `8c8bcba4`, `main` at the WormBase C. elegans link fix. Test and
+dev moved onto it on 2026-10-11, production the same day, which closed a gap of
+17 merged pull requests open since 2026-09-29. The floating `agr-blast:restyle`
+tag no longer names what the test instance serves; read the image off the
+container rather than trusting a tag.
+
+The config volumes are in step as well: `config` was promoted from `config-dev`
+during that release, so the split described below is currently latent again.
 | host port | 4570 | 4569 | 4568 |
 | reached at | `http://172.31.3.193:4570` | `https://blast-dev.alliancegenome.org` | `https://blast.alliancegenome.org` |
 | `public/environments` from | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config` |
@@ -117,10 +120,12 @@ never point Playwright at `http://localhost:4569` either.
 
 Note incidentally that the `?v=` value is the first 12 hex digits of the
 SHA-256 of the asset file (`lib/sequenceserver/routes.rb:903-921`, `asset_version`), so it is a
-reliable fingerprint of which bundle a given container is serving. `651d65fe…`
-is prod's CSS, i.e. `app.min.css` as committed at `fda1db1f`; `d2a25f6a…` is
-dev's, i.e. `main` at `b435058e` (it was `279b24bc…` at `73e4a38a`, which is
-the kind of drift that makes this a useful check rather than a constant). Test
+reliable fingerprint of which bundle a given container is serving. All three
+instances now serve `main` at `8c8bcba4`, so all three answer `1c38919cc1e9…`;
+before the 2026-10-11 release production answered `651d65fe…`, its
+`app.min.css` as committed at `fda1db1f`, and dev `d2a25f6a…` at
+`b435058e` (and `279b24bc…` at `73e4a38a`, which is the kind of drift that
+makes this a useful check rather than a constant). Test
 has no fixed digest to quote: it is
 whatever branch was last built into the floating `agr-blast:restyle` tag, which
 is rebuilt in place several times a day, so read it off the instance rather than
@@ -247,15 +252,27 @@ docker build . -t agr-blast:$TAG
 
 ### prod
 
-**The image is already built.** `agr-blast:8c8bcba4` is `main`, built on
-2026-10-11, and it is the image test and dev have run since, so it has been
-exercised on both. All four committed bundles in it match
-`git show main:public/...`. Rebuild only if `main` has moved since.
+**Production was released onto `agr-blast:8c8bcba4` on 2026-10-11**, so the
+steps below are a record of what was run as much as instructions for next time.
+Check any tag written here against `git rev-parse --short=8 main`: two tags in
+this file went stale within two days while that release was being prepared.
 
-An earlier note here named `c3867140`. That tag is stale: it predates the
-WormBase fix, and on it a CB4856 hit links to the wrong assembly with an
-unstripped accession. Check the tag against `git rev-parse --short=8 main`
-rather than taking any tag written down here.
+What the release did, in order, and what it measured:
+
+| step | result |
+|---|---|
+| `docker cp` of the job history | 1,841 of 1,841 `job.yaml`, 3.6 GB |
+| `cp -a config-dev/. config/` | the two trees identical afterwards |
+| recreate on `8c8bcba4` | up in 5 s |
+| an old job URL | HTTP 200, and 3 more at random |
+| `test/manual/smoke-test.sh` | 55 passed, 0 failed |
+| one cross-species ALLIANCE search | 152 hits, 152 links, 0 wrong |
+
+The job rescue is the step that now needs no repeating: new jobs land in
+`/var/sequenceserver-data/jobs-prod`, which the container mounts, so the next
+redeploy can skip it. It mattered this time because the count had grown from
+1,758 on 2026-10-09 to 1,841 by the release, and the earlier snapshot would
+have lost 83 jobs.
 
 **Promote the config in the same window.** Production reads
 `/var/sequenceserver-data/config`, which is behind `config-dev` twice over: its
@@ -656,11 +673,14 @@ npm run build          # webpack --mode production && tailwindcss --minify
 git add public/sequenceserver-*.min.js public/css/app.min.css
 ```
 
-## prod is fifteen merged pull requests behind
+## the gap production used to carry, closed 2026-10-11
 
-Prod runs `agr-blast:fda1db1f`, PR #23, merged 2026-09-29. `main` is
-`effcac18`, PR #40, merged 2026-10-08. `git log --oneline fda1db1f..effcac18`
-is fifteen commits, one per pull request:
+Production ran `agr-blast:fda1db1f`, PR #23, merged 2026-09-29, until the
+release on 2026-10-11 moved it to `8c8bcba4`. `git log --oneline
+fda1db1f..main` was 22 commits by then, and the fifteen below are what the gap
+looked like when this section was written, at `effcac18` on 2026-10-08. The
+section is kept because what the gap cost is the useful part, and because the
+counting mistake in it is worth not repeating:
 
 ```
 effcac18  Keep genome browser links working when a database prefixes its ids (#40)

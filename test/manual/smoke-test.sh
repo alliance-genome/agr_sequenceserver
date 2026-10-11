@@ -488,7 +488,7 @@ jsoncheck "ALLIANCE serves all nine declared genomes" \
 # count alone would pass if the same genome were built nine times.
 jsoncheck "ALLIANCE has one database per member organism" \
   "blast/ALLIANCE/prod/searchdata.json" \
-  "set(x['title'] for x in (d['database'] if isinstance(d['database'], list) else d['database'].values())) == {'C_elegans_Genome_Assembly','ZFIN_GRCz11','RGD_mRatBN7_2','Mouse_GRCm39','Human_GRCh38','Fly_Release_6_plus_ISO1_MT','Yeast_R64','X_laevis_XENLA_9_2','X_tropicalis_XENTR_9_1'}"
+  "set(x['title'] for x in (d['database'] if isinstance(d['database'], list) else d['database'].values())) == {'C_elegans_Genome_Assembly','ZFIN_GRCz12tu','RGD_GRCr8','Mouse_GRCm39','Human_GRCh38','Fly_Release_6_plus_ISO1_MT','Yeast_R64','X_laevis_XENLA_10_1','X_tropicalis_UCB_Xtro_10_0'}"
 
 # tblastn is the point of this deployment: a protein query against nucleotide
 # subjects. blastn finds almost nothing between yeast and human genomic DNA.
