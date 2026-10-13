@@ -46,6 +46,25 @@ test('the Alliance example is offered and fills the box', async ({ page }) => {
     const label = await page.locator(`${S.exampleRow} button`).first().innerText();
     await page.locator(`${S.exampleRow} button`).first().click();
     await expect(page.locator(S.sequence)).not.toHaveValue('');
-    await expect(page.locator(S.databaseCheckboxChecked)).toHaveCount(1);
+    // And selects nothing. This deployment serves nine organisms and exists to
+    // search across them, so picking the example's own genome would defeat it
+    // and would discard a selection the user had already made.
+    await expect(page.locator(S.databaseCheckboxChecked)).toHaveCount(0);
     console.log(`EXAMPLE=${label}`);
+});
+
+test('the Alliance example leaves a selection the user already made', async ({ page }) => {
+    test.setTimeout(120 * 1000);
+    await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
+
+    // Tick two genomes, then click the example. Leaf anchors only: clicking a
+    // species folder drives jstree's own cascade rather than one database.
+    const leaves = page.locator('#nucleotide_database_tree li.jstree-leaf > a.jstree-anchor');
+    await leaves.nth(0).click();
+    await leaves.nth(1).click();
+    await expect(page.locator(S.databaseCheckboxChecked)).toHaveCount(2);
+
+    await page.locator(`${S.exampleRow} button`).first().click();
+    await expect(page.locator(S.sequence)).not.toHaveValue('');
+    await expect(page.locator(S.databaseCheckboxChecked)).toHaveCount(2);
 });
