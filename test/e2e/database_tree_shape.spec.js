@@ -44,6 +44,10 @@ test('the Alliance example is offered and fills the box', async ({ page }) => {
 
     await expect(page.locator(S.exampleRow)).toBeVisible();
     const label = await page.locator(`${S.exampleRow} button`).first().innerText();
+    // A protein, so that selecting a genome resolves to tblastn, which is what
+    // a nine-genome deployment is for. A nucleotide example found zebrafish
+    // and nothing else.
+    expect(label).toMatch(/protein|histone|H4/i);
     await page.locator(`${S.exampleRow} button`).first().click();
     await expect(page.locator(S.sequence)).not.toHaveValue('');
     // And selects nothing. This deployment serves nine organisms and exists to
@@ -67,4 +71,21 @@ test('the Alliance example leaves a selection the user already made', async ({ p
     await page.locator(`${S.exampleRow} button`).first().click();
     await expect(page.locator(S.sequence)).not.toHaveValue('');
     await expect(page.locator(S.databaseCheckboxChecked)).toHaveCount(2);
+});
+
+test('the Alliance example is a protein, so a genome resolves to tblastn', async ({ page }) => {
+    test.setTimeout(120 * 1000);
+    await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
+
+    await page.locator(`${S.exampleRow} button`).first().click();
+    await expect(page.locator(S.sequence)).not.toHaveValue('');
+
+    // Tick one genome. The query is protein and the subjects are nucleotide,
+    // so the only sensible method is tblastn.
+    await page.locator('#nucleotide_database_tree li.jstree-leaf > a.jstree-anchor').first().click();
+    await expect(page.locator(S.databaseCheckboxChecked)).toHaveCount(1);
+    // The submit button carries the resolved method as its value attribute.
+    // Its visible text is decorated, and toHaveValue only works on inputs.
+    await expect(page.locator(S.submit)).toBeEnabled();
+    await expect(page.locator(S.submit)).toHaveAttribute('value', 'tblastn');
 });

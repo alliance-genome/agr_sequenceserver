@@ -80,20 +80,34 @@ export const EXAMPLES = {
     ],
     "ALLIANCE": [
         {
-            "label": "GRCz12tu genome fragment",
+            "label": "histone H4, conserved across all nine",
             "database": "ZFIN_GRCz12tu",
+            // A protein, because this deployment is for tblastn.
+            //
+            // It used to be a zebrafish genomic fragment, which blastn
+            // finds in zebrafish and nowhere else: cross-species
+            // nucleotide identity between, say, yeast and human genomic
+            // DNA is below blastn's detection, so the example
+            // demonstrated nothing the page exists for.
+            //
+            // C. elegans histone H4 (T10C6.11, his-4), 123 residues and
+            // the most conserved protein there is. Measured by tblastn
+            // against all nine genomes: 47 hits across 9 organisms, from
+            // 10 in human down to 2 in fly and yeast. Actin reaches all
+            // nine too, with 124 hits, which crowds the result list.
+            //
+            // "database" still names one, because an example only
+            // renders where its database is present, and selectDatabase
+            // keeps it from being ticked.
+            "sequence": ">his-4 Caenorhabditis elegans histone H4, T10C6.11\nMAPPKPSAKGAKKAAKTVTKPKDGKKRRHARKESYSVYIYRVLKQVHPDTGVSSKAMSIM\nNSFVNDVFERIAAEASRLAHYNKRSTISSREIQTAVRLILPGELAKHAVSEGTKAVTKYT\nSSK",
             // Fill the query box and leave the database choice alone.
             //
             // Every other deployment serves one organism, so selecting the
             // example's own database is a helpful shortcut there. This one
             // serves nine, and exists to search across them: selecting
-            // zebrafish alone is the opposite of what the page is for, and it
-            // silently discards whatever the user had already ticked.
-            //
-            // The database is still named, because the example only renders
-            // where that database is present.
-            "selectDatabase": false,
-            "sequence": ">1:2000000-2000599 Danio rerio GRCz12tu chromosome 1\nGTTCCAGTAGGTCTTCAGTGTTTGTGATGATTGGGATCAGCAGATCAGCAGATGATTCTG\nTTGAGAAATCCACTTTCTGACACTTTAACAAATGATCAACAAGAAGTCAAGTTATTATTT\nGTTGCTCTCACAACTGGGATCAACGACAAGAATATAATGCATACCTACATACATTATAAC\nACAAGAAGACAGAAGGACATTTCAATACGTGGAAAATTAAGAAAGTAAAGTCAGGAGAGT\nAAAAGATGAACATTCTAAAGTTATATATACTGTATTAGGGCTGCACGATATTGAAAAGAG\nTCAAGATATCAGAGTCCATTGCTGAATTCCTCCCTAAAAAAACCCGTTTAAGTTGGAAAT\nACGAAATAAAAGTGCAGCAACTTAAAGTTTAATATGTGAATTTAATAATGAGGGGCTGCC\nAGATGGTTTTACTCGCTCATTTGCAACGGTTTTGGGTTGCCAGGTTTGCATTGCGGGATC\nAGTGTTCATTAAGAAATGATTCAGTTTTCATTTGGTTTTCAGGAGAACTTTGTGATGTAA\nGTTAGTGCAAAAATAATAATGATGTTTTTATTCTCTCAGGGCTTGTAGCAGAAGGGGAAA"
+            // zebrafish alone is the opposite of what the page is for, and
+            // it silently discards whatever the user had already ticked.
+            "selectDatabase": false
         }
     ]
 };
