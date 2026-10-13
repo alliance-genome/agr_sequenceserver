@@ -82,6 +82,17 @@ export const EXAMPLES = {
         {
             "label": "GRCz12tu genome fragment",
             "database": "ZFIN_GRCz12tu",
+            // Fill the query box and leave the database choice alone.
+            //
+            // Every other deployment serves one organism, so selecting the
+            // example's own database is a helpful shortcut there. This one
+            // serves nine, and exists to search across them: selecting
+            // zebrafish alone is the opposite of what the page is for, and it
+            // silently discards whatever the user had already ticked.
+            //
+            // The database is still named, because the example only renders
+            // where that database is present.
+            "selectDatabase": false,
             "sequence": ">1:2000000-2000599 Danio rerio GRCz12tu chromosome 1\nGTTCCAGTAGGTCTTCAGTGTTTGTGATGATTGGGATCAGCAGATCAGCAGATGATTCTG\nTTGAGAAATCCACTTTCTGACACTTTAACAAATGATCAACAAGAAGTCAAGTTATTATTT\nGTTGCTCTCACAACTGGGATCAACGACAAGAATATAATGCATACCTACATACATTATAAC\nACAAGAAGACAGAAGGACATTTCAATACGTGGAAAATTAAGAAAGTAAAGTCAGGAGAGT\nAAAAGATGAACATTCTAAAGTTATATATACTGTATTAGGGCTGCACGATATTGAAAAGAG\nTCAAGATATCAGAGTCCATTGCTGAATTCCTCCCTAAAAAAACCCGTTTAAGTTGGAAAT\nACGAAATAAAAGTGCAGCAACTTAAAGTTTAATATGTGAATTTAATAATGAGGGGCTGCC\nAGATGGTTTTACTCGCTCATTTGCAACGGTTTTGGGTTGCCAGGTTTGCATTGCGGGATC\nAGTGTTCATTAAGAAATGATTCAGTTTTCATTTGGTTTTCAGGAGAACTTTGTGATGTAA\nGTTAGTGCAAAAATAATAATGATGTTTTTATTCTCTCAGGGCTTGTAGCAGAAGGGGAAA"
         }
     ]

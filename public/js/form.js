@@ -253,6 +253,17 @@ export class Form extends Component {
     handleExampleSelected(example) {
         this.query.current.value(example.sequence);
 
+        // An example may ask not to touch the database selection, and the
+        // Alliance-wide deployment does. It serves nine organisms and exists
+        // to search across them, so selecting the example's own genome is the
+        // opposite of what the page is for, and it silently discards whatever
+        // the user had already ticked. Everywhere else serves one organism and
+        // the shortcut helps.
+        if (example.selectDatabase === false) {
+            this.query.current.focus();
+            return;
+        }
+
         const database = (this.state.databases || []).find(db => db.title === example.database);
         if (!database) {
             console.warn(`Example database not found in this deployment: ${example.database}`);
