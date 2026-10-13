@@ -15,6 +15,9 @@ require 'sequenceserver'
 # For the purpose of testing, set DOTDIR to spec/dotdir.
 SequenceServer::DOTDIR = File.join(__dir__, 'dotdir')
 
+# The shape SecureRandom.uuid produces, which is what Job#initialize assigns.
+JOB_UUID = /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/.freeze
+
 Capybara.app = SequenceServer
 Capybara.server = :webrick
 Capybara.default_max_wait_time = 15
@@ -72,11 +75,24 @@ RSpec.configure do |config|
     clear_downloads
   end
 
-  config.after :context, type: :feature do
-    FileUtils.rm_rf Dir[File.join(SequenceServer::DOTDIR, '*-*-*-*-*')]
-  end
-
   config.after :context do
     SequenceServer::Database.clear
+
+    # Delete the jobs the run just created, which this hook used to miss.
+    #
+    # It was scoped `type: :feature`, and the specs that call Job.create are
+    # job_spec and routes_spec, neither of which is a feature spec, so nothing
+    # ever cleaned up after them. 145 job directories had collected in
+    # spec/dotdir by the time anyone counted, none of them tracked.
+    #
+    # Anchored on the uuid shape Job#initialize generates, so the ten fixture
+    # directories beside them -- blast_2.2.30 through blast_2.9.0 and
+    # diamond_0.9.24, which are tracked and are what 214 of the suite's
+    # examples read -- cannot match it.
+    Dir[File.join(SequenceServer::DOTDIR, '*')].each do |path|
+      next unless File.basename(path).match?(JOB_UUID)
+
+      FileUtils.rm_rf path
+    end
   end
 end
