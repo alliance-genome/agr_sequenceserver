@@ -102,7 +102,11 @@ module SequenceServer
       # filesystem or the Location header (traversal, CRLF, scheme injection).
       halt 404, 'No databases found' unless mod =~ /\A[A-Za-z0-9_-]+\z/
 
-      db_base = File.join('/db', mod)
+      # From the config, like database_dir_for. The literal "/db" was here and
+      # in the alias route below, the last two of five places that hardcoded a
+      # path the container happens to use. Same value in every deployment,
+      # since all three set `:database_dir: "/db"`.
+      db_base = File.join(SequenceServer.config[:database_dir], mod)
       halt 404, 'No databases found' unless File.directory?(db_base)
 
       versions = Dir.children(db_base).reject do |e|
@@ -435,7 +439,7 @@ module SequenceServer
       pattern = DATASET_ALIASES.dig(mod, params[:dataset].to_s.downcase)
       pass unless pattern
 
-      db_base = File.join('/db', mod)
+      db_base = File.join(SequenceServer.config[:database_dir], mod)
       pass unless mod =~ /\A[A-Za-z0-9_-]+\z/ && File.directory?(db_base)
 
       versions = Dir.children(db_base).select do |e|
