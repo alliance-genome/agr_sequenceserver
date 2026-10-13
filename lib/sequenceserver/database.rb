@@ -210,13 +210,44 @@ module SequenceServer
         collection.values
       end
 
+      # A binomial name as one word: "Caenorhabditis" and "elegans" are two
+      # directories on disk and one species to a reader.
+      SPECIES_EPITHET = /\A[a-z]+\z/.freeze
+
+      # The folders to show above a database, which are not the folders it sits
+      # in on disk.
+      #
+      # Two differences. The last category is dropped where it repeats the
+      # database title, which it does for every database on every deployment
+      # measured -- so the tree read "Caenorhabditis / elegans /
+      # C_elegans_Genome_Assembly / C_elegans_Genome_Assembly", the leaf naming
+      # its own parent.
+      #
+      # Then a genus and a species epithet left at the top are joined, so the
+      # reader sees "Caenorhabditis elegans" rather than a Caenorhabditis folder
+      # holding an elegans folder. Only a lower-case single word counts as an
+      # epithet, which is what keeps SGD out of it: its two levels are
+      # "Alternative_Reference_Strains" and the database, and after the first
+      # rule it has one category left and no pair to join.
+      def display_categories(db)
+        categories = db.categories.dup
+        categories.pop if categories.last == db.title
+
+        if categories.size == 2 && categories[1].match?(SPECIES_EPITHET)
+          [categories.join(' ')]
+        else
+          categories
+        end
+      end
+
       def tree
         all.each_with_object({}) do |db, data|
           data[db.type] ||= []
           use_parent = '#'
-          db.categories.each_with_index do |entry, index|
-            parent = index.zero? ? '#' : db.categories[0..(index - 1)].join('-')
-            use_id = db.categories[0..index].join('-')
+          categories = display_categories(db)
+          categories.each_with_index do |entry, index|
+            parent = index.zero? ? '#' : categories[0..(index - 1)].join('-')
+            use_id = categories[0..index].join('-')
             element = { id: use_id, parent: parent, text: entry }
             data[db.type] << element unless data[db.type].include?(element)
             use_parent = use_id

@@ -87,7 +87,7 @@ module SequenceServer
       }.freeze
 
       it 'takes an Alliance sequence id as the refName' do
-        name = Links.extract_ref_name('', '1', '/db/ALLIANCE/prod/databases/Homo/sapiens/x', ALLIANCE)
+        name = Links.extract_ref_name('', '1', '/db/ALLIANCE/9.1.0/databases/Homo/sapiens/x', ALLIANCE)
         expect(name).to eq '1'
       end
 
@@ -97,7 +97,7 @@ module SequenceServer
       it 'keeps a scaffold id rather than the first word of its defline' do
         title = 'Homo sapiens chromosome 1 unlocalized genomic scaffold, GRCh38.p14 Primary Assembly HSCHR1_CTG1_UNLOCALIZED'
         name = Links.extract_ref_name(title, 'NT_187361.1',
-                                      '/db/ALLIANCE/prod/databases/Homo/sapiens/x', ALLIANCE)
+                                      '/db/ALLIANCE/9.1.0/databases/Homo/sapiens/x', ALLIANCE)
         expect(name).to eq 'NT_187361.1'
       end
 
@@ -107,7 +107,7 @@ module SequenceServer
       it 'is not intercepted by the RGD rule for a path containing RGD' do
         rat = ALLIANCE.merge('assembly' => 'Rattus_norvegicus')
         name = Links.extract_ref_name('Rattus norvegicus chromosome 1', '1',
-                                      '/db/ALLIANCE/prod/databases/Rattus/norvegicus/RGD_mRatBN7_2/x', rat)
+                                      '/db/ALLIANCE/9.1.0/databases/Rattus/norvegicus/RGD_mRatBN7_2/x', rat)
         expect(name).to eq '1'
       end
 
@@ -116,7 +116,7 @@ module SequenceServer
       it 'is not intercepted by the SGD rule for a Saccharomyces assembly' do
         yeast = ALLIANCE.merge('assembly' => 'Saccharomyces_cerevisiae')
         name = Links.extract_ref_name('Saccharomyces cerevisiae chromosome IV', 'chrIV',
-                                      '/db/ALLIANCE/prod/databases/Saccharomyces/cerevisiae/x', yeast)
+                                      '/db/ALLIANCE/9.1.0/databases/Saccharomyces/cerevisiae/x', yeast)
         expect(name).to eq 'chrIV'
       end
 
@@ -185,7 +185,7 @@ module SequenceServer
         # Links.genomic_hsp_spans reads an HSP with [], not accessors.
         hsp = { 'sstart' => 1000, 'send' => 1300, 'qstart' => 1, 'qend' => 300 }
 
-        link = Links.jbrowse(metadata, ['x'], [hsp], '1', '', '/db/ALLIANCE/prod/x', false)
+        link = Links.jbrowse(metadata, ['x'], [hsp], '1', '', '/db/ALLIANCE/9.1.0/x', false)
 
         expect(link[:url]).to include 'assembly=Homo_sapiens'
         expect(link[:url]).to include 'tracks=blasthits'

@@ -503,6 +503,19 @@ genome browser links, as it did before. That is the safe state: the old code
 with the new config would have produced "Chr1" for rat, which GRCr8 does not
 contain. Promote the config to production only together with the code.
 
+**Renamed to a release number, 2026-10-13.** The deployment is
+`/blast/ALLIANCE/9.1.0/`, not `/blast/ALLIANCE/prod/`, and gets a release
+whenever the Alliance does: a new config file, a new environment in
+global.yaml, a new directory. `metadata.release` and every entry's `version`
+read 9.1.0, where they read `prod` and a mixture of `production` and `WS292`.
+
+A clean rename, no alias, so `/blast/ALLIANCE/prod/` now answers 404.
+`/blast/ALLIANCE/` redirects to 9.1.0 without any new code, because the `:mod`
+route already picks the highest numeric version and `prod` has no digits.
+
+Measurements dated before that day in this file and in the code comments name
+the old path. They were taken there, so they keep it.
+
 ### Step 9: Name the organism, everywhere a hit appears
 
 **Problem.** A cross-species result page never names a species.

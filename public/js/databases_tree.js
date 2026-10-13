@@ -131,145 +131,23 @@ export default class extends Databases {
 
         $(tree_id).jstree(jstreeConfig);
 
-        // Expand specific nodes after tree is loaded for WormBase, FlyBase, and RGD
+        // Open the whole tree once it is ready.
+        //
+        // This replaced 140 lines that opened nodes by matching their text
+        // against hardcoded names, one branch of ifs per MOD: the
+        // Caenorhabditis folder and then the elegans folder for WormBase as
+        // long as the text was not briggsae, brenneri, remanei or japonica,
+        // and the same shape again for FlyBase, RGD, SGD fungal and ZFIN.
+        // Every deployment it did not name was left collapsed, ALLIANCE among
+        // them, and a renamed species silently stopped matching.
+        //
+        // Opening everything needs no such list. The trees are small enough
+        // for it: the largest is SGD's 312 nodes, and a database now sits two
+        // levels down rather than four, since Database.display_categories
+        // drops the leaf that repeated its parent and joins a genus to its
+        // species epithet.
         $(tree_id).on('ready.jstree', function () {
-            // Check if this is WormBase
-            const isWormBase = window.location.hostname.includes('wormbase') ||
-                              window.location.pathname.includes('/WB/') ||
-                              document.querySelector('img[alt*="wormbase" i]') ||
-                              document.querySelector('img[src*="wormbase" i]');
-
-            // Check if this is FlyBase
-            const isFlyBase = window.location.hostname.includes('flybase') ||
-                             window.location.pathname.includes('/FB/') ||
-                             document.querySelector('img[alt*="flybase" i]') ||
-                             document.querySelector('img[src*="flybase" i]');
-
-            // Check if this is RGD
-            const isRGD = window.location.hostname.includes('rgd') ||
-                         window.location.pathname.includes('/RGD/') ||
-                         document.querySelector('img[alt*="rgd" i]') ||
-                         document.querySelector('img[src*="rgd" i]');
-
-            // Check if this is SGD fungal (pathname contains SGD and ends with 'f')
-            const isSGDFungal = (window.location.pathname.includes('/SGD/') ||
-                                window.location.hostname.includes('sgd') ||
-                                document.querySelector('img[alt*="sgd" i]') ||
-                                document.querySelector('img[src*="sgd" i]')) &&
-                               /\/[^/]+f$/.test(window.location.pathname.replace(/\/$/, ''));
-
-            // Check if this is ZFIN
-            const isZFIN = window.location.hostname.includes('zfin') ||
-                          window.location.pathname.includes('/ZFIN/') ||
-                          document.querySelector('img[alt*="zfin" i]') ||
-                          document.querySelector('img[src*="zfin" i]');
-
-            if (!isWormBase && !isFlyBase && !isRGD && !isSGDFungal && !isZFIN) {
-                return; // Only run on WormBase, FlyBase, RGD, SGD fungal, or ZFIN pages
-            }
-
-            // Use setTimeout to ensure tree is fully rendered
-            setTimeout(function() {
-                const treeInstance = $(tree_id).jstree(true);
-                if (!treeInstance) {
-                    return;
-                }
-
-                const allNodes = treeInstance.get_json('#', { flat: true });
-
-                allNodes.forEach(function(node) {
-                    const nodeText = node.text ? node.text.toLowerCase() : '';
-
-                    // WormBase: Expand C. elegans nodes
-                    if (isWormBase) {
-                        // 1. Caenorhabditis genus folder
-                        if (nodeText === 'caenorhabditis' ||
-                            nodeText.startsWith('caenorhabditis (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                        // 2. C. elegans species folder (but not other species)
-                        else if ((nodeText === 'c. elegans' ||
-                                 nodeText === 'elegans' ||
-                                 nodeText.includes('c. elegans (') ||
-                                 nodeText.includes('elegans (')) &&
-                                !nodeText.includes('briggsae') &&
-                                !nodeText.includes('brenneri') &&
-                                !nodeText.includes('remanei') &&
-                                !nodeText.includes('japonica')) {
-                            treeInstance.open_node(node.id);
-                        }
-                    }
-
-                    // FlyBase: Expand D. melanogaster nodes
-                    if (isFlyBase) {
-                        // 1. Drosophila genus folder
-                        if (nodeText === 'drosophila' ||
-                            nodeText.startsWith('drosophila (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                        // 2. D. melanogaster species folder (but not other species)
-                        else if ((nodeText === 'd. melanogaster' ||
-                                 nodeText === 'melanogaster' ||
-                                 nodeText.includes('d. melanogaster (') ||
-                                 nodeText.includes('melanogaster (')) &&
-                                !nodeText.includes('simulans') &&
-                                !nodeText.includes('yakuba') &&
-                                !nodeText.includes('pseudoobscura') &&
-                                !nodeText.includes('virilis') &&
-                                !nodeText.includes('mojavensis')) {
-                            treeInstance.open_node(node.id);
-                        }
-                    }
-
-                    // RGD: Expand R. norvegicus nodes
-                    if (isRGD) {
-                        // 1. Rattus genus folder
-                        if (nodeText === 'rattus' ||
-                            nodeText.startsWith('rattus (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                        // 2. R. norvegicus species folder
-                        else if (nodeText === 'r. norvegicus' ||
-                                 nodeText === 'norvegicus' ||
-                                 nodeText.includes('r. norvegicus (') ||
-                                 nodeText.includes('norvegicus (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                    }
-
-                    // SGD Fungal: Expand S. cerevisiae nodes
-                    if (isSGDFungal) {
-                        // 1. Saccharomyces genus folder
-                        if (nodeText === 'saccharomyces' ||
-                            nodeText.startsWith('saccharomyces (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                        // 2. S. cerevisiae species folder
-                        else if (nodeText === 's. cerevisiae' ||
-                                 nodeText === 'cerevisiae' ||
-                                 nodeText.includes('s. cerevisiae (') ||
-                                 nodeText.includes('cerevisiae (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                    }
-
-                    // ZFIN: Expand D. rerio nodes
-                    if (isZFIN) {
-                        // 1. Danio genus folder
-                        if (nodeText === 'danio' ||
-                            nodeText.startsWith('danio (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                        // 2. D. rerio species folder
-                        else if (nodeText === 'd. rerio' ||
-                                 nodeText === 'rerio' ||
-                                 nodeText.includes('d. rerio (') ||
-                                 nodeText.includes('rerio (')) {
-                            treeInstance.open_node(node.id);
-                        }
-                    }
-                });
-            }, 500);
+            $(tree_id).jstree('open_all');
         });
     }
 

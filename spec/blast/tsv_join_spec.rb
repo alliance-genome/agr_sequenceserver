@@ -6,7 +6,8 @@ require 'spec_helper'
 # It used to be keyed {qseqid => {sseqid => ...}}, which assumes a subject id
 # identifies a hit. That holds on a single-database search and fails the moment
 # one spans several: human, mouse, rat and zebrafish all name a chromosome "1".
-# Measured on a nine-genome tblastn against /blast/ALLIANCE/prod/ -- 131 hits,
+# Measured on a nine-genome tblastn against the Alliance deployment, then at
+# /blast/ALLIANCE/prod/ and now at /blast/ALLIANCE/9.1.0/ -- 131 hits,
 # 21 subject ids claimed by more than one hit, 53 hits displaying another hit's
 # per-HSP coverage.
 module SequenceServer

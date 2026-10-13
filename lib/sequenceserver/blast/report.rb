@@ -57,7 +57,7 @@ module SequenceServer
       # tblastn for human ACTB returned 131 hits and not one of them was mouse
       # or rat, while mouse alone returns 20 at evalue 0.0.
       #
-      # Measured over the deployments here: ALLIANCE/prod 23 of 36 same-type
+      # Measured over the deployments here: ALLIANCE 23 of 36 same-type
       # database pairs collide, WB/WS298 6 pairs (the nematode genome
       # assemblies, which all name chromosomes I-VI and X), FB/FB2026_03 and
       # RGD/8.3.0 none.
@@ -365,7 +365,8 @@ module SequenceServer
       # `hsps` then indexes positionally -- so the second hit's HSPs were shown
       # the first hit's coverage.
       #
-      # Measured on a nine-genome tblastn against /blast/ALLIANCE/prod/: 131
+      # Measured on a nine-genome tblastn against the Alliance deployment,
+      # then at /blast/ALLIANCE/prod/ and now at /blast/ALLIANCE/9.1.0/: 131
       # hits over 78 distinct subject ids, 21 ids claimed by more than one hit,
       # and 53 of the 131 hits displaying another hit's per-HSP coverage.
       #

@@ -454,8 +454,14 @@ puts problems.empty? ? "OK" : "FAIL: #{problems.join(" | ")}"
   sgd_target=$(curl -sI "$BASE_URL/blast/SGD/" | tr -d '\r' \
     | awk 'BEGIN{IGNORECASE=1}/^Location:/{print $2}' | sed 's|.*/blast/SGD/||;s|/$||')
   for v in $(printf '%s\n' "$sgd_target" R64-5-1f R64-5-1m | awk 'NF && !seen[$0]++'); do
+    # The app root is /sequenceserver in the shipped image and the working
+    # directory when the tree is mounted instead, so look in both rather than
+    # hardcoding one. A hardcoded /sequenceserver here reported "no
+    # genome_browser config" for a config that was present.
     gb=$(docker exec "$TEST_CONTAINER" sh -c \
-      "grep -c genome_browser /sequenceserver/public/environments/SGD/$v/environment.json 2>/dev/null" || echo 0)
+      "cat /sequenceserver/public/environments/SGD/$v/environment.json \
+           /work/public/environments/SGD/$v/environment.json 2>/dev/null \
+       | grep -c genome_browser" || echo 0)
     if [ "${gb:-0}" -ge 1 ]; then ok "SGD/$v has JBrowse genome_browser config ($gb entries)"
     else bad "SGD/$v has no genome_browser config" "JBrowse linkout will not render there"; fi
   done
@@ -478,29 +484,29 @@ status "WB WS298 searchdata.json still OK" "blast/WB/WS298/searchdata.json" "200
 # than a lighter data release.
 section "8b. ALLIANCE cross-species deployment"
 
-status "ALLIANCE search page loads" "blast/ALLIANCE/prod/" "200"
+status "ALLIANCE search page loads" "blast/ALLIANCE/9.1.0/" "200"
 
 jsoncheck "ALLIANCE serves all nine declared genomes" \
-  "blast/ALLIANCE/prod/searchdata.json" \
+  "blast/ALLIANCE/9.1.0/searchdata.json" \
   "len(d['database'] if isinstance(d['database'], list) else list(d['database'].values())) == 9"
 
 # One per member organism, plus human and mouse. Named individually because a
 # count alone would pass if the same genome were built nine times.
 jsoncheck "ALLIANCE has one database per member organism" \
-  "blast/ALLIANCE/prod/searchdata.json" \
+  "blast/ALLIANCE/9.1.0/searchdata.json" \
   "set(x['title'] for x in (d['database'] if isinstance(d['database'], list) else d['database'].values())) == {'C_elegans_Genome_Assembly','ZFIN_GRCz12tu','RGD_GRCr8','Mouse_GRCm39','Human_GRCh38','Fly_Release_6_plus_ISO1_MT','Yeast_R64','X_laevis_XENLA_10_1','X_tropicalis_UCB_Xtro_10_0'}"
 
 # tblastn is the point of this deployment: a protein query against nucleotide
 # subjects. blastn finds almost nothing between yeast and human genomic DNA.
 jsoncheck "ALLIANCE offers tblastn" \
-  "blast/ALLIANCE/prod/searchdata.json" \
+  "blast/ALLIANCE/9.1.0/searchdata.json" \
   "'tblastn' in d['options']"
 
 # Genus misspellings and lowercase genera shipped in this config for two years
 # ("xenupus", "xenupos", "mus", "homo"), and genus is interpolated into the
 # on-disk path that becomes the database tree.
 jsoncheck "ALLIANCE genome titles are not misspelled" \
-  "blast/ALLIANCE/prod/searchdata.json" \
+  "blast/ALLIANCE/9.1.0/searchdata.json" \
   "not [x for x in (d['database'] if isinstance(d['database'], list) else d['database'].values()) if 'xenup' in x['title'].lower()]"
 
 # --- 9. asset cache busting ------------------------------------------------

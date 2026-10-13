@@ -135,12 +135,12 @@ const MODS = [
     },
     {
         label: 'ALLIANCE',
-        path: '/blast/ALLIANCE/prod/',
+        path: '/blast/ALLIANCE/9.1.0/',
         // The Alliance-wide deployment has no member name to interpolate, so the
         // heading collapses to the bare word. Every other heading ends in it, so
         // the cross-MOD check below skips this one as a substring of the rest.
         heading: 'BLAST',
-        dataVersion: 'prod',
+        dataVersion: '9.1.0',
         trees: ['nucleotide_database_tree'],
         databaseFloor: 9,
         hasProtein: false,
@@ -149,12 +149,17 @@ const MODS = [
         // database to be present. ALLIANCE offers one example, a zebrafish
         // nucleotide fragment.
         //
+        // The target moved with the assembly: the zebrafish database was
+        // ZFIN_GRCz11 until it was rebuilt on GRCz12tu, the build Alliance
+        // JBrowse 2 serves, and the example silently stopped being offered
+        // because examples.js drops one whose database is absent.
+        //
         // Worth noting as a gap rather than fixing here: a nucleotide example
         // demonstrates almost nothing on a cross-species deployment, because
         // cross-species nucleotide identity between, say, yeast and human
         // genomic DNA is below blastn's detection. tblastn is what this
         // deployment is for, and there is no protein example to show it.
-        exampleDatabases: ['ZFIN_GRCz11']
+        exampleDatabases: ['ZFIN_GRCz12tu']
     }
 ];
 
