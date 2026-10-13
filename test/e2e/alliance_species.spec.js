@@ -26,7 +26,7 @@ test.describe('ALLIANCE: a hit names its organism', () => {
     test('a single-genome tblastn labels its hits with that genome\'s species',
         async ({ page }) => {
             test.setTimeout(BLAST_TIMEOUT + 120 * 1000);
-            await gotoSearch(page, '/blast/ALLIANCE/prod/');
+            await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
 
             // Mouse on its own. Chosen deliberately: in a nine-genome search
             // mouse is crowded out of the result list entirely by
@@ -49,7 +49,7 @@ test.describe('ALLIANCE: a hit names its organism', () => {
         });
 
     test('the deployment holds nine genomes to search across', async ({ page }) => {
-        await gotoSearch(page, '/blast/ALLIANCE/prod/');
+        await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
         expect((await databaseTitles(page)).length).toBe(9);
     });
 
@@ -72,7 +72,7 @@ test.describe('ALLIANCE: an incomplete result says so', () => {
     test('human and mouse together now return both, and are not called incomplete',
         async ({ page }) => {
             test.setTimeout(BLAST_TIMEOUT + 180 * 1000);
-            await gotoSearch(page, '/blast/ALLIANCE/prod/');
+            await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
 
             // This test used to assert the opposite. Human and mouse both name
             // their chromosomes 1..n, so BLAST conflated the two genomes'
@@ -130,7 +130,7 @@ test.describe('ALLIANCE: an incomplete result says so', () => {
 
     test('a single database is never called incomplete', async ({ page }) => {
         test.setTimeout(BLAST_TIMEOUT + 120 * 1000);
-        await gotoSearch(page, '/blast/ALLIANCE/prod/');
+        await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
 
         await selectDatabaseByTitle(page, 'Human_GRCh38');
         await page.fill(S.sequence, `>ACTB\n${ACTB}`);
@@ -158,7 +158,7 @@ test.describe('ALLIANCE: an incomplete result says so', () => {
 
     test('a multi-organism result lists which organisms answered', async ({ page }) => {
         test.setTimeout(BLAST_TIMEOUT + 180 * 1000);
-        await gotoSearch(page, '/blast/ALLIANCE/prod/');
+        await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
 
         // Three genomes whose chromosome vocabularies do not overlap, so the
         // result is complete and the summary can be trusted.

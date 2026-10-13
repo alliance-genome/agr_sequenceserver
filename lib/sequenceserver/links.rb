@@ -424,7 +424,7 @@ module SequenceServer
       # Every rule after this point infers the genome from a substring of the URL,
       # the assembly name or the database path, and each one is a trap for the
       # Alliance databases. The path
-      # /db/ALLIANCE/prod/databases/Rattus/norvegicus/RGD_mRatBN7_2/... contains
+      # /db/ALLIANCE/9.1.0/databases/Rattus/norvegicus/RGD_mRatBN7_2/... contains
       # "RGD", so the RGD rule claims it and returns "Chr1" where Alliance
       # JBrowse 2 wants "1". The Alliance yeast assembly is
       # "Saccharomyces_cerevisiae", which the SGD rule matches verbatim. And

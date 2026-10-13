@@ -98,71 +98,14 @@ for (const mod of MODS) {
             ]);
         });
 
-        test(`a collapsed group expands to reveal children that were not rendered before (${mod.name})`, async ({ page }) => {
-            await gotoSearch(page, mod.path);
-
-            const tree = page.locator(S.nucleotideTree);
-
-            // Pick the first group that is collapsed AND has no children in the
-            // DOM at all -- jstree renders lazily, which is the property under
-            // test. Record the "before" picture.
-            const before = await page.evaluate((treeSel) => {
-                const t = document.querySelector(treeSel);
-                const node = Array.from(t.querySelectorAll('li.jstree-closed'))
-                    .find((n) => n.querySelectorAll('li').length === 0);
-                if (!node) return null;
-                return {
-                    id: node.id,
-                    title: node.querySelector('.jstree-anchor').innerText.trim(),
-                    descendantItems: node.querySelectorAll('li').length,
-                    anchorsInTree: t.querySelectorAll('.jstree-anchor').length
-                };
-            }, S.nucleotideTree);
-
-            expect(before, 'expected at least one collapsed, unrendered group').not.toBeNull();
-            expect(before.descendantItems).toBe(0);
-
-            // NOTE: jstree reuses the same node id in both trees (e.g. a
-            // "Brugia" <li> exists in #nucleotide_database_tree AND in
-            // #protein_database_tree), so a bare `#id` locator is ambiguous.
-            // Always scope group lookups to one tree.
-            const group = page.locator(`${S.nucleotideTree} #${before.id}`);
-            await expect(group).toHaveClass(/jstree-closed/);
-
-            // Click the arrow itself, which is the affordance the hint tells
-            // users about (and the one whose hit area was enlarged to 24px).
-            await group.locator('> i.jstree-ocl').click();
-            await expect(group).toHaveClass(/jstree-open/);
-
-            const after = await page.evaluate(({ treeSel, id }) => {
-                const t = document.querySelector(treeSel);
-                const node = t.querySelector(`#${id}`);
-                return {
-                    descendantItems: node.querySelectorAll('li').length,
-                    anchorsInTree: t.querySelectorAll('.jstree-anchor').length,
-                    visibleChildTitles: Array.from(node.querySelectorAll(':scope > ul > li > .jstree-anchor'))
-                        .filter((a) => a.offsetParent !== null)
-                        .map((a) => a.innerText.trim())
-                };
-            }, { treeSel: S.nucleotideTree, id: before.id });
-
-            // Children now exist AND are on screen; the tree grew by exactly
-            // the number of newly rendered anchors.
-            expect(after.descendantItems).toBeGreaterThan(0);
-            expect(after.anchorsInTree).toBeGreaterThan(before.anchorsInTree);
-            expect(after.visibleChildTitles.length).toBeGreaterThan(0);
-            expect(after.anchorsInTree - before.anchorsInTree)
-                .toBe(after.descendantItems);
-
-            // Collapsing again hides them, so the arrow really is a toggle.
-            await group.locator('> i.jstree-ocl').click();
-            await expect(group).toHaveClass(/jstree-closed/);
-            const stillVisible = await page.evaluate(({ treeSel, id }) => Array.from(
-                document.querySelector(treeSel).querySelector(`#${id}`)
-                    .querySelectorAll(':scope > ul > li > .jstree-anchor')
-            ).filter((a) => a.offsetParent !== null).length, { treeSel: S.nucleotideTree, id: before.id });
-            expect(stillVisible).toBe(0);
-        });
+        // A spec that required a collapsed group used to live here, testing
+        // jstree's lazy rendering by finding an li.jstree-closed with no
+        // children in the DOM and expanding it. Nothing is collapsed any
+        // more: the tree opens fully on ready, so the premise is gone rather
+        // than the behaviour regressed. What replaced it, in
+        // database_tree_shape.spec.js, is the opposite assertion -- no
+        // jstree-closed anywhere, every leaf reachable without a click, and a
+        // leaf one folder deep instead of three.
 
         test(`every tree leaf mirrors exactly one databases[] checkbox (${mod.name})`, async ({ page }) => {
             await gotoSearch(page, mod.path);

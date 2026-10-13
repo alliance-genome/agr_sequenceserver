@@ -132,16 +132,16 @@ module SequenceServer
     end
 
     get '/blast/environment_info.json' do
-        file_path = "/sequenceserver/public/environments/environment_info.json"
-        puts "Attempting to serve file at #{file_path}"
+      # settings.root, not the literal "/sequenceserver". That string is only
+      # the app's path inside the container image, and this was the third place
+      # carrying it: the other two were the environment.json readers fixed in
+      # #43. Anywhere else the route answered 404 for a file that was present.
+      file_path = File.join(settings.root, 'public', 'environments',
+                            'environment_info.json')
+      halt 404, 'File not found' unless File.exist?(file_path)
 
-        if File.exist?(file_path)
-            puts "File found, sending file"
-            send_file(file_path, type: 'application/json', filename: 'environment_info.json')
-        else
-            puts "File not found"
-            halt 404, 'File not found'
-        end
+      send_file(file_path, type: 'application/json',
+                           filename: 'environment_info.json')
     end
 
     # Candidates for a gene symbol, for the search form's gene box.
