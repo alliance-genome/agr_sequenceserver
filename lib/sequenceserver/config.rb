@@ -131,7 +131,10 @@ module SequenceServer
         },
         num_threads: 1,
         num_jobs: 1,
-        job_lifetime: 43_200,
+        # In MINUTES, which JobRemover multiplies by 60. 129_600 is 90 days,
+        # raised from 43_200, which was 30. A result URL is something people
+        # share, and 30 days was reaping recovered September results.
+        job_lifetime: 129_600,
         # Warn in the UI before rendering results larger than this value
         large_result_warning_threshold: 250 * 1024 * 1024,
         optimistic: false # Faster, but does not perform DB compatibility checks
