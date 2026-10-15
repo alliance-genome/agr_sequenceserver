@@ -637,6 +637,53 @@ BLASTs merged in `job.rb`.
 **Effort.** Days. **Risk.** Gate on more than one organism so single-organism
 reports are unchanged.
 
+### Step 11, closed 2026-10-15
+
+Three things shipped, and the fourth turned out not to be needed.
+
+**The incomplete-result warning** (`report.js:196`) names the databases that
+share ids, because that is the condition BLAST does not report. The plan's
+"no hits: *Mus musculus*" line was not built: it would state as fact the one
+thing that is false when ids collide.
+
+**A per-organism count** (`report.js:organismSummaryJSX`) for every organism
+that answered, and the sidebar's organism count (`sidebar.js:209`).
+
+**A switch per organism**, which hides that organism's hits and its HSP
+blocks. The rows are selected through a `data-organism` attribute on each
+element and one CSS rule per hidden organism, because `hits.js` renders in
+25ms batches and holds the created elements in its own state, so a prop added
+to `Hits` never reaches a hit already on the page. Nothing about the search
+changes and nothing BLAST withheld comes back.
+
+**Grouping the list by organism was not built.** `hits.js` pushes query, hit
+and HSP elements into one flat array in BLAST's rank order, one HSP per 25ms
+cycle; wrapping groups around that means rewriting the renderer that keeps a
+10,000-HSP page responsive. The counts plus the switches answer the same
+question for a fraction of the risk.
+
+**And the premise no longer holds.** The nine-genome `tblastn` for human ACTB
+that returned 131 hits with no mouse and no rat now returns, measured
+2026-10-15 through the JSON API:
+
+| organism | hits |
+|---|---|
+| *Homo sapiens* | 29 |
+| *Rattus norvegicus* | 21 |
+| *Mus musculus* | 20 |
+| *Xenopus laevis* | 15 |
+| *Danio rerio* | 14 |
+| *Xenopus tropicalis* | 8 |
+| *Saccharomyces cerevisiae* | 7 |
+| *Caenorhabditis elegans* | 6 |
+| *Drosophila melanogaster* | 4 |
+
+124 hits, all nine organisms answering, the largest holding 23% of the list.
+No genome is eating it. That search takes 4m56 on this host, past the browser
+suite's 180s timeout, so it is measured through the API rather than asserted
+in Playwright; `test/e2e/organism_filter.spec.js` covers the filter on human
+and mouse, the pair that used to collide.
+
 ### Step 12: Publish it
 
 **Problem.** `layout.erb:65-73` has no ALLIANCE case, so the member link points
