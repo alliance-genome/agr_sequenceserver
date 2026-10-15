@@ -249,9 +249,14 @@ export default class extends Component {
             {' ' + link.title + ' '}
         </a>;
     }
+    // data-organism is what lets the report hide one organism's rows. It has
+    // to sit on the element rather than be threaded as a prop: hits.js renders
+    // in 25ms batches and keeps the created elements in its own state, so a
+    // later prop change never reaches a hit already on the page.
     render() {
         return (
             <div className="hit mt-1 border-l-2 border-transparent pl-1 -ml-1" id={this.domID()} data-hit-def={this.props.hit.id}
+                data-organism={Utils.speciesName(this.props.hit) || undefined}
                 data-hit-len={this.props.hit.length} data-hit-evalue={this.props.hit.evalue}>
                 {this.headerJSX()} {this.contentJSX()}
             </div>

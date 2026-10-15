@@ -28,10 +28,14 @@ test.describe('ALLIANCE: a hit names its organism', () => {
             test.setTimeout(BLAST_TIMEOUT + 120 * 1000);
             await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
 
-            // Mouse on its own. Chosen deliberately: in a nine-genome search
-            // mouse is crowded out of the result list entirely by
-            // -max_target_seqs 100, which is a separate problem (the plan's
-            // Step 11) and would make this test flaky if it searched all nine.
+            // Mouse on its own, now only because a nine-genome tblastn takes
+            // 4m56 on this host and this suite's BLAST timeout is 180s.
+            //
+            // The reason this comment used to give was that mouse is crowded
+            // out of a nine-genome result entirely. That was true and is not:
+            // it was id conflation, not ranking, and the seqid_prefix rebuild
+            // fixed it. Measured 2026-10-15 over all nine through the JSON
+            // API: 124 hits, nine organisms answering, mouse contributing 20.
             await selectDatabaseByTitle(page, 'Mouse_GRCm39');
             await page.fill(S.sequence, `>ACTB\n${ACTB}`);
             await runBlast(page);

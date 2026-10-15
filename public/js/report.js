@@ -35,7 +35,9 @@ class Report extends Component {
             stats: [],
             alignment_blob_url: '',
             allQueriesLoaded: false,
+            hiddenOrganisms: [],
         };
+        this.toggleOrganism = this.toggleOrganism.bind(this);
         this.prepareAlignmentOfAllHits = this.prepareAlignmentOfAllHits.bind(this);
         this.setStateFromJSON = this.setStateFromJSON.bind(this);
         this.plugins = new ReportPlugins(this);
@@ -213,14 +215,9 @@ class Report extends Component {
     }
 
     /**
-     * Which organisms answered, and how many hits each contributed.
-     *
-     * The first question a cross-species result raises, and one the hit list
-     * does not answer at a glance: selecting nine genomes and hearing back
-     * from seven IS the result. Shown only where more than one organism
-     * replied, so single-organism reports are unchanged.
+     * How many hits each organism contributed, in descending order.
      */
-    organismSummaryJSX() {
+    organismCounts() {
         var counts = {};
         (this.state.queries || []).forEach(function (query) {
             (query.hits || []).forEach(function (hit) {
@@ -228,22 +225,93 @@ class Report extends Component {
                 if (name) counts[name] = (counts[name] || 0) + 1;
             });
         });
+        return counts;
+    }
+
+    /**
+     * Hide or show one organism's hits.
+     */
+    toggleOrganism(name) {
+        this.setState(function (prev) {
+            var hidden = prev.hiddenOrganisms || [];
+            return {
+                hiddenOrganisms: hidden.indexOf(name) === -1 ?
+                    hidden.concat([name]) :
+                    hidden.filter(function (other) { return other !== name; }),
+            };
+        });
+    }
+
+    /**
+     * Hides the hits of organisms switched off in the summary.
+     *
+     * A rule per organism rather than a prop on each hit. hits.js renders in
+     * 25ms batches and keeps the created elements in its own state, so a prop
+     * added to Hits never reaches a hit already on the page; the elements
+     * carry data-organism and this selects on it. Matching the attribute also
+     * catches the HSP blocks, which are siblings of their hit in that flat
+     * list rather than children of it.
+     */
+    organismFilterCSS() {
+        var hidden = this.state.hiddenOrganisms || [];
+        if (!hidden.length) return null;
+
+        var rules = hidden.map(function (name) {
+            return '[data-organism=' + JSON.stringify(name) + ']{display:none}';
+        }).join('\n');
+        return <style id="organism-filter">{rules}</style>;
+    }
+
+    /**
+     * Which organisms answered, how many hits each contributed, and a switch
+     * for each.
+     *
+     * Two questions a cross-species result raises that the hit list does not
+     * answer at a glance. First, who replied: selecting nine genomes and
+     * hearing back from seven IS the result. Second, what the others said,
+     * which one conserved genome's 100 alignments can bury, since BLAST ranks
+     * globally across every database searched. Switching that genome off is
+     * the cheap answer; it changes what is displayed and nothing about the
+     * search.
+     *
+     * Shown only where more than one organism replied, so single-organism
+     * reports are unchanged.
+     */
+    organismSummaryJSX() {
+        var counts = this.organismCounts();
+        var hidden = this.state.hiddenOrganisms || [];
         var names = Object.keys(counts).sort(function (a, b) {
             return counts[b] - counts[a] || a.localeCompare(b);
         });
         if (names.length < 2) return null;
 
+        var toggle = this.toggleOrganism;
         return (
             <div className="my-2 text-sm" id="organism-summary">
                 <span className="font-semibold">Organisms with hits:</span>{' '}
-                {names.map(function (name, i) {
+                {names.map(function (name) {
+                    var off = hidden.indexOf(name) !== -1;
                     return (
-                        <span key={name}>
-                            {i > 0 ? ', ' : ''}
+                        <button
+                            type="button"
+                            key={name}
+                            className={'mr-2 px-1 border rounded text-sm ' + (off ?
+                                'border-gray-300 text-gray-400 line-through' :
+                                'border-seqblue text-seqblue')}
+                            data-organism-toggle={name}
+                            aria-pressed={off ? 'false' : 'true'}
+                            title={off ? 'Show these hits' : 'Hide these hits'}
+                            onClick={function () { toggle(name); }}
+                        >
                             <em>{name}</em> ({counts[name]})
-                        </span>
+                        </button>
                     );
                 })}
+                {hidden.length ?
+                    <span className="text-gray-500" id="organism-filter-note">
+                        {hidden.length === 1 ? '1 organism hidden' : hidden.length + ' organisms hidden'}
+                    </span>
+                    : null}
             </div>
         );
     }
@@ -270,6 +338,7 @@ class Report extends Component {
                     />
                     {this.incompleteResultNoticeJSX()}
                     {this.organismSummaryJSX()}
+                    {this.organismFilterCSS()}
                     <GraphicalOverview
                         queries={this.state.queries}
                         prorgam={this.state.program}

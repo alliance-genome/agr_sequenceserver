@@ -337,12 +337,17 @@ export default function HSP(props) {
     return <span className="text-gray-700">{text}</span>;
   }
 
+  // data-organism repeats what the hit carries, because an HSP is a SIBLING
+  // of its hit in the rendered list and not a child of it: hits.js pushes
+  // query, hit and HSP elements into one flat array. Hiding a hit alone would
+  // leave its alignments on the page.
   return (
     <div
       className="hsp pt-px pb-5 border-l-2 border-transparent pl-1 -ml-1"
       id={domID()}
       ref={hspRef}
       data-parent-hit={hitDOM_ID()}
+      data-organism={Utils.speciesName(props.hit) || undefined}
     >
       <p className="m-0 p-0 rounded-none border-0 bg-inherit whitespace-pre-wrap break-keep text-sm text-neutral-500 font-semibold tracking-wide">
         {props.showHSPNumbers &&
