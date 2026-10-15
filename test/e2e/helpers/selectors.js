@@ -68,7 +68,7 @@ module.exports = {
     treeSearchNucleotide: '#nucleotide_database_tree_search',
     treeSearchProtein: '#protein_database_tree_search',
     // Exact hint text shipped under each tree (appears once per tree).
-    treeHintText: 'Click arrows to expand/collapse groups. Use checkboxes to select databases.',
+    treeHintText: 'Use checkboxes to select databases. Search accepts a common name (zebrafish, worm, yeast) or a Latin one.',
 
     // Settings / presets block. Rendered empty until a database is selected.
     presets: 'div#options-presets',
