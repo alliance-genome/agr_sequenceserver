@@ -509,6 +509,17 @@ jsoncheck "ALLIANCE genome titles are not misspelled" \
   "blast/ALLIANCE/9.1.0/searchdata.json" \
   "not [x for x in (d['database'] if isinstance(d['database'], list) else d['database'].values()) if 'xenup' in x['title'].lower()]"
 
+# environment_info.json is the published manifest of deployments, served from
+# the config volume and hand-maintained there. It listed FB, WB, SGD and RGD
+# and not ALLIANCE, so whatever consumes it could not see this deployment.
+jsoncheck "ALLIANCE appears in the published environment manifest" \
+  "blast/environment_info.json" \
+  "'9.1.0' in d['environments'].get('ALLIANCE', {})"
+
+jsoncheck "the ALLIANCE manifest entry says it is public" \
+  "blast/environment_info.json" \
+  "d['environments']['ALLIANCE']['9.1.0']['public'] is True"
+
 # --- 9. asset cache busting ------------------------------------------------
 section "9. frontend assets are cache-busted"
 # The bundles are served with no Cache-Control and no ETag, so a browser falls
