@@ -2,11 +2,51 @@ import React from 'react';
 import _ from 'underscore';
 import Jstree from 'jstree';
 import { Databases } from './databases';
+import commonNames from '../configs/common_names.json';
+
+/**
+ * Shortest query that may consult the common-name table.
+ *
+ * One or two letters match a dozen alias keys at once ("a" is in "ant",
+ * "aphid", "rat" and "yeast"), which would turn an early keystroke into a
+ * match on most of the tree. Latin text matching is unaffected and still
+ * applies from the first character.
+ */
+const MIN_ALIAS_QUERY = 3;
+
+/**
+ * Does this tree node answer the query?
+ *
+ * jstree's own search compares the query against node text, so a tree of
+ * Latin binomials and build titles answers nothing for "zebrafish", "worm",
+ * "fly" or "mouse". Text matching stays first; the alias table in
+ * public/configs/common_names.json is consulted only when the text does not
+ * match and the query is long enough to be meant.
+ */
+export function nodeMatchesQuery(query, text) {
+    const q = (query || '').trim().toLowerCase();
+    const label = (text || '').toLowerCase();
+    if (!q) return false;
+    if (label.includes(q)) return true;
+    if (q.length < MIN_ALIAS_QUERY) return false;
+
+    const aliases = commonNames.aliases || {};
+    return Object.keys(aliases).some(function (alias) {
+        if (!alias.includes(q)) return false;
+        return aliases[alias].some(function (pattern) {
+            return label.includes(pattern.toLowerCase());
+        });
+    });
+}
 
 export default class extends Databases {
     constructor(props) {
         super(props);
+        this.state = Object.assign({}, this.state, { searchMisses: {} });
+        this.searchMissBound = {};
         this.handleLoadTree = this.handleLoadTree.bind(this);
+        this.handleTreeSearch = this.handleTreeSearch.bind(this);
+        this.handleTreeExpansion = this.handleTreeExpansion.bind(this);
         this.renderDatabases = this.renderDatabases.bind(this);
         this.renderDatabaseSearch = this.renderDatabaseSearch.bind(this);
         this.renderDatabaseTree = this.renderDatabaseTree.bind(this);
@@ -76,6 +116,20 @@ export default class extends Databases {
             'plugins': ['checkbox', 'search', 'sort'],
             'checkbox': {
                 'keep_selected_style': false
+            },
+            // Filter rather than highlight, and accept common names.
+            //
+            // The default search adds a class to matching anchors and leaves
+            // the rest in place, which on SGD's 134 nucleotide rows means
+            // hunting for a tint. show_only_matches hides the rest,
+            // and show_only_matches_children keeps a matched species folder's
+            // databases visible, since the folder is not the thing you select.
+            'search': {
+                'show_only_matches': true,
+                'show_only_matches_children': true,
+                'search_callback': function (str, node) {
+                    return nodeMatchesQuery(str, node.text);
+                }
             }
         };
 
@@ -142,13 +196,26 @@ export default class extends Databases {
         // them, and a renamed species silently stopped matching.
         //
         // Opening everything needs no such list. The trees are small enough
-        // for it: the largest is SGD's 312 nodes, and a database now sits two
-        // levels down rather than four, since Database.display_categories
-        // drops the leaf that repeated its parent and joins a genus to its
-        // species epithet.
+        // for it: the largest is FlyBase's 200 nucleotide nodes, and a
+        // database now sits two levels down rather than four, since
+        // Database.display_categories drops the leaf that repeated its parent
+        // and joins a genus to its species epithet.
         $(tree_id).on('ready.jstree', function () {
             $(tree_id).jstree('open_all');
         });
+
+        // Bind once. handleLoadTree runs on every click of the tree, and
+        // off('search.jstree') would take jstree's own show_only_matches
+        // handler with it, since that is bound to this same element under the
+        // same event name.
+        if (!this.searchMissBound[category]) {
+            this.searchMissBound[category] = true;
+            $(tree_id).on('search.jstree', function (_e, data) {
+                if (data.str && data.res.length === 0) {
+                    _this.handleSearchMiss(category, $(tree_id).jstree(true), data.str);
+                }
+            });
+        }
     }
 
     selectDatabases(databases) {
@@ -181,8 +248,50 @@ export default class extends Databases {
     }
 
     handleTreeSearch(category, tree_id, search_id) {
-        var search_for = $('#' + search_id).val();
-        $('#' + tree_id).jstree(true).search(search_for);
+        var search_for = ($('#' + search_id).val() || '').trim();
+        var tree = $('#' + tree_id).jstree(true);
+        if (!tree) return;
+
+        // Undo a previous miss before searching again.
+        //
+        // jstree's show_only_matches acts only when something matched, so a
+        // query matching nothing would leave the whole tree on display and
+        // read as "everything matches". handleSearchMiss hides it instead,
+        // and putting it back is ours to do for the same reason.
+        if (this.state.searchMisses[category]) {
+            tree.show_all();
+            this.setState(function (prev) {
+                return { searchMisses: Object.assign({}, prev.searchMisses, { [category]: false }) };
+            });
+        }
+
+        // jstree treats an empty string as clear_search, so deleting the query
+        // restores every node that show_only_matches hid.
+        tree.search(search_for);
+    }
+
+    /**
+     * Nothing matched, so show nothing and say why.
+     */
+    handleSearchMiss(category, tree, query) {
+        tree.hide_all();
+        this.setState(function (prev) {
+            return { searchMisses: Object.assign({}, prev.searchMisses, { [category]: query }) };
+        });
+    }
+
+    /**
+     * Open or close every node in one tree.
+     *
+     * The tree arrives fully open, so these exist for getting back to that
+     * state after a few collapses, and for folding a long deployment down to
+     * its species list. FlyBase is the case that wants collapsing: 134
+     * nucleotide databases under 66 species folders, 200 rows on one page.
+     */
+    handleTreeExpansion(category, open) {
+        var tree = $(`#${category}_database_tree`).jstree(true);
+        if (!tree) return;
+        tree[open ? 'open_all' : 'close_all']();
     }
 
     renderDatabases(category) {
@@ -225,6 +334,7 @@ export default class extends Databases {
                         >
                             {toggleState}
                         </button>
+                        {this.renderExpansionControls(category)}
                     </div>
                     <ul className={'databases hidden text-lg ' + category}>
                         {
@@ -251,12 +361,46 @@ export default class extends Databases {
         );
     }
 
+    renderExpansionControls(category) {
+        // Pointless where no node has children, which is every deployment
+        // whose species each hold one database.
+        var tree = this.props.tree[category] || [];
+        var hasFolders = tree.some(function (node) { return node.parent === '#'; }) &&
+            tree.some(function (node) { return node.parent !== '#'; });
+        if (!hasFolders) return null;
+
+        return (
+            <span id={`${category}_tree_expansion`}>
+                <button
+                    type="button"
+                    className="px-2 text-base md:text-lg text-seqblue"
+                    id={`${category}_expand_all`}
+                    onClick={_.bind(function () {
+                        this.handleTreeExpansion(category, true);
+                    }, this)}
+                >
+                    [Expand all]
+                </button>
+                <button
+                    type="button"
+                    className="px-2 text-base md:text-lg text-seqblue"
+                    id={`${category}_collapse_all`}
+                    onClick={_.bind(function () {
+                        this.handleTreeExpansion(category, false);
+                    }, this)}
+                >
+                    [Collapse all]
+                </button>
+            </span>
+        );
+    }
+
     renderDatabaseSearch(category) {
         var tree_id = category + '_database_tree';
         var search_id = tree_id + '_search';
 
         return (
-            <input type='text' id={search_id} className='border rounded px-1' placeholder='Search...'
+            <input type='text' id={search_id} className='border rounded px-1' placeholder='Search, e.g. zebrafish'
                 onKeyUp=
                     {
                         _.bind(function () {
@@ -273,7 +417,12 @@ export default class extends Databases {
 
         return (
             <div>
-                <p className="text-xs text-gray-500 mb-1 italic">Click arrows to expand/collapse groups. Use checkboxes to select databases.</p>
+                <p className="text-xs text-gray-500 mb-1 italic">Use checkboxes to select databases. Search accepts a common name (zebrafish, worm, yeast) or a Latin one.</p>
+                {this.state.searchMisses[category] ?
+                    <p className="text-sm my-2" id={`${category}_search_miss`}>
+                        No database matches <strong>{this.state.searchMisses[category]}</strong>.
+                    </p>
+                    : null}
                 <div
                     id={tree_id}
                     className={'jstree_div'}
