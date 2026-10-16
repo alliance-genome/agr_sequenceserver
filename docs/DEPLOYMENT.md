@@ -1,19 +1,30 @@
 # Running the three BLAST instances
 
-Everything below was read off the host on 2026-10-02. None of it was written
-down anywhere before this file, which is the main reason it exists. The topology
-is three `docker run` invocations and two nginx `server` blocks. The
-invocations survive nowhere but in the containers themselves — the shell
+Everything below was read off the host on 2026-10-02, and the figures were
+re-read on 2026-10-16. None of it was written down anywhere before this file,
+which is the main reason it exists.
+
+**State on 2026-10-16.** All three instances run `agr-blast:72efdceb`, `main`
+after the Phase 3 merges (#56, #57, #58). Production holds 3,053 job
+directories in `/var/sequenceserver-data/jobs-prod`, a bind mount, so a
+redeploy no longer risks them. `:job_lifetime` is 129,600, which is minutes,
+so 90 days. The local registry holds two `agr-blast` tags, `72efdceb` and
+`6772fbc8` to roll back to, and no `agr-blast-prod-pre-*` containers; the
+numbers in this file that counted 19 tags or 47 images are from before the
+2026-10-15 cleanup.
+
+The topology is three `docker run` invocations and two nginx `server` blocks.
+The invocations survive nowhere but in the containers themselves — the shell
 histories hold only an older form of the prod one, against a differently-named
 image — so the commands here were reconstructed from `docker inspect`. The
 nginx blocks do not route the way the hostnames suggest, and that part has cost
 people time.
 
-Line numbers below are against `main` at `b435058e` (PR #31), the commit dev is
-running — not against whatever happens to be checked out. The working copy on
-this host is routinely parked on a feature branch, and a branch's bundles are
-not the ones any instance serves, so `md5sum public/...` in the working tree
-will not reproduce the figures here while `git show b435058e:public/...` will.
+Line numbers below are against `main`, and `main` is what every instance runs.
+The working copy on this host is routinely parked on a feature branch, and a
+branch's bundles are not the ones any instance serves, so `md5sum public/...`
+in the working tree will not reproduce the figures here while
+`git show main:public/...` will.
 
 Measured figures are dated where they appear, because several were taken at
 `73e4a38a` before #31 merged. The one that matters most is the asset digest
@@ -25,9 +36,11 @@ Nothing here is automated. There is no CI deploy, no orchestration, no image
 registry, and no image is pushed anywhere — the tags below exist only in this
 host's local Docker. `deploy.sh` in the repository root looks like the deploy
 script and is not: it builds an image called `agr-blast-prod-container`, and the
-container actually serving production runs `agr-blast:8c8bcba4`. Running it
+container actually serving production runs `agr-blast:72efdceb`. Running it
 would redeploy prod from an untagged image and lose the one record of which
-commit is live, so treat it as historical. `monitor.sh` beside it is harmless —
+commit is live, so treat it as historical. That image was deleted on
+2026-10-15 and the script would rebuild it, which is one more reason not to run
+it. `monitor.sh` beside it is harmless —
 an interactive menu of `docker logs`, `restart`, `stop`, `exec` against
 `agr-blast-prod` — but it only knows about prod. The same goes for
 `docker-compose.yaml`, which describes four per-MOD services on ports 5001-5004;
@@ -39,21 +52,27 @@ nothing on this host was started from it.
 | | test | dev | prod |
 |---|---|---|---|
 | container | `agr-blast-restyle` | `agr-blast-dev` | `agr-blast-prod` |
-| image | `agr-blast:8c8bcba4` | `agr-blast:8c8bcba4` | `agr-blast:8c8bcba4` |
-
-All three run `8c8bcba4`, `main` at the WormBase C. elegans link fix. Test and
-dev moved onto it on 2026-10-11, production the same day, which closed a gap of
-17 merged pull requests open since 2026-09-29. The floating `agr-blast:restyle`
-tag no longer names what the test instance serves; read the image off the
-container rather than trusting a tag.
-
-The config volumes are in step as well: `config` was promoted from `config-dev`
-during that release, so the split described below is currently latent again.
+| image | `agr-blast:72efdceb` | `agr-blast:72efdceb` | `agr-blast:72efdceb` |
 | host port | 4570 | 4569 | 4568 |
 | reached at | `http://172.31.3.193:4570` | `https://blast-dev.alliancegenome.org` | `https://blast.alliancegenome.org` |
 | `public/environments` from | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config-dev` | `/var/sequenceserver-data/config` |
+| `/root/.sequenceserver` from | the container | the container | `/var/sequenceserver-data/jobs-prod` |
 | `HTTPS` | unset | `on` | `on` |
 | restart policy | `no` | `no` | `unless-stopped` |
+
+The three rows after `image` used to sit below two paragraphs of prose, which
+broke the table in every renderer; they are part of it again.
+
+All three run `72efdceb`, `main` after the Phase 3 merges. The three releases
+before it were `8c8bcba4` on 2026-10-11, which closed a gap of 17 merged pull
+requests open since 2026-09-29, then `941e2440`, `6772fbc8` and this one. Read
+the image off the container rather than trusting a tag written here: four tags
+in this file went stale inside a week.
+
+The config volumes are in step as well: `config` was promoted from `config-dev`
+during the 2026-10-11 release, so the split described below is currently latent
+again. Only `environment_info.json` differs by intent, and it does not: the
+ALLIANCE entry added on 2026-10-15 went into both.
 
 All three mount `/var/sequenceserver-data/blast` at `/db` read-write and all
 three run the identical command,
@@ -108,7 +127,7 @@ $ curl -s http://localhost:4568/blast/WB/WS298/ | grep -o 'href="[^"]*app.min.cs
 href="https://localhost:4568/blast/css/app.min.css?v=651d65fef8d4"
 
 $ curl -s http://localhost:4570/blast/WB/WS298/ | grep -o 'href="[^"]*app.min.css[^"]*"'
-href="http://localhost:4570/blast/css/app.min.css?v=<branch currently in agr-blast:restyle>"
+href="http://localhost:4570/blast/css/app.min.css?v=<digest of the built asset>"
 ```
 
 The first of those — any `HTTPS=on` container reached over plain HTTP — is a
@@ -121,17 +140,16 @@ never point Playwright at `http://localhost:4569` either.
 Note incidentally that the `?v=` value is the first 12 hex digits of the
 SHA-256 of the asset file (`lib/sequenceserver/routes.rb:903-921`, `asset_version`), so it is a
 reliable fingerprint of which bundle a given container is serving. All three
-instances now serve `main` at `8c8bcba4`, so all three answer `1c38919cc1e9…`;
+instances serve `main` at `72efdceb`, so all three answer the same digest;
 before the 2026-10-11 release production answered `651d65fe…`, its
 `app.min.css` as committed at `fda1db1f`, and dev `d2a25f6a…` at
 `b435058e` (and `279b24bc…` at `73e4a38a`, which is the kind of drift that
-makes this a useful check rather than a constant). Test
-has no fixed digest to quote: it is
-whatever branch was last built into the floating `agr-blast:restyle` tag, which
-is rebuilt in place several times a day, so read it off the instance rather than
-trusting a value written down here. `sha256sum public/css/app.min.css | cut -c1-12`
-in the tree you built it from is the other half of that check, and the two
-agreeing is how you confirm test is running the branch you think it is.
+makes this a useful check rather than a constant). No digest is quoted for the
+current build on purpose: it changes with every frontend merge, and a value
+written here goes stale faster than anyone rereads it.
+`sha256sum public/css/app.min.css | cut -c1-12` in the tree you built from is
+the other half of the check, and the two agreeing is how you confirm an
+instance is running the commit you think it is.
 
 ## Which container actually answers which URL
 
@@ -179,24 +197,30 @@ unverified.
 
 ## Image tags
 
-Dev and prod images are tagged with the 8-character `agr_sequenceserver` `main`
-commit they were built from: `git rev-parse --short=8 HEAD`. That is the whole
-convention, and it is the only record of what is deployed. Test uses the
-floating tag `agr-blast:restyle`, rebuilt in place from whatever working branch
-is under review, so its tag tells you nothing about its contents — check the
-image id or the asset fingerprint instead.
+Images are tagged with the 8-character `agr_sequenceserver` `main` commit they
+were built from: `git rev-parse --short=8 HEAD`. That is the whole convention,
+and it is the only record of what is deployed. All three instances carry a
+commit tag now; the floating `agr-blast:restyle` tag that test used to run is
+gone, and the procedure below builds one image for all three. Use a floating
+tag only for a branch that is not on `main`, and check the image id or the
+asset fingerprint rather than the tag when you do.
 
 You can check a tag rather than trust it. The bundle inside the image matches
 the one committed at that commit, so:
 
 ```bash
-docker run --rm --entrypoint sh agr-blast:fda1db1f \
+docker run --rm --entrypoint sh agr-blast:72efdceb \
   -c 'md5sum /sequenceserver/public/sequenceserver-search.min.js'
-# 11885c7e9d53425616eb91aade1eaf79
+# 0db2c206137697a6e89a2bb394b52ab4
 
-git show fda1db1f:public/sequenceserver-search.min.js | md5sum
-# 11885c7e9d53425616eb91aade1eaf79
+git show 72efdceb:public/sequenceserver-search.min.js | md5sum
+# 0db2c206137697a6e89a2bb394b52ab4
 ```
+
+Worth running in the other direction too, before the build: `npm run build` on
+a clean `main` must leave `git status` clean. If it does not, the committed
+bundles are not the source's, and the image will carry whichever the build
+produced rather than what was reviewed.
 
 ## Rebuilding and redeploying an instance
 
@@ -252,27 +276,36 @@ docker build . -t agr-blast:$TAG
 
 ### prod
 
-**Production was released onto `agr-blast:8c8bcba4` on 2026-10-11**, so the
-steps below are a record of what was run as much as instructions for next time.
-Check any tag written here against `git rev-parse --short=8 main`: two tags in
-this file went stale within two days while that release was being prepared.
+**Production runs `agr-blast:72efdceb`, released 2026-10-15.** The steps below
+are a record of what was run as much as instructions for next time. Check any
+tag written here against `git rev-parse --short=8 main`: four went stale inside
+a week while these releases were being prepared.
 
-What the release did, in order, and what it measured:
+The last release, in order, and what it measured:
 
 | step | result |
 |---|---|
-| `docker cp` of the job history | 1,841 of 1,841 `job.yaml`, 3.6 GB |
-| `cp -a config-dev/. config/` | the two trees identical afterwards |
-| recreate on `8c8bcba4` | up in 5 s |
-| an old job URL | HTTP 200, and 3 more at random |
-| `test/manual/smoke-test.sh` | 55 passed, 0 failed |
-| one cross-species ALLIANCE search | 152 hits, 152 links, 0 wrong |
+| `npm run build` on clean `main` | all three bundles byte-identical to what is committed |
+| `docker build -t agr-blast:72efdceb` | 1.76 GB, two bundles md5-matched against the repo |
+| recreate test and dev | up in 5 s |
+| `test/manual/smoke-test.sh` on 4570 | 57 passed, 0 failed |
+| `npx playwright test` on 4570 | 111 passed |
+| baseline a prod job URL | HTTP 200, 3,041 job directories |
+| `docker stop` and rename to `agr-blast-prod-pre-72efdceb` | kept for rollback |
+| recreate prod on `72efdceb` | up in 5 s |
+| the same job URL, and the count | HTTP 200, 3,041 unchanged |
+| `test/manual/smoke-test.sh` on 4568 | 57 passed, 0 failed |
 
-The job rescue is the step that now needs no repeating: new jobs land in
-`/var/sequenceserver-data/jobs-prod`, which the container mounts, so the next
-redeploy can skip it. It mattered this time because the count had grown from
-1,758 on 2026-10-09 to 1,841 by the release, and the earlier snapshot would
-have lost 83 jobs.
+The job rescue two releases ago is the step that needs no repeating. New jobs
+land in `/var/sequenceserver-data/jobs-prod`, which the container mounts, so
+the writable layer holds none. Verified before the 2026-10-15 cleanup:
+`docker diff` on all six parked `agr-blast-prod-pre-*` containers reported zero
+changes each, so none of them was holding a job anyone could still reach.
+
+**`:job_lifetime` is 129,600, and the unit is minutes.** `job_remover.rb:16`
+multiplies by 60, so that is 90 days, raised from 43,200 (30 days) in #55. A
+result URL someone shared survives a redeploy and three months, not the 12
+hours an earlier version of this file claimed.
 
 **Promote the config in the same window.** Production reads
 `/var/sequenceserver-data/config`, which is behind `config-dev` twice over: its
@@ -296,15 +329,16 @@ So forgetting the copy costs 146 links and breaks nothing. Doing the copy
 without the new image is the combination to avoid: the older code ignores
 `ref_name` and answers `Chr1` for rat, which GRCr8 does not contain.
 
-**Rescue the job history first.** Until the `jobs-prod` volume below exists,
-prod keeps its jobs in `/root/.sequenceserver` *inside the container's writable
-layer*, so the `docker rm -f` that starts a redeploy deletes every one of them.
-Each is a result URL someone may have shared or bookmarked; at the last count
-there were 1,758 of them, 3.6 GB. They do not come back.
+**The job rescue is historical, and the reason is worth keeping.** Before the
+`jobs-prod` bind mount existed, prod kept its jobs in `/root/.sequenceserver`
+*inside the container's writable layer*, so the `docker rm -f` that the
+documented procedure opened with deleted every one of them. Each is a result
+URL someone may have shared; there were 1,841 of them, 3.6 GB, by the release
+that rescued them. The rescue was:
 
 ```bash
-# Point-in-time copy, so run it IMMEDIATELY before the swap -- anything
-# submitted after this runs and before the container stops is lost.
+# Point-in-time copy, so it had to run IMMEDIATELY before the swap -- anything
+# submitted after it ran and before the container stopped was lost.
 mkdir -p /var/sequenceserver-data/jobs-prod
 docker cp agr-blast-prod:/root/.sequenceserver/. /var/sequenceserver-data/jobs-prod/
 
@@ -313,8 +347,19 @@ docker exec agr-blast-prod sh -c 'find /root/.sequenceserver -name job.yaml | wc
 find /var/sequenceserver-data/jobs-prod -name job.yaml | wc -l
 ```
 
-Then recreate, with that directory mounted so the next redeploy needs no rescue
-at all:
+Run it only against a prod container that has no `jobs-prod` mount, which
+`docker inspect` will tell you. Against the current one it copies the mount
+onto itself.
+
+Record a job id and the directory count anyway, as a before-and-after on the
+redeploy rather than a rescue:
+
+```bash
+JID=$(sudo ls -t /var/sequenceserver-data/jobs-prod | head -1)
+sudo ls /var/sequenceserver-data/jobs-prod | wc -l
+```
+
+Then recreate, with that directory mounted:
 
 ```bash
 # Keep the old container rather than deleting it, so rollback is a rename.
@@ -373,21 +418,34 @@ docker run -d --name agr-blast-dev \
 
 ### test
 
-Built from the branch under review, tagged `restyle`, and with **no** `HTTPS`
-variable so the page is usable over `http://172.31.3.193:4570`:
+Same image as dev and prod, and with **no** `HTTPS` variable so the page is
+usable over `http://172.31.3.193:4570`. That absence is what makes test the
+only instance the browser suite can be pointed at:
 
 ```bash
-git checkout <branch>
-docker build . -t agr-blast:restyle
-
 docker rm -f agr-blast-restyle
 docker run -d --name agr-blast-restyle \
   -p 4570:4567 \
   -v /var/sequenceserver-data/blast:/db \
   -v /var/sequenceserver-data/config-dev:/sequenceserver/public/environments \
-  agr-blast:restyle \
+  agr-blast:$TAG \
   sequenceserver -c /sequenceserver/public/configs/sequenceserver.conf
 ```
+
+For a branch that is not on `main`, build it under a name that cannot be
+mistaken for a release tag and deploy only test from it:
+
+```bash
+git checkout <branch>
+docker build . -t agr-blast:branch-<name>
+```
+
+**A `docker cp` of a bundle into a running test container shortens the loop and
+costs you the tag.** It works, and the instance is then ahead of its own
+image, so the next person to read the tag is told something false. It was done
+several times while the Phase 3 branches were under review, and the fix each
+time was to rebuild and recreate before trusting any measurement. If you do
+it, say so, and rebuild before the instance is handed to anyone else.
 
 Those three `docker run` lines were reconstructed from `docker inspect` of the
 containers running now, not copied from a script, because no script produces
@@ -397,8 +455,8 @@ The tag is only as honest as the working tree. `docker build` sends the working
 tree, not the commit, so building with a dirty tree produces an image tagged
 with a commit it does not contain — and since the tag is the only record of what
 is deployed, that is a lie you cannot detect later. Check `git status` before
-building for dev or prod, and keep the floating `restyle` tag for anything that
-is not a clean checkout of `main`.
+building for dev or prod, and name a branch build `agr-blast:branch-<name>`
+rather than giving it a commit tag it does not contain.
 
 `NODE_ENV=production` on prod is inherited from `deploy.sh` and does nothing at
 runtime: nothing under `lib/`, `views/` or `config.ru` reads it, the only
@@ -407,16 +465,19 @@ webpack runs, which is not in a running container. It is listed anyway because
 it is what prod actually has, and a redeploy that silently drops an environment
 variable is the kind of difference nobody later believes was accidental.
 
-A redeploy loses that container's job history. Finished jobs live inside the
-container at `/root/.sequenceserver`, not on the shared volume, with a 12-hour
-`:job_lifetime` (`public/configs/sequenceserver.conf`), so every result URL
-anyone is holding against that instance stops resolving.
+A redeploy of **test or dev** loses that container's job history, and only
+prod is spared. Their finished jobs live inside the container at
+`/root/.sequenceserver`, not on the shared volume, so every result URL anyone
+holds against test or dev stops resolving when it is recreated. Prod mounts
+`/var/sequenceserver-data/jobs-prod` there instead. `:job_lifetime` is 129,600
+minutes, 90 days (`public/configs/sequenceserver.conf`), so on prod a shared
+URL now outlives both the deploy and the quarter.
 
-Rolling back is the same `docker run` with the previous tag, and it works
-because the images are kept: the local registry currently holds 19
-`agr-blast:<sha>` tags (17 distinct images — two pairs of shas point at one
-image each) plus four named tags, going back two weeks, `agr-blast:fda1db1f`
-among them.
+Rolling back is the same `docker run` with the previous tag, and it works as
+long as that image is still on the host. The registry holds two after the
+2026-10-15 cleanup: `72efdceb`, which everything runs, and `6772fbc8` to roll
+back to. One previous tag is the policy; the alternative was 19 of them, and
+clearing the surplus took `docker system df` from 12.38 GB to 5.04 GB.
 Code rolls back cleanly this way. Data does not roll back at all — see the
 `copy_to_production` section at the end.
 
@@ -442,11 +503,15 @@ curl -s 'http://localhost:4569/blast/SGD/R64-5-1m/gene_search?q=act1' | head -c 
 Third, the HTTP smoke suite and the browser suite:
 
 ```bash
-bash test/manual/smoke-test.sh http://localhost:4569     # 50 passed, 0 failed
-npx playwright test                                      # 83 tests, 83 passed (2.5m)
+bash test/manual/smoke-test.sh http://172.31.3.193:4570  # 57 passed, 0 failed
+E2E_BASE_URL=http://172.31.3.193:4570 npx playwright test  # 111 passed (8.1m)
 ```
 
-The browser suite asserts on UI copy, so "83 passed" holds only when the spec
+Both figures are from the 2026-10-15 release against test at `72efdceb`. The
+smoke suite grew from 50 to 57 as checks were added for the ALLIANCE
+deployment and its manifest entry; the browser suite from 83 to 111.
+
+The browser suite asserts on UI copy, so "111 passed" holds only when the spec
 files and the instance are the same commit. Run a feature branch's specs against
 dev and you get failures that are not bugs: a branch that reworded the gene
 search hint also reworded `test/e2e/gene_search.spec.js:187`, which then fails
@@ -464,14 +529,21 @@ deploy it to test or dev, run the browser suite there, and only then redeploy
 prod from the same image and verify prod with the two curl checks and
 `smoke-test.sh`.
 
-Both of the numbers above are from runs made while writing this file, against
-dev at `73e4a38a` with a `73e4a38a` checkout. `test/e2e/README.md:88` still says
-64 tests with one known failure. `npx playwright test --list` now reports 83 in
-8 files; the gap over the 64 static `test(` blocks is data-driven specs, where
-`cross_mod.spec.js`'s 5 declarations list as 17 tests. The known failure — SGD
-fungal offering examples for databases the fungal release does not have — is
-fixed: `examplesForCurrentMod` filters the offered examples against the
-databases the deployment actually returned (`public/js/examples.js:95-104`).
+`npx playwright test --list` reports **111 tests in 14 files** as of
+2026-10-16, against 85 static `test(` blocks; the gap is data-driven specs,
+where `cross_mod.spec.js`'s 5 declarations list as 17 tests.
+`test/e2e/README.md:88` still says 64 tests with one known failure, and both
+halves of that are stale. The known failure — SGD fungal offering examples for
+databases the fungal release does not have — is fixed: `examplesForCurrentMod`
+filters the offered examples against the databases the deployment actually
+returned (`public/js/examples.js:95-104`).
+
+Three of the 14 files are slow enough to notice, because they run real BLAST
+jobs: `alliance_species.spec.js` takes 6.2 minutes and `organism_filter.spec.js`
+about 3. A nine-genome `tblastn` for human ACTB takes **4m56** on this host,
+past the suite's 180s BLAST timeout, which is why no spec runs one; the
+per-organism distribution over all nine is measured through the JSON API
+instead and recorded in `docs/ALLIANCE_WIDE_PLAN.md`.
 
 ## Running the test suites
 
@@ -494,7 +566,7 @@ it fails, the harness is broken; stop and fix the URL before reading any other
 failure.
 
 Pointing it at an instance is the whole point of the variable. To review a branch
-you build it as `agr-blast:restyle`, redeploy test, and run the suite with
+you build it as `agr-blast:branch-<name>`, redeploy test, and run the suite with
 `E2E_BASE_URL=http://172.31.3.193:4570` — the test instance is the only one
 without `HTTPS=on`, so it is the only one a plain-HTTP base URL works against,
 and the only one you can drive without a certificate. Confirmed working:
@@ -520,27 +592,33 @@ bundled Chromium — `npx playwright install` is unnecessary here and may fail.
 npm test
 ```
 
-At `73e4a38a`: 7 suites, 34 tests, **2 failing**, in about 11 seconds. The
-totals move with whatever spec files a branch adds or deletes — the
-`harden-request-handling` branch deletes `cloud_share_modal.spec.js` and so
-reports 6 suites and 30 tests — but the two failures are the durable part. They
-are pre-existing and unrelated to deployment:
+At `72efdceb`: 7 suites, 38 tests, **1 failing**, in about 11 seconds. The
+totals move with whatever spec files a branch adds or deletes, but the one
+failure is the durable part, and it is a node version difference rather than a
+defect:
 
 ```
-FAIL public/js/tests/form.spec.js    PARAMETERS › should render the link to advanced parameters modal…
 FAIL public/js/tests/report.spec.js  REPORT PAGE › SIDEBAR › DOWNLOAD LINKS › ALIGNMENT DOWNLOAD › …
-                                     TypeError: errCallback is not a function   (public/js/report.js:91)
 ```
 
-PR #24's commit message records the same two suites failing identically with its
-changes stashed, so this is the state of the repository, not a regression. A
-clean `npm test` is not currently the bar; "still exactly these two" is.
+**It passes on CI and fails here.** CI runs node 22, this host has node 18, so
+a local `npm test` shows one failure the pull request does not. The bar locally
+is "still exactly this one"; the bar on CI is zero.
+
+The `form.spec.js` failure this file used to pair it with is fixed, as is the
+behaviour behind it: the advanced-parameters link is not offered until an
+algorithm is known, which `test/e2e/advanced_options.spec.js` now asserts in a
+browser as well.
 
 ### RSpec
 
-The suite passes: **362 examples, 0 failures**. It did not until recently, and
-the history is worth keeping, because most of the failures were specs that a
-fork-wide change left behind rather than anything broken in the app.
+The suite passes: **376 examples, 0 failures**, measured at `72efdceb` in
+`agr-blast:6772fbc8`. It did not until recently, and the history is worth
+keeping, because most of the failures were specs that a fork-wide change left
+behind rather than anything broken in the app.
+
+214 of the 376 come from `spec/blast_versions`; see "`spec/blast_versions/` is
+live coverage" below before excluding it.
 
 **There is no Ruby on the host.** No `ruby`, `gem`, `bundle` or `rspec` on
 `PATH`, nothing under `/opt` or `/usr/local`, no ruby RPM installed. The suite
@@ -556,13 +634,13 @@ installs no development gems either. Unset it and mount the working tree:
 
 ```bash
 cd /home/ec2-user/gitroot/pull-upstream/agr_sequenceserver
-docker run --rm -v "$PWD:/work" -w /work --entrypoint bash agr-blast:effcac18 -c '
+docker run --rm -v "$PWD:/work" -w /work --entrypoint bash agr-blast:72efdceb -c '
   bundle config unset without
   bundle install --quiet
   bundle exec bin/sequenceserver -s -d spec/database/v5/sample
   bundle exec rspec spec
 '
-# 362 examples, 0 failures
+# 376 examples, 0 failures
 ```
 
 The `bin/sequenceserver -s -d spec/database/v5/sample` line is not optional and
@@ -747,6 +825,8 @@ The HTTP smoke suite measures the gap directly:
 ```
 bash test/manual/smoke-test.sh http://localhost:4569     # 50 passed, 0 failed     (dev)
 bash test/manual/smoke-test.sh http://localhost:4568     # 47-48 passed, 2-3 failed (prod)
+# Measured while the gap was open. Both answer 57 of 57 now, and the suite has
+# grown from 50 checks to 57.
 ```
 
 Two of prod's failures are deterministic: "SGD fungal defline handling" and
@@ -773,9 +853,9 @@ its `docker cp` step**, then the job-id curl, the two curl checks and the smoke
 suite against `http://localhost:4568`, and expect 50/0.
 
 Build the image ahead of time and the deploy window is only as long as a
-container restart: `agr-blast:effcac18` is already built, and is the same image
-id as `agr-blast:restyle`, so the test instance on 4570 has been exercising
-exactly this code.
+container restart. Deploy the same image to test first and run the suites
+there, which is how every release since has been done: the test instance on
+4570 is then exercising exactly the code prod is about to run.
 
 ## The hazard that will take a MOD offline: `copy_to_production`
 
@@ -891,26 +971,35 @@ whole-directory replacement is neither.
 The other side of the shared volume — how a release is declared, built and
 indexed — is `docs/ALLIANCE_BLAST_OVERVIEW.md` and
 `agr_blastdb_manager/docs/PIPELINE.md`. How the app serves it is
-`docs/ARCHITECTURE.md`, and the gene search box that prod is missing is
-`docs/GENE_SEARCH.md`. The outstanding data defects (ALLIANCE/prod serving one
-database instead of its full set; ZFIN GRCz11 built without `-parse_seqids`;
-ZFIN and RGD deflines carrying no gene symbols, so gene search cannot answer for
-them) are in `docs/ALLIANCE_WIDE_PLAN.md` and
-`agr_blastdb_manager/docs/alliance_2024_build_failure.md`.
+`docs/ARCHITECTURE.md`, and the gene search box is `docs/GENE_SEARCH.md`. The
+outstanding data defects are in `docs/ALLIANCE_WIDE_PLAN.md` and
+`agr_blastdb_manager/docs/alliance_2024_build_failure.md`. Two of the ones
+this section used to list are closed: ALLIANCE serves all nine of its declared
+genomes since #63, and ZFIN's zebrafish is built on GRCz12tu. Still open and
+not ours to fix: ZFIN and RGD deflines carry no gene symbols, so gene search
+cannot answer for them, ZFIN ships no protein databases, and three ZFIN URIs
+404.
 
-Two things are left explicitly unverified: whether a host reboot restores prod,
-given `docker.service` is disabled, and whether the 41 non-fork RSpec failures
-are genuine.
+One thing is left explicitly unverified: whether a host reboot restores prod,
+given `docker.service` is disabled. The 41 non-fork RSpec failures this
+section also listed are resolved; the suite is 376 of 376.
 
 On disk headroom, since everything above shares one filesystem. Read it with
 `df -h /` and `docker system df` rather than trusting a figure here — every
-build moves it. On 2026-10-02: `/` is 250 GB with 80 GB free,
-`/var/sequenceserver-data/blast` accounts for 82 GB of the 171 GB used, and
-`docker system df` reports 47 images totalling 16.68 GB of which 16.54 GB (99%)
-is reclaimable, plus 415.2 MB of build cache. An 8.5 GB `copytree` of FB2026_03
-fits comfortably today; a few more releases, or a few more `agr-blast:<sha>`
-tags, and it will not. `docker image prune` is the cheap lever, and the only
-tags worth keeping are the ones a container is using plus the previous prod tag
-to roll back to; the build cache is separate and needs `docker builder prune`,
-which `docker image prune` will not touch. There is also a stale container `sstest`, created 2025-08-18 from
-an image `agr-seqserv-test` and never started.
+build moves it. On 2026-10-16, after the cleanup: `/` is 250 GB with 74 GB
+free, `/var/sequenceserver-data/blast` accounts for most of the 177 GB used,
+and `docker system df` reports 5 images totalling 5.04 GB, 3 containers and an
+empty build cache. On 2026-10-02 the same command reported 47 images and
+16.68 GB, of which 99% was reclaimable.
+
+An 8.5 GB `copytree` of FB2026_03 fits today; a few more releases and it will
+not. `docker image prune` is the cheap lever, and the only tags worth keeping
+are the one each container is using plus the previous prod tag to roll back
+to. The build cache is separate and needs `docker builder prune`, which
+`docker image prune` will not touch.
+
+A parked `agr-blast-prod-pre-<tag>` container is free to delete once the new
+one is trusted, but check it first: before the `jobs-prod` bind mount existed,
+such a container held the only copy of its job history. `docker diff
+<container>` reporting zero changes is the proof that it holds nothing, and
+that is what all six were on 2026-10-15.

@@ -210,6 +210,25 @@ report with thousands of alignments; past 250 cycles it sets `veryBig`, which
 child components use to drop the expensive parts. Per-hit link generation
 (below) happens server-side during `to_json`, not here.
 
+That batching constrains anything added to the report afterwards. The elements
+it creates go into its own state, so a prop added to `Hits` never reaches a hit
+already on the page, and the rendered list is flat: query, hit and HSP elements
+are siblings in one array, in BLAST's rank order. Both facts show up in the
+per-organism filter. Each organism in the result summary is a switch, and it
+works by a `data-organism` attribute on the hit and HSP elements plus one CSS
+rule per hidden organism (`report.js`, `organismFilterCSS`), rather than by
+threading state down. Grouping the list by organism would mean rewriting this
+renderer, which is why the counts and the switches exist instead.
+
+Two notices sit above the list, and the distinction between them matters.
+`organismSummaryJSX` says which organisms answered and with how many hits, and
+renders only where more than one did. `incompleteResultNoticeJSX` says the
+result is missing alignments, and fires only when databases in one search share
+sequence ids: BLAST reports such a sequence once, so the others' alignments
+never reach the output and nothing in BLAST's output says so. The notice names
+the databases rather than the absent organisms, because "no hits in *Mus
+musculus*" is the one thing that is false in that situation.
+
 ## Per-request databases, and the bug that forced thread-local state
 
 Four facts combine into the interesting part of this design. The server is
@@ -695,8 +714,9 @@ Appending `?loc=` to that would have produced a URL with two query strings.
 The **JBrowse 1** branch builds `addFeatures`/`addTracks` instead, and overrides
 the configured track list with `["Gene_span", "RNA"]` for any FlyBase URL
 (`links.rb:489-495`). It is dead code in the current deployment: each of
-`/var/sequenceserver-data/config` and `config-dev` holds 272 `genome_browser`
-blocks, and every single one of them is `"type": "jbrowse2"`. The branch is also
+`/var/sequenceserver-data/config` and `config-dev` holds 280 `genome_browser`
+blocks as of 2026-10-16, and every single one of them is `"type": "jbrowse2"`.
+It was 272 before ALLIANCE/9.1.0 gained its nine. The branch is also
 the fragile one — `tracks` is `join`ed
 without a nil check (`links.rb:494`), which would raise on a config entry that
 omits it, and no deployed entry does.
@@ -894,11 +914,30 @@ hidden checkboxes but leaves jstree showing nothing selected — and because the
 tree's own handler rebuilds state from jstree, the next click on any node
 silently undid it.
 
-Auto-expansion (`databases_tree.js:135-273`) opens the reference species' genus
-and species nodes on WormBase, FlyBase, RGD, SGD's fungal set and ZFIN, so that
-the tree does not open on a hundred collapsed clades. It identifies the MOD by
-hostname, URL path, or the `alt`/`src` of a logo image, and runs 500 ms after
-`ready.jstree`.
+The whole tree opens on `ready.jstree` (`databases_tree.js:204`). This
+replaced 140 lines that opened one privileged species per MOD by matching node
+text against hardcoded names, identifying the MOD by hostname, URL path, or the
+`alt`/`src` of a logo image. Every deployment that list did not name was left
+fully collapsed, ALLIANCE among them, and a renamed species silently stopped
+matching. Opening everything needs no such list, and is affordable because
+`Database#display_categories` dropped the leaf that repeated its parent: a
+database sits two levels down rather than four, and the largest deployment is
+FlyBase at 200 nucleotide rows.
+
+Search accepts common names as well as node text
+(`databases_tree.js:130`, `nodeMatchesQuery`). The tree's folders are Latin
+binomials and its leaves are build titles, so jstree's own node-text search
+answered nothing for "zebrafish", "worm" or "mouse". The table is
+`public/configs/common_names.json`, 40 names over 129 patterns; text matching
+runs first, and the table is consulted only when text misses and the query is
+3 characters or longer. `show_only_matches` filters rather than tinting, and
+`show_only_matches_children` is what carries a matched species folder's
+databases with it. A query matching nothing is handled separately
+(`handleSearchMiss`, `:276`), because jstree's filter acts only when something
+matched and would otherwise leave the whole tree on display.
+
+`[Expand all]` and `[Collapse all]` (`renderExpansionControls`, `:364`) render
+only where some node has children.
 
 ## Configuration
 
@@ -908,20 +947,27 @@ exist.
 **`public/configs/sequenceserver.conf`** is the server config the containers
 actually load. It sets `:host`, `:port`, `:databases_widget: tree`,
 `:database_dir: "/db"`, `:num_threads: 1`, `:num_jobs: 1`,
-`:job_lifetime: 43200` and `:options` — the advanced-parameter presets per BLAST
-method. `:job_lifetime` is in **minutes** (`JobRemover` multiplies it by 60 at
-`lib/sequenceserver/job_remover.rb:16`), so 43200 is 30 days, not 12 hours; a
-finished job directory under `~/.sequenceserver/` survives that long.
+`:job_lifetime: 129600` and `:options` — the advanced-parameter presets per
+BLAST method. `:job_lifetime` is in **minutes** (`JobRemover` multiplies it by
+60 at `lib/sequenceserver/job_remover.rb:16`), so 129,600 is 90 days; a
+finished job directory under `~/.sequenceserver/` survives that long. It was
+43,200, 30 days, until #55. On production that directory is a bind mount from
+`/var/sequenceserver-data/jobs-prod`, so the lifetime is the only thing that
+removes a result, and a redeploy is not.
 Each preset is a `:description` plus an `:attributes` list, and they are what
 populate the Options dropdown; all five methods currently default to
 `-evalue 1e-5 -max_target_seqs 100`, with `blastn` offering a second
-`short-seq` preset at `-task blastn-short -evalue 1e-1`. `:database_dir` reads
-like the most important key here and is in fact inert in the server: the only
-code that consumed it was `init_database`, which is no longer called. What
-remains is bookkeeping — `Config#normalize` renames a legacy `:database` key
-into it (`lib/sequenceserver/config.rb:66-68`) so very old config files keep
-loading. The real root is the literal `/db` that `database_dir_for` joins
-(`routes.rb:565`). The only other code that would read `:database_dir` is
+`short-seq` preset at `-task blastn-short -evalue 1e-1`. `:database_dir` is live, and an
+earlier version of this section called it inert on the strength of
+`init_database` not being called. Both halves changed: the `init_database`
+call was restored in #42, where it validates `database_dir` and fixed 27 spec
+failures, and `database_dir_for` now joins `SequenceServer.config[:database_dir]`
+(`routes.rb:601`) instead of a literal `/db`. Five hardcoded container paths
+were removed across #43, #51 and #52; each had degraded silently rather than
+failing, because the config readers fall back to an empty config, which is
+also what a release with no `environment.json` legitimately has.
+`Config#normalize` still renames a legacy `:database` key into it
+(`lib/sequenceserver/config.rb:66-68`) so very old config files keep loading. The only other code that would read `:database_dir` is
 `bin/sequenceserver`'s interactive database-formatting flow, and that is itself
 broken: it reaches the directory only through `SequenceServer.makeblastdb`,
 which no longer exists. The `conf/*.conf` files are the old per-MOD configs and
@@ -946,10 +992,12 @@ separate things read it:
 - the entries' `uri` fields, which are how a hit's database is matched to a
   config entry at `hit.rb:116`.
 
-Every one of the 272 `genome_browser` blocks in each config directory is
-`jbrowse2`. Only a small minority of entries carry a block at all — 10 of SGD's
-183 main-set entries, 1 of FlyBase's 200 — which is why most hits get no genome
-browser link and that is not a fault.
+Every one of the 280 `genome_browser` blocks in each config directory is
+`jbrowse2`. How many entries carry one varies by deployment, and for most it is
+a small minority: 10 of SGD's 183 main-set entries, 2 of its 312 fungal ones,
+1 of FlyBase's 200, 31 of WormBase WS298's 63. ALLIANCE is the exception at 9
+of 9, which is what #62 and #63 were for. Most hits therefore get no genome
+browser link, and that is not a fault.
 
 **`public/configs/database_order.json`** controls only how the jstree node list
 is sorted, and only for the two MODs it names. It is sent to the client inside
@@ -963,12 +1011,27 @@ strains ahead of other strains, and genomic DNA ahead of ORFs ahead of RNA; RGD
 uses it to put GRCr8 ahead of mRatBN7. No other MOD has an entry, so no other
 MOD gets a custom sort.
 
+**`public/configs/common_names.json`** is the table the database tree searches
+on when node text misses: 40 common names mapped to 129 substrings matched
+against a node's label. It is imported into the search bundle at build time
+rather than served, so it costs no request. Every pattern in it matches at
+least one of the 910 labels this host serves, which `databases_tree.spec.js`
+asserts, so a pattern that stops matching fails the suite rather than going
+quiet.
+
 **`public/configs/examples`** does not exist — example sequences are in the
 bundle, as a literal table in `public/js/examples.js`. Each entry names its
 database by *title*, not id, and the set is filtered against the databases the
 deployment actually loaded before anything is offered. Without that filter an
 example whose database is absent fills the query box and selects nothing,
 leaving the user with a disabled search button and no explanation.
+
+An entry may also set `selectDatabase: false`, and the Alliance one does.
+`handleExampleSelected` returns early on it (`form.js`), so the example fills
+the query box and touches no selection. A deployment that exists to search
+across nine genomes should not pick one of them for you, and the previous
+example picked zebrafish, which also discarded whatever the user had already
+ticked.
 
 ## The gene search box
 

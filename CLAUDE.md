@@ -74,7 +74,7 @@ Two webpack entry points produce two bundles:
 ```
 Page (search.js) → Form (form.js)
   ├── SearchQueryWidget (query.js)     — textarea + sequence type detection
-  ├── DatabasesTree (databases_tree.js) — JSTree widget with MOD-specific auto-expansion
+  ├── DatabasesTree (databases_tree.js) — JSTree widget, open on load, searchable by common name
   ├── Options (options.js)             — e-value, max hits, task dropdowns
   └── SearchButton (search_button.js)
 ```
@@ -95,7 +95,7 @@ Page (report_root.js) → Report (report.js)
 
 - **JBrowse links** (`lib/sequenceserver/links.rb`): MOD-specific chromosome extraction (WormBase Roman numerals, FlyBase arm names, RGD ChrN format). Generates links for both JBrowse 1 and JBrowse 2. Gene-level links use `jbrowse-nclist-cli`.
 - **Database ordering** (`public/configs/database_order.json`): Sort rules for SGD strains/types and RGD assembly versions
-- **JSTree auto-expansion** (`public/js/databases_tree.js`): Auto-opens the relevant species node based on URL MOD segment
+- **Database tree** (`public/js/databases_tree.js`): opens every node on load, and searches on common names from `public/configs/common_names.json` as well as node text. It used to open one privileged species per MOD from a hardcoded list, which left every deployment the list did not name collapsed.
 - **Task dropdown defaulting** (`public/js/options.js`): Defaults to match selected BLAST method
 - **Layout** (`views/layout.erb`): Alliance branding, dynamic MOD logos from `alliancegenome.org` asset manifest, BETA ribbon, citation text
 - **HTTPS detection**: Custom logic for `alliancegenome.org` deployments behind proxies (checks `HTTP_X_FORWARDED_PROTO`)

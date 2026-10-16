@@ -85,13 +85,21 @@ Corollary: **never hardcode a host in a spec.** Use a path relative to
 
 ## Current status
 
-Last full run against dev: **64 tests — 63 passed, 1 failed, 2.1 minutes.**
+Last full run, 2026-10-15 against test at `72efdceb`: **111 tests in 14 files,
+111 passed, 8.1 minutes.** Point it at test on 4570, never at dev or prod over
+plain HTTP, for the reason above.
 
-`npm run test:e2e` currently **exits non-zero, and that is correct**: the one
-failure is a real product bug, not a broken test. Do not "fix" it by loosening
-the assertion.
+Three files carry most of the time, because they run real BLAST jobs:
+`alliance_species.spec.js` at 6.2 minutes and `organism_filter.spec.js` at
+about 3. No spec runs a nine-genome `tblastn`: that takes 4m56 on this host,
+past `BLAST_TIMEOUT` of 180s. The per-organism distribution over all nine is
+measured through the JSON API and recorded in `docs/ALLIANCE_WIDE_PLAN.md`.
 
-### Known failure: SGD fungal offers examples for databases it does not have
+`npm run test:e2e` exits zero. It did not when this file was written, and the
+failure it described is fixed, so the paragraph telling you not to "fix" the
+failure by loosening the assertion no longer applies to anything.
+
+### Fixed: SGD fungal offered examples for databases it does not have
 
 ```
 cross_mod.spec.js › SGD (fungal): every offered example names a database this deployment has
@@ -99,26 +107,23 @@ cross_mod.spec.js › SGD (fungal): every offered example names a database this 
   do not exist in this deployment
 ```
 
-`examplesForCurrentMod()` in `public/js/examples.js` keys the table on the MOD
-segment alone:
+`examplesForCurrentMod()` keyed the table on the MOD segment alone, so
+`/blast/SGD/R64-5-1f/` was served the R64-5-1m examples, which target
+`ORF_coding` and `Protein_sequences`. The user clicked the example, got a
+sequence, and was left with a greyed-out submit button and no explanation.
 
-```js
-const segment = window.location.pathname.split('/')[2];   // "SGD" — version ignored
-return EXAMPLES[segment.toUpperCase()] || [];
-```
+It now filters the offered examples against the databases the deployment
+actually returned (`public/js/examples.js:95-104`), and the fungal set has
+entries of its own. Kept here because the shape of the bug is worth
+recognising: an examples table keyed on less than the full URL will do this
+again on the next deployment that shares a MOD code.
 
-So `/blast/SGD/R64-5-1f/` is served the R64-5-1m examples, which target
-`ORF_coding` and `Protein_sequences` — databases that exist only in R64-5-1m.
-Measured on dev:
+### One thing a spec cannot assert
 
-| Path                   | Query box filled | Databases selected | Submit  |
-| ---------------------- | ---------------- | ------------------ | ------- |
-| `/blast/SGD/R64-5-1m/` | 915 chars        | 1                  | enabled |
-| `/blast/SGD/R64-5-1f/` | 915 chars        | **0**              | **disabled** |
-
-The user clicks the example, gets a sequence, and is left with a greyed-out
-submit button and no explanation. Fixing it means either keying examples on
-`MOD + version` or giving the fungal deployment its own entry.
+A `docker cp` of a bundle into the running test container leaves the instance
+ahead of its own image. Every number above was taken after a rebuild and a
+`docker run`, not after a `docker cp`, and that distinction cost a morning
+while the Phase 3 branches were under review.
 
 ### Known bug, annotated rather than failing
 
@@ -150,6 +155,12 @@ is unaffected — `blast_params` is correct; it is only the UI that lies.
 | `routing.spec.js`       | Permanent URLs and aliases (`/blast/SGD/` → current release, `/yeast/` → R64-5-1m, `/fungal/` → R64-5-1f) and `?name=` deep links, including gene symbols and case-insensitivity. |
 | `results_links.spec.js` | Real BLAST results: NCBI `/nuccore/` vs `/protein/` routing, SGD JBrowse linkouts with Roman-numeral chromosomes, and the sequence-viewer modal. |
 | `cross_mod.spec.js`     | Every deployment (WB, FB, SGD ×2, RGD, ZFIN, ALLIANCE) boots, shows its own branding and logo, renders correctly typed databases, and throws nothing; WormBase hits carry no bogus NCBI link. |
+| `gene_search.spec.js`   | The gene box: an ambiguous symbol lists every organism that has it and choosing one loads that organism rather than the first match; a partial symbol finds what starts with it, with the exact match first; a symbol keeps the source database's own capitalisation; one database cannot crowd out the others; a symbol nothing carries says so. |
+| `database_tree_shape.spec.js` | The tree arrives open and two deep on ALLIANCE, WB and SGD, and the Alliance example fills the box, selects nothing, leaves an existing selection alone, and resolves to `tblastn`. |
+| `database_tree_search.spec.js` | Searching the tree in English: each of eight common names finds its own Alliance genome, "worm" reaches all 32 WormBase databases through their species folders, a miss hides the tree and names the query, and `[Expand all]` / `[Collapse all]` drive the whole tree. |
+| `header_member_link.spec.js` | The header logo's href on all seven deployments, and that none links a `/members/<UPPERCASE>` path built from its URL segment. |
+| `alliance_species.spec.js` | A hit names its organism, and a result is called incomplete only when ids genuinely collide. Slow: 6.2 minutes, real BLAST. |
+| `organism_filter.spec.js` | Switching one organism out of a cross-species result hides its hits and its HSP blocks, restores them, and is absent from a single-organism report. Slow: about 3 minutes. |
 
 ### Conventions
 
