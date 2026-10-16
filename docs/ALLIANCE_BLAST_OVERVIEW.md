@@ -11,6 +11,14 @@ comes from, so it gets the longest section below.
 | `agr_blastdb_manager` | A Python pipeline that reads one of those files, downloads each FASTA, runs `makeblastdb`, writes a gene-name index beside each database, and copies the result onto the shared volume. |
 | `agr_sequenceserver` (this repo) | A Sinatra + React fork of wurmlab/SequenceServer that serves whatever it finds on that volume, and nothing else. |
 
+**Read with a date in mind.** This file describes the system as found in
+early October 2026, and three of the things it reports as broken are fixed:
+the Alliance-wide deployment serves all nine of its declared genomes, it is
+named by Alliance release (`/blast/ALLIANCE/9.1.0/`) rather than `prod`, and
+it appears in `environment_info.json`. The *mechanisms* it describes are all
+still live, which is why the descriptions are left standing with notes rather
+than rewritten.
+
 The handoff is deliberately thin and almost entirely implicit. The
 configuration repo does not know the manager exists; the manager is pointed at a
 config file by hand on the command line; and the server has no idea either of
@@ -22,8 +30,10 @@ next is a filesystem layout.
 That is not a complaint. It is why a release can be published by copying files,
 and why nothing needs to be deployed when the data changes. It is also why a
 renamed FASTA file silently breaks genome-browser links, and why
-`/blast/ALLIANCE/prod/` has served one of its nine declared genomes since 2024
-without anything reporting an error. Both of those are explained below.
+`/blast/ALLIANCE/prod/` served one of its nine declared genomes from 2024 to
+2026-10-13 without anything reporting an error. Both of those are explained
+below, and the second is fixed: nine of nine now, under
+`/blast/ALLIANCE/9.1.0/`.
 
 ## The shared volume is the real interface
 
@@ -51,11 +61,13 @@ no startup inventory. `database_dir_for` (`lib/sequenceserver/routes.rb:561`)
 turns the two URL segments into `/db/:mod/:version/databases`, and every route
 that touches a database re-scans that directory before using it. A release
 appears the moment its directory does, and disappears the moment it is removed.
-The only state the server keeps is finished jobs, and those live inside the
-container at `/root/.sequenceserver` with a 12-hour `:job_lifetime`
-(`public/configs/sequenceserver.conf`), not on the volume — so a result URL is
-only valid on the container that ran the search, and replacing a container
-discards its history.
+The only state the server keeps is finished jobs, and those live at
+`/root/.sequenceserver` with a `:job_lifetime` of 129,600
+(`public/configs/sequenceserver.conf`), which is minutes, so 90 days. A result
+URL is only valid on the container that ran the search. On test and dev that
+directory is in the container's writable layer, so replacing one discards its
+history; production mounts `/var/sequenceserver-data/jobs-prod` there and keeps
+3,053 results across redeploys.
 
 **Three containers serve the same bytes.** Asking each of the three for the
 same release returns the same 200 FlyBase databases:
@@ -359,18 +371,25 @@ Measured on the volume, per MOD and release:
 | ZFIN | prod | 7 | 7 | 0 |
 | ZFIN | zfintest | 9 | 9 | 0 |
 | RGD | 8.3.0 | 9 | 9 | 0 |
-| ALLIANCE | prod | 1 | 1 | 0 |
+| ALLIANCE | 9.1.0 | 9 | 9 | 0 |
 
 The volume is not on its own filesystem: it sits on the host root, which is
-170 GB used of 250 GB (68%). Disk exhaustion there is not hypothetical — it is
-what killed seven of the nine ALLIANCE builds in 2024.
+177 GB used of 250 GB (71%) on 2026-10-16. Disk exhaustion there is not
+hypothetical — it is what killed seven of the nine ALLIANCE builds in 2024.
+The manager checks free space against the sources' sizes before downloading
+anything as of 2026-10-15, so a build that cannot fit now refuses to start
+instead of failing seven entries in.
 
 `environment_info.json` sits beside the per-release configs and reads like the
 list of releases the service intends to advertise: it names `FB/FB2026_03`,
-`WB/WS298`, `SGD/R64-5-1m` ("Yeast BLAST"), `SGD/R64-5-1f` ("Fungal BLAST") and
-`RGD/8.3.0`, with display names and contacts, and no ZFIN or ALLIANCE at all.
-Nothing reads it — see below. Every release on the volume is reachable by URL
-whether it appears there or not.
+`WB/WS298`, `SGD/R64-5-1m` ("Yeast BLAST"), `SGD/R64-5-1f` ("Fungal BLAST"),
+`RGD/8.3.0` and, since 2026-10-15, `ALLIANCE/9.1.0` ("Alliance BLAST"), with
+display names and contacts. ZFIN is still absent. Nothing in this repository
+reads it — see below — and every release on the volume is reachable by URL
+whether it appears there or not, so the file is a published manifest for
+something outside these three repositories. It is also hand-maintained on the
+volume and in no repository, which is why the smoke suite asserts the ALLIANCE
+entry.
 
 Two MODs named in this repo's own documentation are not here at all. XenBase
 has a config file (`conf/XB/databases.XB.5.5.1.json`), an entry in the config
@@ -418,19 +437,27 @@ databases now contribute nothing to the list rather than fifty rows that fail
 when clicked. That makes the box honest, not correct: the indexes are still
 unusable.
 
-**ALLIANCE/prod serves one of nine declared genomes.** The config was written
-on 2024-03-21 naming nine reference genomes. One build ran against it, on
-2024-10-09, for 65 seconds: C. elegans failed on a stale MD5, seven failed with
-`[Errno 28] No space left on device`, zebrafish built. The run exited 0, and a
-year later `copy_to_production` shipped the one database that had succeeded.
-Nothing alerted, because publishing on partial success is the designed
-behaviour. The config has not been content-edited since the day it was written,
-and still spells two of its nine species `xenupus laevis` and
-`xenupos tropicalis`. `docs/ALLIANCE_WIDE_PLAN.md` is the plan to fix it;
-`agr_blastdb_manager/docs/alliance_2024_build_failure.md` is the post-mortem.
+**ALLIANCE served one of nine declared genomes, from 2024 to 2026-10-13.** The
+config was written on 2024-03-21 naming nine reference genomes. One build ran
+against it, on 2024-10-09, for 65 seconds: C. elegans failed on a stale MD5,
+seven failed with `[Errno 28] No space left on device`, zebrafish built. The
+run exited 0, and a year later `copy_to_production` shipped the one database
+that had succeeded. Nothing alerted, because publishing on partial success was
+the designed behaviour.
+
+Fixed, in three parts. The config was rewritten and the misspellings
+`xenupus laevis` and `xenupos tropicalis` with it; all nine genomes were built,
+four of them repointed onto the assemblies JBrowse 2 actually serves; and
+publishing on partial success is no longer the designed behaviour, since the
+manager now gates `environment.json` on every entry succeeding and checks free
+space before it starts. `docs/ALLIANCE_WIDE_PLAN.md` carries the plan and the
+closure notes under each step; `agr_blastdb_manager/docs/alliance_2024_build_failure.md`
+is the post-mortem, with "The three mechanisms, closed 2026-10-15" at the end.
 
 **The one ALLIANCE database that did build was built without `-parse_seqids`,**
-so its accessions come back as `BL_ORD_ID:0`.
+so its accessions came back as `BL_ORD_ID:0`. It was rebuilt with the other
+eight, on GRCz12tu rather than GRCz11, so this no longer applies to ALLIANCE.
+ZFIN's own deployment still carries it.
 
 **Manager citations here are against `origin/main`, not the checkout on this
 host.** `/home/ec2-user/gitroot/agr_blastdb_manager` sat six commits behind at

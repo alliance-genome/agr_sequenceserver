@@ -4,11 +4,32 @@ This document captures potential UI improvements for future exploration.
 
 ---
 
-## Database Tree Expandability
+## Database Tree Expandability — done, 2026-10-15
 
-**Problem:** Users may not realize the database tree can be expanded to show more databases, especially for Fungal BLAST.
+**Shipped:** Options A and F together, plus a seventh thing this section did
+not consider.
 
-### Possible Solutions
+Option F (#51): `open_all` on `ready.jstree`, exactly as sketched below. It
+replaced 140 lines that opened one privileged species per MOD from a hardcoded
+list, which left every deployment the list did not name fully collapsed,
+ALLIANCE among them. `Database#display_categories` also dropped the leaf that
+repeated its parent, so the tree is two levels rather than four and "Cons: may
+be overwhelming" turned out not to bite: the largest deployment is FlyBase at
+200 rows.
+
+Option A (#56): `[Expand all]` and `[Collapse all]`, rendered only where some
+node has children.
+
+What this section missed: **nobody could search the tree.** Its folders are
+Latin binomials, so "zebrafish", "worm", "fly" and "mouse" matched nothing on
+the deployment whose users are least likely to think in Latin. 40 common names
+in `public/configs/common_names.json` fixed that, and search now filters
+rather than tinting a match in a list of 200.
+
+Option E, count badges, was not built and still requires the backend change it
+describes.
+
+### The options as originally sketched
 
 #### Option A: Add "Expand All" / "Collapse All" buttons
 Add buttons above the tree to quickly expand/collapse everything.
@@ -86,6 +107,11 @@ $(tree_id).on('ready.jstree', function() {
 
 ### Recommended Approach
 Combination of **Option A** (Expand/Collapse buttons) + **Option B** (helper text) would be the least intrusive and most user-friendly.
+
+What shipped was A + F, and the helper text of Option B was rewritten rather
+than added: it used to say "Click arrows to expand/collapse groups", which is
+no longer the first thing to know about a tree that arrives open. It now names
+what the search box accepts.
 
 ---
 

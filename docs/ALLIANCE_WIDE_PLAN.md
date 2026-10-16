@@ -2,9 +2,11 @@
 
 ## Context
 
-`/blast/ALLIANCE/prod/` is meant to be the cross-species BLAST — one place to
-search every member organism's reference genome, as opposed to the per-MOD
-deployments that each serve their own organism in depth.
+`/blast/ALLIANCE/9.1.0/`, written `/blast/ALLIANCE/prod/` throughout the
+original of this plan, is the cross-species BLAST — one place to search every
+member organism's reference genome, as opposed to the per-MOD deployments that
+each serve their own organism in depth. The rename landed in #66 and #51, and
+is recorded under Step 8 as "Renamed to a release number, 2026-10-13".
 
 It declares nine reference genomes and serves one.
 
@@ -584,6 +586,45 @@ count; the real fix for cross-species ranking is Step 11.
 **Verify.** Anchor counts for WB, FB, SGD, RGD and ZFIN unchanged. Searching
 "zebrafish" selects *Danio rerio*.
 
+### Step 10, closed 2026-10-15
+
+The tree opened in #51 and the search learned English in #56.
+
+**Opening it** needed no per-MOD rule at all. The 140 lines that matched node
+text against hardcoded species names, one branch of ifs per MOD, became
+`open_all` on `ready.jstree`. Every deployment it had not named was left
+collapsed, ALLIANCE among them, and a renamed species silently stopped
+matching. `Database#display_categories` dropped the leaf that repeated its
+parent at the same time, so a database sits two levels down rather than four.
+
+**Searching it** takes 40 common names over 129 patterns, in
+`public/configs/common_names.json`. Every pattern matches at least one of the
+910 labels this host serves, which the Jest spec asserts, so a pattern that
+stops matching fails the suite rather than going quiet. Text matching runs
+first and is unchanged; the table is consulted only when text misses and the
+query is 3 characters or longer, because "a" sits inside *ant*, *aphid*, *rat*
+and *yeast*.
+
+Search filters now rather than tinting, through jstree's `show_only_matches`.
+`show_only_matches_children` is what makes a group name work: "worm" matches
+the *Caenorhabditis elegans* folder and the folder's database follows, since
+the leaf `C_elegans_Genome_Assembly` carries no genus name of its own. A query
+matching nothing used to leave the whole tree on display, because jstree's
+filter acts only when something matched; it now hides the tree and names the
+query that found nothing.
+
+`[Expand all]` and `[Collapse all]` render where some node has children.
+FlyBase is the case that wants them: 134 nucleotide databases under 66 species
+folders, 200 rows on one page.
+
+**Verified** as the step asked. On ALLIANCE each of zebrafish, human, mouse,
+rat, yeast, worm, fly and frog finds exactly its own genome. On WB WS298
+"worm" matches all 32 nucleotide databases, which is correct because all nine
+genera served are nematodes; "filarial worm" narrows to 2 and "briggsae" to 1.
+
+**Not done.** Forcing `[Select all]` visible for a single-database category.
+It is hidden because selecting all of one database is the checkbox beside it.
+
 ### Step 11: Stop one genome eating the result list
 
 **Revised after measurement — the premise was wrong, and the truth is worse.**
@@ -710,6 +751,48 @@ word "BLAST", verified across all seven deployments. Anyone wanting
 **Verify.** No `members/` link in the rendered page. The new `tblastn` example
 returns hits in more than one organism.
 
+### Step 12, closed 2026-10-15
+
+Four things, across #53, #54, #57 and config #68.
+
+**The member link.** `layout.erb` built it from the URL's MOD segment through a
+seven-entry map whose `else` branch answered the segment itself, so the
+Alliance-wide deployment linked `alliancegenome.org/members/ALLIANCE` under the
+Alliance's own logo, on every page it serves. ALLIANCE is not a member; it is
+all of them. The `else` branch is `nil` now and a nil sends the logo to the
+Alliance home page, which is also the right answer for any future segment
+missing from the map. The seven member links are byte-identical, and
+`test/e2e/header_member_link.spec.js` asserts the href on all seven
+deployments plus "no deployment links a `/members/<UPPERCASE>` path".
+
+What is *not* verified: whether `/members/ALLIANCE` actually renders an error.
+alliancegenome.org returns 200 for every path, being client-rendered, and
+CloudFront answers a headless browser with 403. The claim is only that
+ALLIANCE is not one of the seven member slugs.
+
+**The manifest.** `environment_info.json` listed FB, WB, SGD main, SGD fungal
+and RGD, and not ALLIANCE, so whatever consumes the published manifest could
+not see the deployment. The entry is in both config volumes now, taking its
+fields from the config's own `metadata` block plus the `display_name` that
+exists in no schema. That file is hand-maintained on the volume and in no
+repository (`agr_blast_service_configuration docs/CONFIG_REFERENCE.md:380-389`),
+so the smoke suite asserts the entry and its `public` flag; that is the only
+thing that will notice if it goes missing.
+
+**The example.** It is a *C. elegans* histone H4, `T10C6.11`, 123 aa, under
+`tblastn`. It took two attempts. The first replacement still carried
+`"database": "ZFIN_GRCz12tu"` and auto-selected zebrafish, which defeats a
+deployment that exists to search across nine genomes and would discard a
+selection the user had already made; `selectDatabase: false` and an early
+return in `handleExampleSelected` fixed that. Three browser examples hold the
+line: the example fills the box, selects nothing, leaves an existing selection
+alone, and resolves to `tblastn` against a genome.
+
+**`metadata.public`** was `false`, the open question this step recorded. It is
+`true` (config #68). Nine genomes, 152 of 152 correct browser links, three
+production releases. `WB/WS292` is now the only config carrying `public:
+false`, correctly: it is a 2023 release no deployment serves.
+
 ### Step 13: Stop it rotting again
 
 **Problem.** Nothing would have caught any of this. The manager exits 0 after
@@ -738,6 +821,43 @@ much smaller number than a naive sum.
 **Effort.** Days. **Risk.** Exiting non-zero will turn other MODs'
 currently-green partial builds red. That is the point, but it surfaces
 unbudgeted work.
+
+### Step 13, closed 2026-10-15 except for the owner
+
+Three mechanisms, in `agr_blastdb_manager` #78 and #79. The detail lives in
+that repository's `docs/alliance_2024_build_failure.md`, under "The three
+mechanisms, closed 2026-10-15".
+
+**Partial failure is failure.** `process_json_entries` returns the count that
+failed, `process_files` sums it across every MOD/environment a YAML run
+covers, and `create_dbs` exits non-zero on it. The three call sites this step
+predicted were the three that needed threading.
+
+**A partial build does not publish.** The condition on `copy_config_file` was
+`successful > 0`; it is `failed == 0`, and the same gate holds back
+`PROCESSED_DATABASES`, which is what gets copied to production, and the genome
+browser map. `--force-publish` accepts a partial build.
+
+**Free space is checked before anything is downloaded**, with one HEAD request
+per entry. The step's own note about peak disk was right and shaped the
+formula: `required = sum(gz) + largest_gz x (1 + 3.1 + 1.0)`, because
+`run_makeblastdb` unlinks the unzipped FASTA and the gz as each entry
+finishes, so one entry's intermediates exist at a time. Both factors were
+measured rather than assumed: 3.06x and 3.05x for `gunzip` of the yeast and
+*C. elegans* genomic FASTAs, and 0.78x for the nine built Alliance databases
+against their summed sources, rounded up to 1.0. For the Alliance config that
+is 9.9 GB required against 3.6 GB actually kept.
+
+**Still open, and it is the one this step cannot close in code.** Nobody owns
+re-running the ALLIANCE config, and it has had two commits, both 2024-03-21.
+Per-MOD configs have release-cadence refresh wired into the Makefile; this one
+needs an owner and a cadence named by a person.
+
+**Also still open**, and recorded in the failure doc rather than left implied:
+nothing afterwards compares what is served against what is declared. The gate
+above stops a partial build from publishing a manifest, but a manifest an
+earlier partial build already published stays wrong until someone rebuilds.
+That is the check that would have found the 2024 failure.
 
 ---
 
@@ -773,18 +893,28 @@ should still reach a gene page, even for one genome.
 
 ## Open questions
 
-1. **Is this a live service or a prototype?** `metadata.public: false` and the
-   missing `environment_info.json` entry point one way; two years of public
-   reachability point the other. Changes urgency, not work.
+Answered as of 2026-10-16:
+
+1. **Is this a live service or a prototype?** Live. `metadata.public` is `true`
+   and the `environment_info.json` entry exists, both as of 2026-10-15. Nine
+   genomes, 152 of 152 correct browser links, three production releases.
 2. **Do the two *Xenopus* entries move to the JBrowse assemblies, or does
-   JBrowse gain the older ones?** Rat and zebrafish need no such conversation
-   (see Step 4). This need not block the build.
+   JBrowse gain the older ones?** They moved. Both are built on what JBrowse 2
+   serves, `Xenopus_laevis_v10.1` and `UCB_Xtro_10.0` (#63), so the
+   coordinates agree by construction rather than by agreement.
+
+Still open:
+
 3. **Is nine the right roster?** It omits *C. elegans* strains, *Xenopus*
    relatives, and every non-member model organism.
-4. **Who owns refreshing this config** as member assemblies advance?
+4. **Who owns refreshing this config** as member assemblies advance? Still
+   nobody. Two commits, both 2024-03-21. This is the one item Step 13 could
+   not close in code.
 5. **What happens to shared ALLIANCE result URLs** if the zebrafish assembly
    changes and its directory is renamed? Every previously shared result would
-   point at coordinates on a genome the deployment no longer serves.
+   point at coordinates on a genome the deployment no longer serves. Sharper
+   now than when it was written: `:job_lifetime` is 90 days as of #55, so a
+   shared URL outlives more assembly changes than it used to.
 
 ## What the review changed
 
