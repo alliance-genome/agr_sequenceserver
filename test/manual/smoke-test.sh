@@ -520,6 +520,22 @@ jsoncheck "the ALLIANCE manifest entry says it is public" \
   "blast/environment_info.json" \
   "d['environments']['ALLIANCE']['9.1.0']['public'] is True"
 
+# SGD's two deployments are different releases, and the manifest said they were
+# the same one. The fungal entry read release SGD:R64-5-1 and dateProduced
+# 2025-12-19, both belonging to the main set whose entry sits directly above it
+# in that hand-maintained file. SGD:R64-5-1 is the S. cerevisiae reference
+# release; the fungal set is 312 other fungi on the 2024-04-11 export, which
+# its config and all 312 of its entry versions say.
+jsoncheck "SGD's fungal manifest entry names the fungal release" \
+  "blast/environment_info.json" \
+  "d['environments']['SGD']['R64-5-1f']['release'] == 'SGD:2024-04-11'"
+
+# The durable half of the check: a copy-paste from the row above is how the
+# first one broke, and it would pass any assertion that only read one entry.
+jsoncheck "SGD's two deployments do not claim the same release" \
+  "blast/environment_info.json" \
+  "d['environments']['SGD']['R64-5-1f']['release'] != d['environments']['SGD']['R64-5-1m']['release']"
+
 # --- 9. asset cache busting ------------------------------------------------
 section "9. frontend assets are cache-busted"
 # The bundles are served with no Cache-Control and no ETag, so a browser falls
