@@ -473,11 +473,34 @@ holds against test or dev stops resolving when it is recreated. Prod mounts
 minutes, 90 days (`public/configs/sequenceserver.conf`), so on prod a shared
 URL now outlives both the deploy and the quarter.
 
-Rolling back is the same `docker run` with the previous tag, and it works as
-long as that image is still on the host. The registry holds two after the
-2026-10-15 cleanup: `72efdceb`, which everything runs, and `6772fbc8` to roll
-back to. One previous tag is the policy; the alternative was 19 of them, and
-clearing the surplus took `docker system df` from 12.38 GB to 5.04 GB.
+Rolling back is the same `docker run` with the previous tag, and it works only
+as long as that image is still on the host. **Keep exactly one predecessor
+tag, and keep it until the release after next replaces it.** The alternative
+was 19 of them, and clearing that surplus took `docker system df` from
+12.38 GB to 5.04 GB; the alternative in the other direction is a rollback that
+needs a build first.
+
+One wrinkle, which cost three releases to notice. A docs-only release produces
+a **byte-identical image**: `.dockerignore` excludes `docs/`, `test/` and
+`CLAUDE.md`, so `docker build` reuses every layer and the new tag lands on the
+same image id. `72efdceb`, `aa62a2bf` and `021cd840` were all
+`9e795864e9a1`. A predecessor tag pointing at the same id as the running one
+is not a rollback target, so the tag worth keeping is the last one whose image
+id **differs** from the current one.
+
+```bash
+# What a predecessor tag is actually worth: compare ids, not names.
+docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep '^agr-blast:'
+```
+
+**There is no rollback image on the host as of 2026-10-21.** Only
+`agr-blast:021cd840`, which all three instances run. The three tags before it
+were the same image id and were untagged; the last genuinely different one,
+`6772fbc8`, was deleted on 2026-10-15. Nothing was rebuilt to fill the gap, so
+the policy starts at the next release: keep `021cd840` when it is displaced.
+Until then a rollback means `git checkout <sha> && docker build`, a few
+minutes rather than a container swap.
+
 Code rolls back cleanly this way. Data does not roll back at all — see the
 `copy_to_production` section at the end.
 
@@ -1000,12 +1023,23 @@ empty build cache. On 2026-10-02 the same command reported 47 images and
 
 An 8.5 GB `copytree` of FB2026_03 fits today; a few more releases and it will
 not. `docker image prune` is the cheap lever, and the only tags worth keeping
-are the one each container is using plus the previous prod tag to roll back
-to. The build cache is separate and needs `docker builder prune`, which
-`docker image prune` will not touch.
+are the one each container is using plus one predecessor whose image id
+differs from it, per the rollback policy above. The build cache is separate
+and needs `docker builder prune`, which `docker image prune` will not touch.
+
+Two tags at 1.76 GB each is not two images' worth of disk: they share every
+layer but the last, so a second `agr-blast` tag costs far less than
+`docker images` suggests. That is why one predecessor is cheap and nineteen
+were not.
 
 A parked `agr-blast-prod-pre-<tag>` container is free to delete once the new
 one is trusted, but check it first: before the `jobs-prod` bind mount existed,
 such a container held the only copy of its job history. `docker diff
 <container>` reporting zero changes is the proof that it holds nothing, and
 that is what all six were on 2026-10-15.
+
+Deleting the parked container is not the same decision as deleting its
+**image tag**. The container is a convenience, since a rollback can start from
+`docker run` with the tag; the tag is the rollback itself. So the cleanup after
+a release is: delete the parked container once the new one is trusted, and
+delete only the tag that the predecessor policy has displaced.
