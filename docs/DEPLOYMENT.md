@@ -503,13 +503,19 @@ curl -s 'http://localhost:4569/blast/SGD/R64-5-1m/gene_search?q=act1' | head -c 
 Third, the HTTP smoke suite and the browser suite:
 
 ```bash
-bash test/manual/smoke-test.sh http://172.31.3.193:4570  # 57 passed, 0 failed
+bash test/manual/smoke-test.sh http://172.31.3.193:4570  # 59 passed, 0 failed
 E2E_BASE_URL=http://172.31.3.193:4570 npx playwright test  # 111 passed (8.1m)
 ```
 
-Both figures are from the 2026-10-15 release against test at `72efdceb`. The
-smoke suite grew from 50 to 57 as checks were added for the ALLIANCE
-deployment and its manifest entry; the browser suite from 83 to 111.
+The browser figure is from the 2026-10-15 release against test. The smoke
+suite grew from 50 to 59 as checks were added for the ALLIANCE deployment and
+its manifest entry, then for SGD's two releases; the browser suite from 83 to
+111.
+
+Four of the 59 read `environment_info.json`, which is hand-maintained on the
+config volume and in no repository, so a test is the only thing that notices
+when it drifts. Two of the four exist because it had drifted: the fungal entry
+named the main set's release and date, copied from the row above it.
 
 The browser suite asserts on UI copy, so "111 passed" holds only when the spec
 files and the instance are the same commit. Run a feature branch's specs against
