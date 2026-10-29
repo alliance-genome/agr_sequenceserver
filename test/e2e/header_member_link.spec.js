@@ -21,7 +21,7 @@ const DEPLOYMENTS = [
     ['/blast/RGD/8.3.0/', 'https://www.alliancegenome.org/members/rgd'],
     ['/blast/ZFIN/zfintest/', 'https://www.alliancegenome.org/members/zfin'],
     // Not a member. It is all of them.
-    ['/blast/ALLIANCE/9.1.0/', 'https://www.alliancegenome.org'],
+    ['/blast/ALLIANCE/9.2.0/', 'https://www.alliancegenome.org'],
 ];
 
 for (const [path, href] of DEPLOYMENTS) {

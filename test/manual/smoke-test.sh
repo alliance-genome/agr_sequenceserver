@@ -484,41 +484,45 @@ status "WB WS298 searchdata.json still OK" "blast/WB/WS298/searchdata.json" "200
 # than a lighter data release.
 section "8b. ALLIANCE cross-species deployment"
 
-status "ALLIANCE search page loads" "blast/ALLIANCE/9.1.0/" "200"
+status "ALLIANCE search page loads" "blast/ALLIANCE/9.2.0/" "200"
 
 jsoncheck "ALLIANCE serves all nine declared genomes" \
-  "blast/ALLIANCE/9.1.0/searchdata.json" \
+  "blast/ALLIANCE/9.2.0/searchdata.json" \
   "len(d['database'] if isinstance(d['database'], list) else list(d['database'].values())) == 9"
 
 # One per member organism, plus human and mouse. Named individually because a
 # count alone would pass if the same genome were built nine times.
 jsoncheck "ALLIANCE has one database per member organism" \
-  "blast/ALLIANCE/9.1.0/searchdata.json" \
+  "blast/ALLIANCE/9.2.0/searchdata.json" \
   "set(x['title'] for x in (d['database'] if isinstance(d['database'], list) else d['database'].values())) == {'C_elegans_Genome_Assembly','ZFIN_GRCz12tu','RGD_GRCr8','Mouse_GRCm39','Human_GRCh38','Fly_Release_6_plus_ISO1_MT','Yeast_R64','X_laevis_XENLA_10_1','X_tropicalis_UCB_Xtro_10_0'}"
 
 # tblastn is the point of this deployment: a protein query against nucleotide
 # subjects. blastn finds almost nothing between yeast and human genomic DNA.
 jsoncheck "ALLIANCE offers tblastn" \
-  "blast/ALLIANCE/9.1.0/searchdata.json" \
+  "blast/ALLIANCE/9.2.0/searchdata.json" \
   "'tblastn' in d['options']"
 
 # Genus misspellings and lowercase genera shipped in this config for two years
 # ("xenupus", "xenupos", "mus", "homo"), and genus is interpolated into the
 # on-disk path that becomes the database tree.
 jsoncheck "ALLIANCE genome titles are not misspelled" \
-  "blast/ALLIANCE/9.1.0/searchdata.json" \
+  "blast/ALLIANCE/9.2.0/searchdata.json" \
   "not [x for x in (d['database'] if isinstance(d['database'], list) else d['database'].values()) if 'xenup' in x['title'].lower()]"
 
 # environment_info.json is the published manifest of deployments, served from
-# the config volume and hand-maintained there. It listed FB, WB, SGD and RGD
-# and not ALLIANCE, so whatever consumes it could not see this deployment.
-jsoncheck "ALLIANCE appears in the published environment manifest" \
+# the config volume and hand-maintained there.
+#
+# ALLIANCE is deliberately absent from it. The entry added on 2026-10-15 named
+# 9.1.0 and asserted public: true, both on the understanding that the
+# multispecies deployment was released. It is not, and 9.1.0 was retired on
+# 2026-10-29, so the entry was removed rather than rekeyed to 9.2.0: rekeying
+# would advertise an unreleased deployment under a new number.
+#
+# The check is therefore that it stays absent. Replace this with a presence
+# check when the deployment is announced.
+jsoncheck "ALLIANCE is not advertised in the published environment manifest" \
   "blast/environment_info.json" \
-  "'9.1.0' in d['environments'].get('ALLIANCE', {})"
-
-jsoncheck "the ALLIANCE manifest entry says it is public" \
-  "blast/environment_info.json" \
-  "d['environments']['ALLIANCE']['9.1.0']['public'] is True"
+  "'ALLIANCE' not in d['environments']"
 
 # SGD's two deployments are different releases, and the manifest said they were
 # the same one. The fungal entry read release SGD:R64-5-1 and dateProduced

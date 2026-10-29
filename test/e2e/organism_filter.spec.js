@@ -43,7 +43,7 @@ async function visibleHitsOf(page, organism) {
 
 test('one organism can be switched out of a cross-species result', async ({ page }) => {
     test.setTimeout(BLAST_TIMEOUT + 240 * 1000);
-    await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
+    await gotoSearch(page, '/blast/ALLIANCE/9.2.0/');
 
     // Human and mouse. Both name their chromosomes 1..n, so this pair was the
     // one BLAST used to conflate; they are built with seqid_prefix now and
@@ -89,7 +89,7 @@ test('one organism can be switched out of a cross-species result', async ({ page
 
 test('the switches are absent from a single-organism result', async ({ page }) => {
     test.setTimeout(BLAST_TIMEOUT + 180 * 1000);
-    await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
+    await gotoSearch(page, '/blast/ALLIANCE/9.2.0/');
 
     await selectDatabaseByTitle(page, 'Human_GRCh38');
     await page.fill(S.sequence, `>ACTB\n${ACTB}`);
