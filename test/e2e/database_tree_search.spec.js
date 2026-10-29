@@ -39,7 +39,7 @@ async function typeQuery(page, query) {
 
 test('a common name finds the genome on the Alliance deployment', async ({ page }) => {
     test.setTimeout(120 * 1000);
-    await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
+    await gotoSearch(page, '/blast/ALLIANCE/9.2.0/');
 
     const before = await visibleLeafTitles(page);
     expect(before.length).toBe(9);
@@ -55,7 +55,7 @@ test('a common name finds the genome on the Alliance deployment', async ({ page 
 
 test('each Alliance common name finds exactly its own genome', async ({ page }) => {
     test.setTimeout(180 * 1000);
-    await gotoSearch(page, '/blast/ALLIANCE/9.1.0/');
+    await gotoSearch(page, '/blast/ALLIANCE/9.2.0/');
 
     const expected = {
         zebrafish: ['ZFIN_GRCz12tu'],

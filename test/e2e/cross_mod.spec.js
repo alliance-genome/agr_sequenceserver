@@ -135,12 +135,12 @@ const MODS = [
     },
     {
         label: 'ALLIANCE',
-        path: '/blast/ALLIANCE/9.1.0/',
+        path: '/blast/ALLIANCE/9.2.0/',
         // The Alliance-wide deployment has no member name to interpolate, so the
         // heading collapses to the bare word. Every other heading ends in it, so
         // the cross-MOD check below skips this one as a substring of the rest.
         heading: 'BLAST',
-        dataVersion: '9.1.0',
+        dataVersion: '9.2.0',
         trees: ['nucleotide_database_tree'],
         databaseFloor: 9,
         hasProtein: false,
