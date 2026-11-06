@@ -27,6 +27,7 @@ module SequenceServer
   require 'sequenceserver/exceptions'
   require 'sequenceserver/sys'
   require 'sequenceserver/refinements'
+  require 'sequenceserver/gene_index'
 
   # The singleton methods defined below constitute the "runtime" environment of
   # SequenceServer.

@@ -6,6 +6,7 @@ import downloadFASTA from './download_fasta';
 import AlignmentExporter from './alignment_exporter'; // to download textual alignment
 import HitButtons from 'hit_buttons';
 import Utils from './utils';
+import HitGenes from './hit_genes';
 
 /**
  * Component for each hit. Receives props from Report. Has no state.
@@ -138,6 +139,7 @@ export default class extends Component {
     contentJSX() {
         return <div className="pt-0 px-0 pb-px" data-parent-hit={this.domID()}>
             {this.hitLinks()}
+            <HitGenes genes={this.props.hit.genes} />
             <HSPOverview key={'kablammo' + this.props.query.id} query={this.props.query}
                 hit={this.props.hit} algorithm={this.props.algorithm}
                 showHSPCrumbs={this.numHSPs() > 1 && this.numHSPs() < 27}
