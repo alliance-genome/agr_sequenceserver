@@ -22,7 +22,7 @@ module SequenceServer
       def to_json(*args)
         # List all attributes that we want to send to the browser.
         properties = %i[number id accession title length total_score
-                        qcovs sciname hsps links gene_symbol]
+                        qcovs sciname hsps links gene_symbol genes]
         properties.inject({}) { |h, k| h[k] = send(k); h }.to_json(*args)
       end
 
@@ -32,6 +32,34 @@ module SequenceServer
 
       # Include the Links module.
       include Links
+
+      # Genes the hit's coordinates fall in, from the per-assembly index.
+      #
+      # Empty is the ordinary answer, and there are four distinct reasons for
+      # it, none of them a failure: the deployment has no genome_browser block,
+      # the hit is a protein, no index is published for the assembly, or the
+      # refName is a scaffold the Alliance GFFs do not annotate. That last one
+      # is the common case rather than an edge: measured 2026-10-30, the GFFs
+      # cover 25 of human's 705 refNames and 25 of fly's 1,870.
+      #
+      # Each gene carries its curie where one exists, which is what lets the
+      # report ask the Alliance for orthologues. A nil curie is ordinary too:
+      # Danio rerio carries one on 45.8% of its gene rows and Xenopus laevis on
+      # 63.0%, so the client has to render a gene with no orthologue link.
+      def genes
+        return @genes if defined?(@genes)
+
+        # links is what matches the config entry and settles the refName, so it
+        # has to have run before @gene_context exists.
+        links
+        context = @gene_context
+        return @genes = [] if context.nil? || context[:ref_name].to_s.empty?
+
+        index = GeneIndex.for(context[:assembly])
+        return @genes = [] if index.nil?
+
+        @genes = index.overlapping(context[:ref_name], context[:from], context[:to])
+      end
 
       # The gene symbol this hit's defline names, or nil. Sent to the client so
       # the hit list can lead with the symbol rather than the accession: a
@@ -160,6 +188,25 @@ module SequenceServer
                 # here rather than inside Links.
                 ref_accession = Links.strip_seqid_prefix(accession, reference_sequence["seqid_prefix"])
                 links.push(Links.jbrowse(reference_sequence["genome_browser"], filepath_parts, hsps, ref_accession, title, hit_db.name, protein_hit))
+
+                # Stash what this match established, so #genes can answer
+                # without walking the config again. Recording it here rather
+                # than recomputing is the point: the entry, the seqid_prefix
+                # and therefore the refName were all settled by the loop above,
+                # and a second pass could disagree with the first.
+                #
+                # Off for protein hits for the same reason the gene_track
+                # lookup below is: the coordinates are amino acid offsets, and
+                # a genomic interval query on those reports whichever gene sits
+                # at that base pair.
+                unless protein_hit
+                  @gene_context = {
+                    assembly: genome_browser_metadata["assembly"],
+                    ref_name: Links.extract_ref_name(title, ref_accession, hit_db.name, genome_browser_metadata),
+                    from: hsps.map(&:sstart).first,
+                    to: hsps.map(&:send).first
+                  }
+                end
 
                 # The gene_track lookup is driven by the hit's own coordinates,
                 # which for a protein hit are amino acid offsets. Feeding those
