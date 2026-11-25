@@ -995,6 +995,83 @@ no window in which anything is missing, because the server discovers databases
 by scanning. That asymmetry is the point: adding is safe and instant,
 whole-directory replacement is neither.
 
+## The AWS resources this host does and does not use
+
+Written 2026-11-25, answering a cost audit that asked whether four AWS
+resources in account 100225593120 are live or retired. **None of it was
+confirmed against AWS.** This instance's role is `EC2ACMReadOnlyRole`, so
+`ec2:DescribeVolumes`, `ec2:DescribeSnapshots`, `s3:ListAllMyBuckets` and
+`logs:DescribeLogGroups` are all denied. What follows is evidence from the host
+and the three repositories, which can show that nothing here references a
+resource; it cannot show the resource is unused by something else.
+
+This instance is `i-00d3d02ee4e03ca8f`, `m7i.xlarge`, `us-east-1`, account
+`100225593120`.
+
+### The root volume is the whole service, and it was grown from 100 GB
+
+One volume, 250 GB, mounted at `/`. There is no separate data volume, so that
+one volume holds the 86 GB of BLAST databases, the 3,817 production job
+results, every image, and both config trees. Losing it loses the service.
+
+It was grown. `xfs_info /` reports **63 allocation groups of 3.99 GiB**, and 23
+of those account for 100 GB:
+
+```bash
+$ sudo xfs_info / | head -1
+meta-data=/dev/nvme0n1p1   isize=512  agcount=63  agsize=1047040 blks
+```
+
+`xfs_growfs` adds allocation groups at the original size rather than resizing
+the existing ones, so a filesystem made at 250 GB would carry 4 to 16 large
+groups, not 63 small ones. 23 of these groups is 98.6 GB, so the original
+volume was the 100 GB the snapshot records. The filesystem was created
+**2024-01-05** (`stat -c %w /`).
+
+That matters for the audit's `snap-0ef503018f42f5fe5`, described as a 100 GB
+nominal, 550-day-old storage-increase backup of `vol-06dec3538ef4a0292`. 550
+days before 2026-11-25 is **2025-05-24**. So the shape fits this volume
+exactly: built at 100 GB in January 2024, grown to 250 GB in May 2025, snapshot
+taken as the pre-resize restore point.
+
+The volume is live and must not be touched. The snapshot is a different
+question: it predates every database rebuild and all 3,817 job results, so
+restoring it would lose all of that. Its only value is as a pre-resize
+rollback, which nobody is going to use 550 days later.
+
+Note the cloud-init log is not evidence of the resize date. `config-resizefs`
+runs `xfs_growfs /` on **every** boot and is a no-op when the filesystem is
+already full-size, so the newest entry is just the last boot, 2026-09-08.
+
+### Nothing here deploys from a registry
+
+The audit's `agr-blast`, 14.13 GiB and untouched since January 2024, is
+consistent with being dead, and the January date is the month this host's
+filesystem was created.
+
+No deploy path pulls an image. There is no CI deploy, no registry and no push:
+the tags the three containers run exist only in this host's local Docker, which
+is the first thing this file says. The one push in the repository is
+`.github/workflows/docker.yml`, and it pushes `wurmlab/sequenceserver` to
+Docker Hub on upstream version tags, to neither this account nor this fork.
+
+### The 2022 ECS and Beanstalk era, and what is left of it
+
+The audit lists dead log groups `blast-fb`, `blast-wb`, `blast-sgd`,
+`blast-xb`, `taskdef` and `Task1`, plus a 674.5 MiB `blast/` prefix from 2022
+in `elasticbeanstalk-us-east-1-100225593120`.
+
+Those four log group names map one to one onto `docker-compose.yaml`'s four
+services, `wb`, `fb`, `sgd` and `xenbase`. That file was last touched
+**2022-06-09**, which dates the same era as the prefix. None of the three
+running containers carries a `com.docker.compose.*` label, so nothing on this
+host was started from it, and no `.ebextensions`, `Dockerrun.aws.json` or ECS
+task definition exists anywhere in the three repositories or their history.
+
+So the application side references none of it. Confirming the resources
+themselves needs EC2, S3 and CloudWatch read in account 100225593120, which
+this host does not have.
+
 ## What this file does not cover
 
 The other side of the shared volume — how a release is declared, built and
